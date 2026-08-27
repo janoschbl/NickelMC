@@ -9,6 +9,8 @@
 //!
 //! The block + entity move-vector raycast mirrors `ProjectileUtil`.
 
+mod fireball;
+mod hurting;
 mod throwable;
 mod throwable_item;
 
@@ -45,6 +47,8 @@ use super::{
     BUBBLE_COLUMN_INSIDE_UP_ACCELERATION,
 };
 
+pub use fireball::Fireball;
+pub use hurting::{AbstractHurtingProjectile, HurtingProjectileBase};
 pub use throwable::ThrowableProjectile;
 pub use throwable_item::ThrowableItemProjectile;
 

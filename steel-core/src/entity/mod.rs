@@ -861,6 +861,8 @@ mod manager;
 mod mob;
 pub mod mob_effect;
 mod monster;
+mod slot_access;
+pub use slot_access::SlotAccess;
 mod movement_sync;
 mod part;
 mod potion_contents;

@@ -40,9 +40,9 @@ mod throwable_potion;
 mod tipped_arrow;
 
 mod fishing_rod;
+mod empty_map;
 mod flint_and_steel;
 mod lead;
-mod empty_map;
 mod map;
 
 pub use air::AirItem;
@@ -55,6 +55,7 @@ pub use compass::CompassItem;
 pub use default::DefaultItemBehavior;
 pub use dye::DyeItem;
 pub use egg::EggItem;
+pub use empty_map::EmptyMapItem;
 pub use ender_eye::EnderEyeItem;
 pub use ender_pearl::EnderPearlItem;
 pub use firework_rocket::FireworkRocketItem;
@@ -80,4 +81,3 @@ pub use spyglass::SpyglassItem;
 pub use standing_and_wall_block_item::StandingAndWallBlockItem;
 pub use throwable_potion::{LingeringPotionItem, SplashPotionItem};
 pub use tipped_arrow::TippedArrowItem;
-pub use empty_map::EmptyMapItem;

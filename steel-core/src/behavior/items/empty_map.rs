@@ -1,8 +1,12 @@
+use crate::behavior::items::map::MapItem;
+use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
+use crate::entity::Entity;
+use crate::inventory::container::Container;
+use crate::world::World;
+use std::sync::Arc;
 use steel_macros::item_behavior;
 use steel_registry::sound_events;
 use steel_registry::stat::vanilla_stat_types;
-use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
-use crate::entity::Entity;
 
 /// The empty map item
 #[item_behavior]
@@ -29,15 +33,20 @@ impl ItemBehavior for EmptyMapItem {
             None,
         );
 
-        let map = 
+        let map = MapItem::create(
+            world,
+            player.block_position().x(),
+            player.block_position().z(),
+            0,
+            true,
+            false,
+        );
 
         if hand_empty {
             // TODO
         }
 
-        if !player.inventory.lock().add(map) {
-            player.drop_item(map, false, false)
-        }
+        player.add_item_or_drop(map);
 
         InteractionResult::Success
     }

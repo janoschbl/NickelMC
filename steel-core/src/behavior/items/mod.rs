@@ -43,7 +43,7 @@ mod fishing_rod;
 mod flint_and_steel;
 mod lead;
 mod empty_map;
-mod map_item;
+mod map;
 
 pub use air::AirItem;
 pub use block_item::{BlockItem, DoubleHighBlockItem};

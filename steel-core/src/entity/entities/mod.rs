@@ -13,10 +13,10 @@ pub use objects::projectiles::{
     EnderPearlEntity, EyeOfEnderEntity, FireworkRocketEntity, FishingHookEntity, SnowballEntity,
     ThrownEggEntity,
 };
-pub use objects::technical::{InteractionEntity, MarkerEntity};
 pub use objects::technical::{
     Alignment, BillboardConstraints, BlockDisplayEntity, BlockDisplayView, Brightness,
     ItemDisplayContext, ItemDisplayEntity, ItemDisplayView, TextDisplayEntity, TextDisplayView,
     Transformation,
 };
+pub use objects::technical::{InteractionEntity, MarkerEntity};
 pub use objects::vehicles::ChestMinecartEntity;

@@ -724,6 +724,9 @@ pub trait LivingEntity: Entity {
 
         self.before_actually_hurt(source, effective_amount);
         self.actually_hurt(world, source, effective_amount);
+        if took_full_damage {
+            self.living_base().begin_hurt_animation();
+        }
         self.resolve_mob_responsible_for_damage(source);
         self.resolve_player_responsible_for_damage(source);
 
@@ -1039,7 +1042,10 @@ pub trait LivingEntity: Entity {
 
     /// Processes vanilla living death side effects.
     fn die(&self, source: &DamageSource) {
-        if self.is_removed() || self.living_base().is_death_processed() {
+        if self.is_removed() {
+            return;
+        }
+        if !self.living_base().mark_death_processed() {
             return;
         }
 
@@ -1064,9 +1070,7 @@ pub trait LivingEntity: Entity {
     }
 
     /// Applies entity specific death behavior after death handling is claimed.
-    fn handle_killing_blow(&self) {
-        let _ = self.living_base().mark_death_processed();
-    }
+    fn handle_killing_blow(&self) {}
 
     /// Returns whether this entity should drop loot on death: not a baby,
     /// and the mob-drops game rule allows it.
@@ -1990,15 +1994,17 @@ pub trait LivingEntity: Entity {
         self.default_tick();
         self.living_base().decrement_hurt_time();
         self.living_base().decrement_invulnerable_time();
-        self.tick_mob_effects();
-        self.detect_equipment_updates();
 
-        // Vanilla keeps running `aiStep` while dying, gated only on `isRemoved`.
-        // What stops is the AI: `isImmobile` returns `isDeadOrDying`, so `aiStep`
-        // skips `serverAiStep`. Death animations depend on still being moved.
+        // Vanilla runs `tickDeath` from `baseTick`, before `tickEffects`, and keeps
+        // running `aiStep` from `tick` gated only on `isRemoved`. What stops while
+        // dying is the AI: `isImmobile` returns `isDeadOrDying`, so `aiStep` skips
+        // `serverAiStep`. Death animations depend on still being moved.
         if self.is_dead_or_dying() {
             self.tick_death();
         }
+
+        self.tick_mob_effects();
+        self.detect_equipment_updates();
 
         if !self.is_removed() {
             self.ai_step(entity);

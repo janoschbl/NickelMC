@@ -109,6 +109,8 @@ impl TargetingConditions {
             }
         }
 
+        // Vanilla gates on `instanceof Mob`, not on the pathfinding subtype; a mob
+        // that never pathfinds would otherwise skip this check entirely.
         if self.check_line_of_sight
             && let Some(mob) = targeter.as_mob()
             && !mob.has_line_of_sight_cached(target)

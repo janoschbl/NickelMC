@@ -52,7 +52,7 @@ use super::{
     DEFAULT_SWING_DURATION, DEFAULT_TICKS_REQUIRED_TO_FREEZE, ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
     ENTITY_LOAD_MAX_VERTICAL_POSITION, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
     EntityMoveError, EntityOwnership, EntitySyncedData, EntityVerticalMovementStateUpdate,
-    InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity, LivingEntityBase,
+    HURT_DURATION_TICKS, InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity, LivingEntityBase,
     LivingTravelInput, MobEffectInstance, RemovalReason, SPEED_MODIFIER_POWDER_SNOW_ID,
     SharedEntity, block_state_suffocates_eye_box, closest_open_space_direction,
     fall_damage_reset_clip_target, fall_flying_collision_damage, fall_flying_free_fall_interval,

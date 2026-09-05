@@ -216,6 +216,10 @@ pub trait LivingEntity: Entity {
     fn save_command_nbt(&self, nbt: &mut NbtCompound) {
         nbt.insert("Health", self.get_health());
         nbt.insert(
+            "HurtTime",
+            NbtTag::Short(self.living_base().hurt_time() as i16),
+        );
+        nbt.insert(
             "DeathTime",
             NbtTag::Short(self.living_base().death_time() as i16),
         );
@@ -667,6 +671,15 @@ pub trait LivingEntity: Entity {
     /// `world` is the `ServerLevel` supplied by the vanilla caller. It may
     /// intentionally differ from the entity's attached world.
     fn hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
+        self.default_hurt_server(world, source, amount)
+    }
+
+    /// Runs the base `LivingEntity.hurtServer` body.
+    ///
+    /// Overrides of [`Self::hurt_server`] call this where vanilla calls
+    /// `super.hurtServer`; the Ender Dragon routes its per-part damage scaling
+    /// through here.
+    fn default_hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
         if self.is_invulnerable_to(world, source) {
             return false;
         }
@@ -1026,12 +1039,11 @@ pub trait LivingEntity: Entity {
 
     /// Processes vanilla living death side effects.
     fn die(&self, source: &DamageSource) {
-        if self.is_removed() {
+        if self.is_removed() || self.living_base().is_death_processed() {
             return;
         }
-        if !self.living_base().mark_death_processed() {
-            return;
-        }
+
+        self.handle_killing_blow();
 
         // Can't directly use &self for &dyn LivingEntity, as the compiler doesn't know if it's Sized.
         // Using a function meant for getting &dyn LivingEntity directly works well here.
@@ -1049,6 +1061,11 @@ pub trait LivingEntity: Entity {
 
         self.broadcast_entity_event(EntityStatus::Death);
         self.set_pose(EntityPose::Dying);
+    }
+
+    /// Applies entity specific death behavior after death handling is claimed.
+    fn handle_killing_blow(&self) {
+        let _ = self.living_base().mark_death_processed();
     }
 
     /// Returns whether this entity should drop loot on death: not a baby,
@@ -1971,10 +1988,14 @@ pub trait LivingEntity: Entity {
     /// The default `Entity::tick` dispatches living entities here.
     fn tick_living_entity(&self, entity: &SharedEntity) {
         self.default_tick();
+        self.living_base().decrement_hurt_time();
         self.living_base().decrement_invulnerable_time();
         self.tick_mob_effects();
         self.detect_equipment_updates();
 
+        // Vanilla keeps running `aiStep` while dying, gated only on `isRemoved`.
+        // What stops is the AI: `isImmobile` returns `isDeadOrDying`, so `aiStep`
+        // skips `serverAiStep`. Death animations depend on still being moved.
         if self.is_dead_or_dying() {
             self.tick_death();
         }
@@ -2166,6 +2187,11 @@ pub trait LivingEntity: Entity {
     /// Decrements vanilla jump cooldown once per living AI step.
     fn tick_no_jump_delay(&self) {
         self.living_base().tick_no_jump_delay();
+    }
+
+    /// Returns the remaining hurt animation ticks.
+    fn hurt_time(&self) -> i32 {
+        self.living_base().hurt_time()
     }
 
     /// Returns whether this entity is immobile because it's dead or dying.

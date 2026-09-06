@@ -1002,9 +1002,17 @@ pub trait LivingEntity: Entity {
         )
     }
 
-    /// Applies knockback velocity in the direction (`xd`, `zd`), scaled by
-    /// `power` and reduced by knockback resistance.
-    fn knockback(&self, mut power: f64, mut xd: f64, mut zd: f64) {
+    /// Applies vanilla `LivingEntity.knockback`.
+    fn knockback(&self, power: f64, xd: f64, zd: f64) {
+        self.default_knockback(power, xd, zd);
+    }
+
+    /// The shared body of [`Self::knockback`].
+    ///
+    /// Rust has no `super`, so an override that only conditionally takes knockback
+    /// (the Ender Dragon ignores it while perched) calls this instead. Mirrors the
+    /// [`Self::hurt_server`] / [`Self::default_hurt_server`] split.
+    fn default_knockback(&self, mut power: f64, mut xd: f64, mut zd: f64) {
         power *= 1.0 - self.knockback_resistance();
         if power <= 0.0 {
             return;

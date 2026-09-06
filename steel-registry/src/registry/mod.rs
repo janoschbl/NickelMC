@@ -17,6 +17,7 @@ use crate::stat::{StatTypeRegistry, vanilla_stat_types};
 use crate::ticket_type::TicketTypeRegistry;
 use crate::world_clock::WorldClockRegistry;
 use crate::{
+    activity::ActivityRegistry,
     attribute::AttributeRegistry,
     banner_pattern::BannerPatternRegistry,
     biome::BiomeRegistry,
@@ -74,7 +75,7 @@ use crate::{
     timeline::TimelineRegistry,
     trim_material::TrimMaterialRegistry,
     trim_pattern::TrimPatternRegistry,
-    vanilla_advancements, vanilla_attributes, vanilla_banner_pattern_tags, vanilla_banner_patterns,
+    vanilla_activities, vanilla_advancements, vanilla_attributes, vanilla_banner_pattern_tags, vanilla_banner_patterns,
     vanilla_biome_tags, vanilla_biomes, vanilla_block_entity_types, vanilla_block_state_providers,
     vanilla_block_tags, vanilla_block_transformers, vanilla_blocks, vanilla_cat_sound_variants,
     vanilla_cat_variants, vanilla_chat_types, vanilla_chicken_sound_variants,
@@ -244,6 +245,7 @@ pub const STAT_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("stat_type
 pub const TICKET_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("ticket_type");
 
 pub struct Registry {
+    pub activities: ActivityRegistry,
     pub attributes: AttributeRegistry,
     pub blocks: BlockRegistry,
     pub items: ItemRegistry,
@@ -323,6 +325,7 @@ impl Registry {
     pub fn new_vanilla() -> Self {
         let mut registry = Self::new_empty();
         vanilla_advancements::register_advancements(&mut registry.advancements);
+        vanilla_activities::register_activities(&mut registry.activities);
         vanilla_attributes::register_attributes(&mut registry.attributes);
 
         vanilla_blocks::register_blocks(&mut registry.blocks);
@@ -459,6 +462,7 @@ impl Registry {
     pub fn freeze(&mut self) {
         self.validate_references();
 
+        self.activities.freeze();
         self.attributes.freeze();
         self.blocks.freeze();
         self.data_components.freeze();
@@ -724,6 +728,7 @@ impl Registry {
     #[must_use]
     pub fn new_empty() -> Self {
         Self {
+            activities: ActivityRegistry::new(),
             attributes: AttributeRegistry::new(),
             blocks: BlockRegistry::new(),
             data_components: DataComponentRegistry::new(),

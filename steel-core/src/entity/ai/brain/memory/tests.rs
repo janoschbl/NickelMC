@@ -1,67 +1,22 @@
 use std::ptr;
-use std::sync::Arc;
 
-use glam::DVec3;
-use simdnbt::owned::NbtTag;
-use steel_registry::vanilla_entities;
-use steel_utils::{DowncastType, DowncastTypeKey, Identifier};
+use steel_utils::DowncastType as _;
 
 use super::{
-    Memories, MemoryModuleType, MemoryModuleTypeRegistry, MemoryStatus, MemoryValue,
-    PackedMemories, PersistentMemoryValue, RememberedEntities, RememberedEntity,
+    Memories, MemoryModuleType, MemoryModuleTypeRegistry, MemoryStatus, PackedMemories,
+    RememberedEntities, RememberedEntity,
 };
-use crate::bootstrap::init_globals;
-use crate::entity::registry::ENTITIES;
-use crate::entity::{SharedEntity, next_entity_id};
-use crate::test_support::test_world;
+use crate::entity::ai::brain::test_support::{
+    Ticks, spawn_pig, test_memory, test_persistent_memory,
+};
 
-#[derive(Debug, PartialEq)]
-struct Ticks(i32);
-
-// SAFETY: This test-only key is distinct and identifies `Ticks` within the test
-// process.
-unsafe impl DowncastType for Ticks {
-    const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:test/memory_value/ticks");
-}
-
-impl MemoryValue for Ticks {}
-
-impl PersistentMemoryValue for Ticks {
-    fn to_nbt(&self) -> NbtTag {
-        NbtTag::Int(self.0)
-    }
-
-    fn from_nbt(tag: &NbtTag) -> Option<Self> {
-        tag.int().map(Self)
-    }
-}
-
-const fn test_memory<V: MemoryValue + DowncastType>(path: &'static str) -> MemoryModuleType<V> {
-    MemoryModuleType::new(Identifier::new_static("steel_test", path))
-}
-
-static SAVED: MemoryModuleType<Ticks> =
-    MemoryModuleType::new_persistent(Identifier::new_static("steel_test", "saved"));
-static SAVED_PERMANENT: MemoryModuleType<Ticks> =
-    MemoryModuleType::new_persistent(Identifier::new_static("steel_test", "saved_permanent"));
+static SAVED: MemoryModuleType<Ticks> = test_persistent_memory("saved");
+static SAVED_PERMANENT: MemoryModuleType<Ticks> = test_persistent_memory("saved_permanent");
 static COOLDOWN: MemoryModuleType<Ticks> = test_memory("cooldown");
 static DUPLICATE_COOLDOWN: MemoryModuleType<Ticks> = test_memory("cooldown");
 static OTHER_COOLDOWN: MemoryModuleType<Ticks> = test_memory("other_cooldown");
 static NEARBY: MemoryModuleType<RememberedEntities> = test_memory("nearby");
 static TARGET: MemoryModuleType<RememberedEntity> = test_memory("target");
-
-fn spawn_entity() -> SharedEntity {
-    init_globals();
-    let world = test_world();
-    ENTITIES
-        .create(
-            &vanilla_entities::PIG,
-            next_entity_id(),
-            DVec3::ZERO,
-            Arc::downgrade(world),
-        )
-        .expect("pig should have a registered entity factory")
-}
 
 #[test]
 fn registered_memory_is_recoverable_by_key() {
@@ -174,7 +129,7 @@ fn expired_memory_is_writable_again() {
 
 #[test]
 fn writing_an_empty_collection_clears_the_slot() {
-    let entity = spawn_entity();
+    let entity = spawn_pig();
     let mut memories = Memories::new();
     memories.register(NEARBY.entry());
 
@@ -199,7 +154,7 @@ fn setting_none_clears_the_slot() {
 
 #[test]
 fn remembered_entity_does_not_keep_the_entity_alive() {
-    let entity = spawn_entity();
+    let entity = spawn_pig();
     let mut memories = Memories::new();
     memories.register(TARGET.entry());
     memories.set(&TARGET, RememberedEntity::new(&entity));
@@ -224,8 +179,8 @@ fn remembered_entity_does_not_keep_the_entity_alive() {
 
 #[test]
 fn remembered_entities_skip_entities_that_left_the_world() {
-    let kept = spawn_entity();
-    let removed = spawn_entity();
+    let kept = spawn_pig();
+    let removed = spawn_pig();
     let mut memories = Memories::new();
     memories.register(NEARBY.entry());
     memories.set(&NEARBY, [&kept, &removed].into_iter().collect());

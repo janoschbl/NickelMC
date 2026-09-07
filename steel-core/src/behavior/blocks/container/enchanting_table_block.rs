@@ -1,0 +1,207 @@
+//! Enchanting table block behavior.
+
+use std::sync::{Arc, Weak};
+
+use glam::IVec3;
+use steel_macros::block_behavior;
+use steel_registry::{
+    REGISTRY, TaggedRegistryExt,
+    blocks::{BlockRef, block_state_ext::BlockStateExt},
+    data_components::vanilla_components::CUSTOM_NAME,
+    vanilla_block_entity_types,
+    vanilla_block_tags::BlockTag,
+};
+use steel_utils::{BlockPos, BlockStateId, Downcast as _};
+
+use crate::behavior::PlacementSource;
+use crate::behavior::block::{BlockBehavior, BlockEntityCreation};
+use crate::behavior::context::BlockPlaceContext;
+use crate::block_entity::{BLOCK_ENTITIES, BlockEntity as _, entities::EnchantingTableBlockEntity};
+use crate::entity::ai::path::PathComputationType;
+use crate::world::World;
+
+/// Behavior for the enchanting table.
+#[block_behavior]
+pub struct EnchantingTableBlock {
+    block: BlockRef,
+}
+
+/// Every offset two blocks out from the table, at table height and one above.
+const fn bookshelf_offsets() -> [IVec3; 32] {
+    let mut offsets = [IVec3::ZERO; 32];
+    let mut count = 0;
+    let mut y: i32 = 0;
+    while y <= 1 {
+        let mut x: i32 = -2;
+        while x <= 2 {
+            let mut z: i32 = -2;
+            while z <= 2 {
+                if x.abs() == 2 || z.abs() == 2 {
+                    offsets[count] = IVec3::new(x, y, z);
+                    count += 1;
+                }
+                z += 1;
+            }
+            x += 1;
+        }
+        y += 1;
+    }
+    offsets
+}
+
+impl EnchantingTableBlock {
+    /// Vanilla `EnchantingTableBlock.BOOKSHELF_OFFSETS`.
+    pub const BOOKSHELF_OFFSETS: [IVec3; 32] = bookshelf_offsets();
+
+    /// Creates a new enchanting table block behavior.
+    #[must_use]
+    pub const fn new(block: BlockRef) -> Self {
+        Self { block }
+    }
+
+    /// Vanilla `isValidBookShelf`: a power provider at `offset` with a power
+    /// transmitter (air and other replaceables) halfway between it and the table.
+    #[must_use]
+    pub fn is_valid_book_shelf(world: &World, pos: BlockPos, offset: IVec3) -> bool {
+        let provider = world
+            .get_block_state(pos.offset(offset.x, offset.y, offset.z))
+            .get_block();
+        let transmitter = world
+            .get_block_state(pos.offset(offset.x / 2, offset.y, offset.z / 2))
+            .get_block();
+        REGISTRY
+            .blocks
+            .is_in_tag(provider, &BlockTag::ENCHANTMENT_POWER_PROVIDER)
+            && REGISTRY
+                .blocks
+                .is_in_tag(transmitter, &BlockTag::ENCHANTMENT_POWER_TRANSMITTER)
+    }
+}
+
+impl BlockBehavior for EnchantingTableBlock {
+    fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
+        Some(self.block.default_state())
+    }
+
+    /// Vanilla applies the placed item's `CUSTOM_NAME` to the new block entity
+    /// through `applyImplicitComponents`.
+    fn set_placed_by(
+        &self,
+        _state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        source: &PlacementSource<'_>,
+    ) {
+        let Some(name) = source.with_item(|stack| stack.get(CUSTOM_NAME).cloned()) else {
+            return;
+        };
+        let Some(block_entity) = world.get_block_entity(pos) else {
+            return;
+        };
+        let Some(table) = block_entity.downcast_ref::<EnchantingTableBlockEntity>() else {
+            return;
+        };
+        table.set_custom_name(Some(name));
+        table.set_changed();
+    }
+
+    fn new_block_entity(
+        &self,
+        level: Weak<World>,
+        pos: BlockPos,
+        state: BlockStateId,
+    ) -> BlockEntityCreation {
+        BlockEntityCreation::from_registered_factory(BLOCK_ENTITIES.create(
+            &vanilla_block_entity_types::ENCHANTING_TABLE,
+            level,
+            pos,
+            state,
+        ))
+    }
+
+    fn is_pathfindable(
+        &self,
+        _state: BlockStateId,
+        _computation_type: PathComputationType,
+    ) -> bool {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use steel_registry::{init_vanilla_registry, vanilla_blocks};
+    use steel_utils::{ChunkPos, types::UpdateFlags};
+
+    use super::*;
+    use crate::behavior::init_behaviors;
+    use crate::block_entity::init_block_entities;
+    use crate::test_support::{fresh_test_world, insert_ready_full_chunk};
+
+    fn placed_table(key: &'static str) -> (Arc<World>, BlockPos) {
+        init_vanilla_registry();
+        init_behaviors();
+        init_block_entities();
+        let world = fresh_test_world(key);
+        let pos = BlockPos::new(8, 64, 8);
+        insert_ready_full_chunk(&world, ChunkPos::from_block_pos(pos));
+        assert!(world.set_block(
+            pos,
+            vanilla_blocks::ENCHANTING_TABLE.default_state(),
+            UpdateFlags::UPDATE_ALL,
+        ));
+        (world, pos)
+    }
+
+    #[test]
+    fn bookshelf_offsets_form_the_vanilla_ring() {
+        assert_eq!(EnchantingTableBlock::BOOKSHELF_OFFSETS.len(), 32);
+        for offset in EnchantingTableBlock::BOOKSHELF_OFFSETS {
+            assert!(offset.x.abs() == 2 || offset.z.abs() == 2);
+            assert!((0..=1).contains(&offset.y));
+            assert!((-2..=2).contains(&offset.x) && (-2..=2).contains(&offset.z));
+        }
+    }
+
+    #[test]
+    fn placing_the_block_creates_its_block_entity() {
+        let (world, pos) = placed_table("enchanting_table_block_entity");
+        let block_entity = world
+            .get_block_entity(pos)
+            .expect("enchanting table should create a block entity");
+        assert!(
+            block_entity
+                .downcast_ref::<EnchantingTableBlockEntity>()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn bookshelves_count_only_with_a_clear_transmitter_block() {
+        let (world, pos) = placed_table("enchanting_table_bookshelf_power");
+        let offset = IVec3::new(2, 0, 0);
+        assert!(!EnchantingTableBlock::is_valid_book_shelf(
+            &world, pos, offset
+        ));
+
+        assert!(world.set_block(
+            pos.offset(2, 0, 0),
+            vanilla_blocks::BOOKSHELF.default_state(),
+            UpdateFlags::UPDATE_ALL,
+        ));
+        assert!(EnchantingTableBlock::is_valid_book_shelf(
+            &world, pos, offset
+        ));
+
+        assert!(world.set_block(
+            pos.offset(1, 0, 0),
+            vanilla_blocks::STONE.default_state(),
+            UpdateFlags::UPDATE_ALL,
+        ));
+        assert!(!EnchantingTableBlock::is_valid_book_shelf(
+            &world, pos, offset
+        ));
+    }
+}

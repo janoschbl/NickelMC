@@ -149,9 +149,16 @@ fn floating_to_string(
     output
 }
 
+/// Rounds like Java's `Math.round(float)`: the floor of `value + 0.5`, so
+/// halves round toward positive infinity, saturating into `i32`.
+#[must_use]
+pub fn round_f32(value: f32) -> i32 {
+    (value + 0.5).floor() as i32
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{float_to_string, is_blank, is_space_char, is_whitespace};
+    use super::{float_to_string, is_blank, is_space_char, is_whitespace, round_f32};
 
     #[test]
     fn matches_java_whitespace_exclusions() {
@@ -184,5 +191,13 @@ mod tests {
         assert_eq!(float_to_string(-0.0), "-0.0");
         assert_eq!(float_to_string(90.0), "90.0");
         assert_eq!(float_to_string(45.5), "45.5");
+    }
+
+    #[test]
+    fn round_f32_matches_java_math_round_on_halves() {
+        assert_eq!(round_f32(2.5), 3);
+        assert_eq!(round_f32(-2.5), -2);
+        assert_eq!(round_f32(2.4), 2);
+        assert_eq!(round_f32(-2.6), -3);
     }
 }

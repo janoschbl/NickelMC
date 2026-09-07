@@ -149,11 +149,23 @@ fn floating_to_string(
     output
 }
 
-/// Rounds like Java's `Math.round(float)`: the floor of `value + 0.5`, so
-/// halves round toward positive infinity, saturating into `i32`.
+/// Rounds like Java's `Math.round(float)`: half-up at the exact midpoint,
+/// using the JDK's bit-level algorithm so floats just below `n + 0.5` do not
+/// round up through float addition. Saturates and maps NaN to 0 like Java.
 #[must_use]
-pub fn round_f32(value: f32) -> i32 {
-    (value + 0.5).floor() as i32
+pub const fn round_f32(value: f32) -> i32 {
+    let bits = value.to_bits() as i32;
+    let biased_exp = (bits & 0x7F80_0000) >> 23;
+    let shift = (23 - 1 + 127) - biased_exp;
+    if shift & -32 == 0 {
+        let mut r = (bits & 0x007F_FFFF) | 0x0080_0000;
+        if bits < 0 {
+            r = -r;
+        }
+        ((r >> shift) + 1) >> 1
+    } else {
+        value as i32
+    }
 }
 
 #[cfg(test)]
@@ -199,5 +211,8 @@ mod tests {
         assert_eq!(round_f32(-2.5), -2);
         assert_eq!(round_f32(2.4), 2);
         assert_eq!(round_f32(-2.6), -3);
+        assert_eq!(round_f32(0.499_999_97), 0);
+        assert_eq!(round_f32(f32::NAN), 0);
+        assert_eq!(round_f32(1.0e10), i32::MAX);
     }
 }

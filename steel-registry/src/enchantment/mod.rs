@@ -17,6 +17,14 @@ pub struct EnchantmentCost {
     pub per_level_above_first: i32,
 }
 
+impl EnchantmentCost {
+    /// Vanilla `Enchantment.Cost.calculate`: `base + per_level_above_first * (level - 1)`.
+    #[must_use]
+    pub const fn calculate(self, level: i32) -> i32 {
+        self.base + self.per_level_above_first * (level - 1)
+    }
+}
+
 #[derive(Debug)]
 pub struct Enchantment {
     pub key: Identifier,
@@ -117,6 +125,30 @@ impl Enchantment {
         REGISTRY.items.is_in_tag(item, &tag)
     }
 
+    /// Vanilla `Enchantment.getMinCost`.
+    #[must_use]
+    pub const fn get_min_cost(&self, level: i32) -> i32 {
+        self.min_cost.calculate(level)
+    }
+
+    /// Vanilla `Enchantment.getMaxCost`.
+    #[must_use]
+    pub const fn get_max_cost(&self, level: i32) -> i32 {
+        self.max_cost.calculate(level)
+    }
+
+    /// Vanilla `Enchantment.isPrimaryItem`: supported, and inside `primary_items`
+    /// when that narrower tag is set.
+    pub fn is_primary_item(&self, item: ItemRef) -> bool {
+        if !self.can_enchant(item) {
+            return false;
+        }
+        let Some(primary_items) = self.primary_items else {
+            return true;
+        };
+        parse_tag_ref(primary_items).is_some_and(|tag| REGISTRY.items.is_in_tag(item, &tag))
+    }
+
     /// Checks if two enchantments are compatible (neither's `exclusive_set` contains the other).
     #[must_use]
     pub fn are_compatible(a: EnchantmentRef, b: EnchantmentRef) -> bool {
@@ -210,6 +242,26 @@ mod tests {
     use simdnbt::ToNbtTag;
     use simdnbt::owned::{NbtList, NbtTag};
     use steel_utils::Identifier;
+
+    #[test]
+    fn sharpness_is_primary_for_swords_but_only_supported_for_axes() {
+        init_vanilla_registry();
+        let sharpness = &vanilla_enchantments::SHARPNESS;
+        assert!(sharpness.can_enchant(&vanilla_items::DIAMOND_AXE));
+        assert!(!sharpness.is_primary_item(&vanilla_items::DIAMOND_AXE));
+        assert!(sharpness.is_primary_item(&vanilla_items::DIAMOND_SWORD));
+        assert!(!sharpness.is_primary_item(&vanilla_items::STONE));
+    }
+
+    #[test]
+    fn cost_windows_follow_the_vanilla_formula() {
+        init_vanilla_registry();
+        // Sharpness: min 1 + 11/level, max 21 + 11/level.
+        let sharpness = &vanilla_enchantments::SHARPNESS;
+        assert_eq!(sharpness.get_min_cost(1), 1);
+        assert_eq!(sharpness.get_min_cost(5), 45);
+        assert_eq!(sharpness.get_max_cost(3), 43);
+    }
 
     #[test]
     fn binding_curse_has_prevent_armor_change_effect() {

@@ -246,8 +246,8 @@ impl Player {
         match self.take_open_menu_for_callback(Some(packet.container_id)) {
             Ok(mut menu) => {
                 if self.game_mode() == GameType::Spectator {
-                    menu.behavior_mut()
-                        .send_all_data_to_remote(&self.connection);
+                    // Vanilla `handleContainerButtonClick` silently drops spectator
+                    // clicks; the resync only happens in `handleContainerClick`.
                 } else if !menu.still_valid(self) {
                     log::debug!(
                         "Player {} interacted with invalid menu {}",

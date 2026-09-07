@@ -18,8 +18,16 @@ use crate::entity::{Entity, LivingEntity, MobEffectInstance, SharedEntity};
 use crate::inventory::equipment::EquipmentSlot;
 use crate::world::World;
 
+#[expect(
+    dead_code,
+    reason = "consumed by the enchanting table menu, which lands later on this branch"
+)]
 mod selection;
 
+#[expect(
+    unused_imports,
+    reason = "consumed by the enchanting table menu, which lands later on this branch"
+)]
 pub(crate) use selection::{EnchantmentInstance, get_enchantment_cost, select_enchantment};
 
 #[derive(Debug, Clone, Copy)]

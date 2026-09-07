@@ -18,7 +18,7 @@ pub(crate) struct EnchantmentInstance {
 impl EnchantmentInstance {
     /// Vanilla `EnchantmentInstance.weight`.
     #[must_use]
-    pub(crate) fn weight(&self) -> i32 {
+    pub(crate) const fn weight(&self) -> i32 {
         self.enchantment.weight as i32
     }
 }
@@ -92,7 +92,7 @@ pub(crate) fn select_enchantment<R: Random>(
 /// Vanilla `EnchantmentHelper.getAvailableEnchantmentResults`: for every
 /// enchantment applicable to `stack` (books accept all), the highest level whose
 /// cost window contains `value`.
-pub(crate) fn get_available_enchantment_results(
+fn get_available_enchantment_results(
     value: i32,
     stack: &ItemStack,
     source: impl Iterator<Item = EnchantmentRef>,
@@ -118,7 +118,7 @@ pub(crate) fn get_available_enchantment_results(
 
 /// Vanilla `EnchantmentHelper.filterCompatibleEnchantments`: drops `target`
 /// itself and everything in an exclusive set with it.
-pub(crate) fn filter_compatible_enchantments(
+fn filter_compatible_enchantments(
     candidates: &mut Vec<EnchantmentInstance>,
     target: &EnchantmentInstance,
 ) {

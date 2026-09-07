@@ -87,7 +87,10 @@ impl BlockBehavior for EnchantingTableBlock {
     }
 
     /// Vanilla applies the placed item's `CUSTOM_NAME` to the new block entity
-    /// through `applyImplicitComponents`.
+    /// through `applyImplicitComponents`, which runs for every placement path
+    /// (player, dispenser, structure, `loadWithComponents`). Steel covers only
+    /// the player-placement path here until an implicit-component hook exists
+    /// for the others.
     fn set_placed_by(
         &self,
         _state: BlockStateId,
@@ -168,7 +171,9 @@ mod tests {
     use std::sync::Arc;
 
     use glam::DVec3;
-    use steel_registry::{init_vanilla_registry, vanilla_blocks};
+    use steel_registry::{
+        init_vanilla_registry, item_stack::ItemStack, vanilla_blocks, vanilla_items,
+    };
     use steel_utils::{
         ChunkPos, Direction,
         types::{InteractionHand, UpdateFlags},
@@ -176,6 +181,7 @@ mod tests {
     use text_components::TextComponent;
 
     use super::*;
+    use crate::behavior::PlacementOrientation;
     use crate::behavior::init_behaviors;
     use crate::block_entity::init_block_entities;
     use crate::entity::Entity as _;
@@ -280,5 +286,38 @@ mod tests {
         );
         assert_eq!(result, InteractionResult::Success);
         assert!(player.has_container_open());
+    }
+
+    #[test]
+    fn set_placed_by_copies_the_placed_items_custom_name() {
+        let (world, pos) = placed_table("enchanting_table_set_placed_by");
+        let behavior = EnchantingTableBlock::new(&vanilla_blocks::ENCHANTING_TABLE);
+        let name = TextComponent::from("Arcane Desk".to_string());
+        let mut stack = ItemStack::new(&vanilla_items::ENCHANTING_TABLE);
+        stack.set(CUSTOM_NAME, name.clone());
+        let source = PlacementSource::direct(
+            None,
+            InteractionHand::MainHand,
+            &mut stack,
+            PlacementOrientation::Directional {
+                direction: Direction::North,
+            },
+            false,
+        );
+
+        behavior.set_placed_by(
+            vanilla_blocks::ENCHANTING_TABLE.default_state(),
+            &world,
+            pos,
+            &source,
+        );
+
+        let block_entity = world
+            .get_block_entity(pos)
+            .expect("enchanting table should create a block entity");
+        let table = block_entity
+            .downcast_ref::<EnchantingTableBlockEntity>()
+            .expect("block entity should be an enchanting table");
+        assert_eq!(table.custom_name(), Some(name));
     }
 }

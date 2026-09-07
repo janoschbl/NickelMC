@@ -107,6 +107,29 @@ fn full_bookshelf_ring_rolls_three_offers_with_clues() {
         kind.seed_slot.get(menu.behavior()),
         EnchantmentKind::client_value(SEED)
     );
+
+    // Pin the absolute wire order: costs at 0..3, seed at 3, enchantment clues
+    // at 4..7, level clues at 7..10. This is the one contract the client relies
+    // on that no index-independent handle assertion above can catch.
+    let behavior = menu.behavior();
+    for offer in 0..3 {
+        assert_eq!(
+            behavior.get_data(offer),
+            Some(EnchantmentKind::client_value(kind.costs[offer]))
+        );
+        assert_eq!(
+            behavior.get_data(4 + offer),
+            Some(EnchantmentKind::client_value(kind.enchant_clue[offer]))
+        );
+        assert_eq!(
+            behavior.get_data(7 + offer),
+            Some(EnchantmentKind::client_value(kind.level_clue[offer]))
+        );
+    }
+    assert_eq!(
+        behavior.get_data(3),
+        Some(EnchantmentKind::client_value(SEED))
+    );
 }
 
 #[test]

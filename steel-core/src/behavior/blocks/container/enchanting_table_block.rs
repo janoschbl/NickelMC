@@ -13,11 +13,14 @@ use steel_registry::{
 };
 use steel_utils::{BlockPos, BlockStateId, Downcast as _};
 
+use crate::behavior::InventoryAccess;
 use crate::behavior::PlacementSource;
 use crate::behavior::block::{BlockBehavior, BlockEntityCreation};
-use crate::behavior::context::BlockPlaceContext;
+use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
 use crate::block_entity::{BLOCK_ENTITIES, BlockEntity as _, entities::EnchantingTableBlockEntity};
 use crate::entity::ai::path::PathComputationType;
+use crate::inventory::menu::kinds::enchantment;
+use crate::player::Player;
 use crate::world::World;
 
 /// Behavior for the enchanting table.
@@ -126,19 +129,57 @@ impl BlockBehavior for EnchantingTableBlock {
     ) -> bool {
         false
     }
+
+    /// Vanilla `useWithoutItem`: opens the menu titled with the table's display name.
+    fn use_without_item(
+        &self,
+        _state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        player: &Player,
+        _hit_result: &BlockHitResult,
+        _inv: &mut InventoryAccess,
+    ) -> InteractionResult {
+        // Vanilla's menu provider is null without the block entity, so the use succeeds but opens nothing.
+        let Some(block_entity) = world.get_block_entity(pos) else {
+            return InteractionResult::Success;
+        };
+        let Some(table) = block_entity.downcast_ref::<EnchantingTableBlockEntity>() else {
+            return InteractionResult::Success;
+        };
+        let title = table.display_name();
+        let inventory = player.inventory.clone();
+        let enchantment_seed = player.experience.lock().enchantment_seed();
+        player.open_menu(title, move |context| {
+            enchantment(
+                inventory,
+                context.container_id,
+                pos,
+                context.world,
+                enchantment_seed,
+            )
+        });
+        InteractionResult::Success
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
+    use glam::DVec3;
     use steel_registry::{init_vanilla_registry, vanilla_blocks};
-    use steel_utils::{ChunkPos, types::UpdateFlags};
+    use steel_utils::{
+        ChunkPos, Direction,
+        types::{InteractionHand, UpdateFlags},
+    };
+    use text_components::TextComponent;
 
     use super::*;
     use crate::behavior::init_behaviors;
     use crate::block_entity::init_block_entities;
-    use crate::test_support::{fresh_test_world, insert_ready_full_chunk};
+    use crate::entity::Entity as _;
+    use crate::test_support::{TestPlayerBuilder, fresh_test_world, insert_ready_full_chunk};
 
     fn placed_table(key: &'static str) -> (Arc<World>, BlockPos) {
         init_vanilla_registry();
@@ -203,5 +244,41 @@ mod tests {
         assert!(!EnchantingTableBlock::is_valid_book_shelf(
             &world, pos, offset
         ));
+    }
+
+    #[test]
+    fn using_the_table_opens_a_menu_titled_with_its_name() {
+        let (world, pos) = placed_table("enchanting_table_use");
+        let player = TestPlayerBuilder::new(Arc::clone(&world), "TableUser", 1).build();
+        player.base().set_position_local(DVec3::new(8.5, 64.0, 8.5));
+        let table = world
+            .get_block_entity(pos)
+            .expect("enchanting table should create a block entity");
+        table
+            .downcast_ref::<EnchantingTableBlockEntity>()
+            .expect("block entity should be an enchanting table")
+            .set_custom_name(Some(TextComponent::from("Arcane Desk".to_string())));
+
+        let behavior = EnchantingTableBlock::new(&vanilla_blocks::ENCHANTING_TABLE);
+        let hit = BlockHitResult {
+            location: DVec3::new(8.5, 65.0, 8.5),
+            direction: Direction::Up,
+            block_pos: pos,
+            miss: false,
+            inside: false,
+            world_border_hit: false,
+        };
+        let mut inventory_access =
+            InventoryAccess::new(Arc::clone(&player.inventory), InteractionHand::MainHand);
+        let result = behavior.use_without_item(
+            vanilla_blocks::ENCHANTING_TABLE.default_state(),
+            &world,
+            pos,
+            &player,
+            &hit,
+            &mut inventory_access,
+        );
+        assert_eq!(result, InteractionResult::Success);
+        assert!(player.has_container_open());
     }
 }

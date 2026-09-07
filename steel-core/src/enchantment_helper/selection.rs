@@ -205,7 +205,10 @@ mod tests {
             1
         );
         let axe = ItemStack::new(&vanilla_items::DIAMOND_AXE);
-        assert!(get_available_enchantment_results(30, &axe, sharpness).is_empty());
+        assert_eq!(
+            get_available_enchantment_results(30, &axe, sharpness),
+            Vec::new()
+        );
     }
 
     #[test]
@@ -244,7 +247,7 @@ mod tests {
                 table_enchantments(),
             );
             assert_eq!(first, second);
-            assert!(!first.is_empty());
+            assert_ne!(first, Vec::new());
             for (index, earlier) in first.iter().enumerate() {
                 for later in &first[index + 1..] {
                     assert!(Enchantment::are_compatible(
@@ -260,14 +263,14 @@ mod tests {
     fn selection_yields_nothing_for_items_without_enchantability() {
         init_vanilla_registry();
         let stone = ItemStack::new(&vanilla_items::STONE);
-        assert!(
+        assert_eq!(
             select_enchantment(
                 &mut LegacyRandom::from_seed(3),
                 &stone,
                 30,
                 table_enchantments()
-            )
-            .is_empty()
+            ),
+            Vec::new()
         );
     }
 }

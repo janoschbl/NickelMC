@@ -15,6 +15,9 @@ pub struct Experience {
     level: i32,
     progress: f32,
     total_points: i32,
+    /// Vanilla `Player.enchantmentSeed` (`XpSeed`). Kept beside the XP fields
+    /// because vanilla saves it there and `onEnchantmentPerformed` changes both.
+    enchantment_seed: i32,
     /// Whether the client experience packet needs to be sent.
     pub dirty: bool,
 }
@@ -37,6 +40,7 @@ impl Experience {
             level,
             progress,
             total_points,
+            enchantment_seed: 0,
             dirty: true,
         }
     }
@@ -48,6 +52,7 @@ impl Experience {
             level,
             progress,
             total_points,
+            enchantment_seed: 0,
             dirty: true,
         }
     }
@@ -112,6 +117,20 @@ impl Experience {
         self.progress
     }
 
+    /// Vanilla `Player.getEnchantmentSeed`; zero until a save provides one or the
+    /// player enchants for the first time.
+    #[must_use]
+    pub const fn enchantment_seed(&self) -> i32 {
+        self.enchantment_seed
+    }
+
+    /// Returns this state with the given enchantment seed, used when restoring saves.
+    #[must_use]
+    pub const fn with_enchantment_seed(mut self, seed: i32) -> Self {
+        self.enchantment_seed = seed;
+        self
+    }
+
     /// Adds (or removes, if negative) experience levels, resetting progress
     /// and total points to zero if the level would drop below zero.
     pub const fn add_levels(&mut self, additional_levels: i32) {
@@ -125,6 +144,14 @@ impl Experience {
             self.progress = 0.0;
             self.total_points = 0;
         }
+        self.dirty = true;
+    }
+
+    /// Vanilla `Player.onEnchantmentPerformed`: spends `enchantment_cost` levels
+    /// (clamping to zero clears progress and total points) and installs `next_seed`.
+    pub const fn on_enchantment_performed(&mut self, enchantment_cost: i32, next_seed: i32) {
+        self.add_levels(-enchantment_cost);
+        self.enchantment_seed = next_seed;
         self.dirty = true;
     }
 

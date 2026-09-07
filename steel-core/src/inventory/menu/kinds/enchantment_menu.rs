@@ -1,6 +1,5 @@
 //! Enchanting table menu.
 
-use std::array::from_fn;
 use std::sync::Arc;
 
 use steel_protocol::packets::game::SoundSource;
@@ -53,10 +52,24 @@ pub fn enchantment(
     let player_slots = builder.player_inventory(&inventory);
 
     // Vanilla data slot order: costs, seed, enchantment clues, level clues.
-    let cost_slots = from_fn(|_| builder.data_slot(0));
+    // Array literals (rather than `from_fn`) guarantee left-to-right evaluation,
+    // so the wire order below rests on a documented contract, not an incidental one.
+    let cost_slots = [
+        builder.data_slot(0),
+        builder.data_slot(0),
+        builder.data_slot(0),
+    ];
     let seed_slot = builder.data_slot(EnchantmentKind::client_value(enchantment_seed));
-    let enchant_clue_slots = from_fn(|_| builder.data_slot(-1));
-    let level_clue_slots = from_fn(|_| builder.data_slot(-1));
+    let enchant_clue_slots = [
+        builder.data_slot(-1),
+        builder.data_slot(-1),
+        builder.data_slot(-1),
+    ];
+    let level_clue_slots = [
+        builder.data_slot(-1),
+        builder.data_slot(-1),
+        builder.data_slot(-1),
+    ];
 
     // Vanilla `removed` hands both table slots back to the player.
     builder.drain([item, lapis]);
@@ -172,7 +185,7 @@ impl EnchantmentKind {
     }
 
     /// Vanilla `EnchantmentMenu.slotsChanged`: rerolls the three offers for the table item.
-    fn update_offers(&mut self, behavior: &mut MenuBehavior, guard: &ContainerLockGuard) {
+    fn update_offers(&mut self, behavior: &mut MenuBehavior, guard: &mut ContainerLockGuard) {
         let stack = behavior.slots()[self.item.start()].get_item(guard).clone();
         if stack.is_empty() || !stack.is_enchantable() {
             self.clear_offers();
@@ -180,7 +193,10 @@ impl EnchantmentKind {
             return;
         }
 
-        let bookcases = self.count_bookshelves();
+        // Counting bookshelves reads world blocks, not containers, so it does not
+        // need the menu containers locked; run it unlocked to avoid holding the
+        // container guard across an unrelated world-lock acquisition.
+        let bookcases = guard.run_unlocked(|| self.count_bookshelves());
         let mut random = Self::seeded_random(self.enchantment_seed);
         for offer in 0..OFFER_COUNT {
             self.costs[offer] = get_enchantment_cost(&mut random, offer, bookcases, &stack);
@@ -213,6 +229,7 @@ impl MenuKind for EnchantmentKind {
             && player.is_within_block_interaction_range_with_buffer(self.block_pos, 4.0)
     }
 
+    /// Vanilla `slotsChanged`: rerolls the offers whenever a menu slot changes.
     fn slots_changed(
         &mut self,
         behavior: &mut MenuBehavior,
@@ -262,6 +279,9 @@ impl MenuKind for EnchantmentKind {
             return false;
         }
 
+        // The seed here is discarded immediately: `enchantment_list` reseeds `random`
+        // with `seed + offer` before using it, mirroring vanilla's reuse of one
+        // long-lived `random` field rather than seeding fresh for the roll itself.
         let mut random = Self::seeded_random(self.enchantment_seed);
         let new_enchantments = self.enchantment_list(&mut random, &stack, offer, self.costs[offer]);
         if new_enchantments.is_empty() {
@@ -275,6 +295,10 @@ impl MenuKind for EnchantmentKind {
         }
 
         // Vanilla `transmuteCopy`: a book keeps its count and components as an enchanted book.
+        // `with_count_and_patch` approximates it via `sanitize_against`, which drops patch
+        // entries equal to the new prototype's default, where vanilla's `forget` drops any
+        // entry the new item defines a default for regardless of value. The two differ only
+        // for patches unreachable through gameplay; identical for anything reachable in play.
         let mut enchanted = if stack.is(&vanilla_items::BOOK) {
             ItemStack::with_count_and_patch(
                 &vanilla_items::ENCHANTED_BOOK,
@@ -299,7 +323,7 @@ impl MenuKind for EnchantmentKind {
         player.award_custom_stat(&vanilla_custom_stats::ENCHANT_ITEM);
         // TODO: Trigger CriteriaTriggers.ENCHANTED_ITEM once Steel has shared advancement foundations.
 
-        self.update_offers(behavior, &guard);
+        self.update_offers(behavior, &mut guard);
         drop(guard);
 
         self.world.play_sound(

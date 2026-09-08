@@ -24,6 +24,7 @@
 //! ```
 
 pub(crate) mod block_state_nbt;
+mod components;
 pub mod entities;
 mod registry;
 mod storage;
@@ -53,6 +54,7 @@ use steel_utils::{
     locks::{SyncMutex, SyncRwLock},
 };
 
+pub use components::ImplicitComponentGetter;
 pub use registry::{BLOCK_ENTITIES, BlockEntityFactory, BlockEntityRegistry, init_block_entities};
 pub(crate) use storage::{
     BlockEntityInsert, BlockEntityLookup, BlockEntityStorage, ClearedBlockEntities,
@@ -315,6 +317,10 @@ impl BlockEntityBase {
         self.components.read().clone()
     }
 
+    fn set_components(&self, components: DataComponentMap) {
+        *self.components.write() = components;
+    }
+
     pub(crate) fn is_valid_container_for(&self, player: &Player) -> bool {
         if self.is_removed() {
             return false;
@@ -422,6 +428,38 @@ pub trait BlockEntity: ErasedType + Send + Sync {
     fn load_with_components(&self, nbt: &BorrowedNbtCompound<'_>) {
         self.load_additional(nbt);
         self.base().load_components(nbt);
+    }
+
+    /// Reads the components this entity represents through its own fields.
+    ///
+    /// Vanilla `BlockEntity.applyImplicitComponents`: every component read from
+    /// `components` is consumed and kept out of the stored component map.
+    fn apply_implicit_components(&self, _components: &mut ImplicitComponentGetter<'_>) {}
+
+    /// Adds the components this entity represents through its own fields.
+    ///
+    /// Vanilla `BlockEntity.collectImplicitComponents`; the inverse of
+    /// [`Self::apply_implicit_components`].
+    fn collect_implicit_components(&self, _components: &mut DataComponentMap) {}
+
+    /// Applies the placed stack's components: implicit ones through
+    /// [`Self::apply_implicit_components`], the rest into the stored component map.
+    ///
+    /// Vanilla `BlockEntity.applyComponentsFromItemStack`; final, do not override.
+    fn apply_components_from_item_stack(&self, stack: &ItemStack) {
+        let mut getter = ImplicitComponentGetter::new(stack);
+        self.apply_implicit_components(&mut getter);
+        self.base()
+            .set_components(getter.remaining_stored_components());
+    }
+
+    /// Returns the stored components together with the implicit ones.
+    ///
+    /// Vanilla `BlockEntity.collectComponents`; final, do not override.
+    fn collect_components(&self) -> DataComponentMap {
+        let mut components = self.base().stored_components();
+        self.collect_implicit_components(&mut components);
+        components
     }
 
     /// Loads entity data from an owned command/runtime compound.

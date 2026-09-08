@@ -7,17 +7,15 @@ use steel_macros::block_behavior;
 use steel_registry::{
     REGISTRY, TaggedRegistryExt,
     blocks::{BlockRef, block_state_ext::BlockStateExt},
-    data_components::vanilla_components::CUSTOM_NAME,
     vanilla_block_entity_types,
     vanilla_block_tags::BlockTag,
 };
 use steel_utils::{BlockPos, BlockStateId, Downcast as _};
 
 use crate::behavior::InventoryAccess;
-use crate::behavior::PlacementSource;
 use crate::behavior::block::{BlockBehavior, BlockEntityCreation};
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
-use crate::block_entity::{BLOCK_ENTITIES, BlockEntity as _, entities::EnchantingTableBlockEntity};
+use crate::block_entity::{BLOCK_ENTITIES, entities::EnchantingTableBlockEntity};
 use crate::entity::ai::path::PathComputationType;
 use crate::inventory::menu::kinds::enchantment;
 use crate::player::Player;
@@ -86,31 +84,6 @@ impl BlockBehavior for EnchantingTableBlock {
         Some(self.block.default_state())
     }
 
-    /// Vanilla applies the placed item's `CUSTOM_NAME` to the new block entity
-    /// through `applyImplicitComponents`, which runs for every placement path
-    /// (player, dispenser, structure, `loadWithComponents`). Steel covers only
-    /// the player-placement path here until an implicit-component hook exists
-    /// for the others.
-    fn set_placed_by(
-        &self,
-        _state: BlockStateId,
-        world: &Arc<World>,
-        pos: BlockPos,
-        source: &PlacementSource<'_>,
-    ) {
-        let Some(name) = source.with_item(|stack| stack.get(CUSTOM_NAME).cloned()) else {
-            return;
-        };
-        let Some(block_entity) = world.get_block_entity(pos) else {
-            return;
-        };
-        let Some(table) = block_entity.downcast_ref::<EnchantingTableBlockEntity>() else {
-            return;
-        };
-        table.set_custom_name(Some(name));
-        table.set_changed();
-    }
-
     fn new_block_entity(
         &self,
         level: Weak<World>,
@@ -172,7 +145,8 @@ mod tests {
 
     use glam::DVec3;
     use steel_registry::{
-        init_vanilla_registry, item_stack::ItemStack, vanilla_blocks, vanilla_items,
+        data_components::vanilla_components::CUSTOM_NAME, init_vanilla_registry,
+        item_stack::ItemStack, vanilla_blocks, vanilla_items,
     };
     use steel_utils::{
         ChunkPos, Direction,
@@ -181,8 +155,9 @@ mod tests {
     use text_components::TextComponent;
 
     use super::*;
-    use crate::behavior::PlacementOrientation;
     use crate::behavior::init_behaviors;
+    use crate::behavior::items::BlockItem;
+    use crate::behavior::{PlacementOrientation, PlacementSource};
     use crate::block_entity::init_block_entities;
     use crate::entity::Entity as _;
     use crate::test_support::{TestPlayerBuilder, fresh_test_world, insert_ready_full_chunk};
@@ -289,9 +264,20 @@ mod tests {
     }
 
     #[test]
-    fn set_placed_by_copies_the_placed_items_custom_name() {
-        let (world, pos) = placed_table("enchanting_table_set_placed_by");
-        let behavior = EnchantingTableBlock::new(&vanilla_blocks::ENCHANTING_TABLE);
+    fn placing_a_named_table_item_names_the_block_entity() {
+        init_vanilla_registry();
+        init_behaviors();
+        init_block_entities();
+        let world = fresh_test_world("enchanting_table_place_named_item");
+        let support = BlockPos::new(8, 63, 8);
+        let pos = support.offset(0, 1, 0);
+        insert_ready_full_chunk(&world, ChunkPos::from_block_pos(pos));
+        assert!(world.set_block(
+            support,
+            vanilla_blocks::STONE.default_state(),
+            UpdateFlags::UPDATE_ALL,
+        ));
+
         let name = TextComponent::from("Arcane Desk".to_string());
         let mut stack = ItemStack::new(&vanilla_items::ENCHANTING_TABLE);
         stack.set(CUSTOM_NAME, name.clone());
@@ -304,17 +290,27 @@ mod tests {
             },
             false,
         );
-
-        behavior.set_placed_by(
-            vanilla_blocks::ENCHANTING_TABLE.default_state(),
+        let context = BlockPlaceContext::new(
             &world,
-            pos,
-            &source,
+            source,
+            &BlockHitResult {
+                location: DVec3::new(8.5, 64.0, 8.5),
+                direction: Direction::Up,
+                block_pos: support,
+                miss: false,
+                inside: false,
+                world_border_hit: false,
+            },
+        );
+
+        assert_eq!(
+            BlockItem::new(&vanilla_blocks::ENCHANTING_TABLE).place(context),
+            InteractionResult::Success
         );
 
         let block_entity = world
             .get_block_entity(pos)
-            .expect("enchanting table should create a block entity");
+            .expect("placing the table should create its block entity");
         let table = block_entity
             .downcast_ref::<EnchantingTableBlockEntity>()
             .expect("block entity should be an enchanting table");

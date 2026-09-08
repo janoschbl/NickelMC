@@ -11,7 +11,7 @@ use crate::behavior::blocks::EnchantingTableBlock;
 use crate::behavior::init_behaviors;
 use crate::block_entity::init_block_entities;
 use crate::entity::Entity as _;
-use crate::inventory::click::Click;
+use crate::inventory::click::{Click, MouseButton};
 use crate::inventory::container::Container as _;
 use crate::inventory::menu::Menu;
 use crate::player::Player;
@@ -191,6 +191,56 @@ fn button_is_rejected_without_lapis_or_levels() {
     assert!(!table_item(&menu).is_enchanted());
     assert_eq!(table_lapis(&menu).count(), 3);
     assert_eq!(kind(&menu).enchantment_seed, SEED);
+}
+
+#[test]
+fn offers_only_reroll_when_the_table_slots_change() {
+    let (world, player, pos, mut menu) = test_table("enchant_menu_unrelated_clicks", SEED);
+    surround_with_bookshelves(&world, pos);
+    place_in_table(
+        &mut menu,
+        &player,
+        ItemStack::new(&vanilla_items::DIAMOND_SWORD),
+        0,
+    );
+    let full_ring_costs = kind(&menu).costs;
+    assert!(full_ring_costs[2] >= 30);
+
+    // Vanilla only recomputes from `enchantSlots.setChanged`, so a click that
+    // touches nothing but the player inventory keeps the stale offers even
+    // after the bookshelves are gone.
+    for offset in EnchantingTableBlock::BOOKSHELF_OFFSETS {
+        assert!(world.set_block(
+            pos.offset(offset.x, offset.y, offset.z),
+            vanilla_blocks::AIR.default_state(),
+            UpdateFlags::UPDATE_ALL,
+        ));
+    }
+    player
+        .inventory
+        .lock()
+        .set_item(1, ItemStack::new(&vanilla_items::STONE));
+    menu.clicked(
+        Click::Pickup {
+            slot: HOTBAR_FIRST_MENU_SLOT + 1,
+            button: MouseButton::Left,
+        },
+        &player,
+    );
+    assert_eq!(kind(&menu).costs, full_ring_costs);
+
+    // Moving lapis into the table changes `enchantSlots`, which rerolls against
+    // the now-empty ring.
+    place_in_table(
+        &mut menu,
+        &player,
+        ItemStack::with_count(&vanilla_items::LAPIS_LAZULI, 3),
+        2,
+    );
+    assert!(
+        kind(&menu).costs[2] <= 8,
+        "no bookshelves caps the third offer"
+    );
 }
 
 #[test]

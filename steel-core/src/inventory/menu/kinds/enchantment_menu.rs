@@ -14,6 +14,7 @@ use steel_utils::{BlockPos, DowncastType, DowncastTypeKey, locks::Shared};
 
 use crate::behavior::blocks::EnchantingTableBlock;
 use crate::enchantment_helper::{EnchantmentInstance, get_enchantment_cost, select_enchantment};
+use crate::inventory::container::DEFAULT_DISTANCE_BUFFER;
 use crate::inventory::prelude::*;
 use crate::inventory::slots::EnchantItemSlot;
 use crate::player::player_inventory::PlayerInventory;
@@ -21,6 +22,12 @@ use crate::world::World;
 
 /// Number of selectable offers.
 const OFFER_COUNT: usize = 3;
+/// Index of the item to enchant within `enchant_slots`.
+const ITEM_SLOT: usize = 0;
+/// Index of the lapis lazuli within `enchant_slots`.
+const LAPIS_SLOT: usize = 1;
+/// Vanilla `new SimpleContainer(2)`: the item slot and the lapis slot.
+const TABLE_SLOT_COUNT: usize = 2;
 
 /// Builds the enchanting table menu for the table at `pos`.
 ///
@@ -33,20 +40,20 @@ pub fn enchantment(
     world: &Arc<World>,
     enchantment_seed: i32,
 ) -> Menu {
-    let enchant_slots = SimpleContainer::new(2).into_shared();
+    let enchant_slots = SimpleContainer::new(TABLE_SLOT_COUNT).into_shared();
     let enchant_slots_ref = ContainerRef::from(Arc::clone(&enchant_slots));
 
     let mut builder = MenuBuilder::new(&vanilla_menu_types::ENCHANTMENT, container_id);
     let item = builder.section_at(
         enchant_slots_ref.clone(),
-        [0],
+        [ITEM_SLOT],
         SectionKind::custom(|container, index| {
             Box::new(EnchantItemSlot::new(container.clone(), index))
         }),
     );
     let lapis = builder.section_at(
         enchant_slots_ref,
-        [1],
+        [LAPIS_SLOT],
         SectionKind::restricted(|_, stack| stack.is(&vanilla_items::LAPIS_LAZULI)),
     );
     let player_slots = builder.player_inventory(&inventory);
@@ -96,7 +103,7 @@ pub fn enchantment(
 /// Per-menu enchanting table state: the two table slots, the seeded offers, and
 /// their client mirrors.
 pub struct EnchantmentKind {
-    /// Slot 0 holds the item, slot 1 the lapis.
+    /// The table's own two slots, indexed by [`ITEM_SLOT`] and [`LAPIS_SLOT`].
     enchant_slots: Shared<SimpleContainer>,
     block_pos: BlockPos,
     world: Arc<World>,
@@ -239,7 +246,10 @@ impl MenuKind for EnchantmentKind {
     /// Vanilla `stillValid`: the table must still stand there and be in reach.
     fn still_valid(&self, _behavior: &MenuBehavior, player: &Player) -> bool {
         self.world.get_block_state(self.block_pos).get_block() == &vanilla_blocks::ENCHANTING_TABLE
-            && player.is_within_block_interaction_range_with_buffer(self.block_pos, 4.0)
+            && player.is_within_block_interaction_range_with_buffer(
+                self.block_pos,
+                f64::from(DEFAULT_DISTANCE_BUFFER),
+            )
     }
 
     /// Vanilla `slotsChanged`: rerolls the offers only when `enchantSlots`
@@ -283,7 +293,10 @@ impl MenuKind for EnchantmentKind {
         let Some(container) = guard.get(container_id) else {
             return false;
         };
-        let (stack, mut currency) = (container.get_item(0).clone(), container.get_item(1).clone());
+        let (stack, mut currency) = (
+            container.get_item(ITEM_SLOT).clone(),
+            container.get_item(LAPIS_SLOT).clone(),
+        );
 
         if (currency.is_empty() || currency.count() < enchantment_cost) && !has_infinite_materials {
             return false;
@@ -333,8 +346,8 @@ impl MenuKind for EnchantmentKind {
         let Some(container) = guard.get_mut(container_id) else {
             return false;
         };
-        container.set_item(0, enchanted);
-        container.set_item(1, currency);
+        container.set_item(ITEM_SLOT, enchanted);
+        container.set_item(LAPIS_SLOT, currency);
         container.set_changed();
 
         player.award_custom_stat(&vanilla_custom_stats::ENCHANT_ITEM);

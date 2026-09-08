@@ -277,14 +277,13 @@ impl MenuKind for EnchantmentKind {
         let enchantment_cost = offer as i32 + 1;
         let has_infinite_materials = player.has_infinite_materials();
 
-        let mut guard = behavior.lock_all_containers();
+        // Only the table container takes part; the player inventory stays unlocked.
+        let mut guard = ContainerLockGuard::lock_all(&[ContainerRef::from(&self.enchant_slots)]);
         let container_id = ContainerId::from_arc(&self.enchant_slots);
-        let (stack, mut currency) = {
-            let container = guard
-                .get(container_id)
-                .expect("enchant container not locked");
-            (container.get_item(0).clone(), container.get_item(1).clone())
+        let Some(container) = guard.get(container_id) else {
+            return false;
         };
+        let (stack, mut currency) = (container.get_item(0).clone(), container.get_item(1).clone());
 
         if (currency.is_empty() || currency.count() < enchantment_cost) && !has_infinite_materials {
             return false;
@@ -331,9 +330,9 @@ impl MenuKind for EnchantmentKind {
         }
         currency.consume(enchantment_cost, has_infinite_materials);
 
-        let container = guard
-            .get_mut(container_id)
-            .expect("enchant container not locked");
+        let Some(container) = guard.get_mut(container_id) else {
+            return false;
+        };
         container.set_item(0, enchanted);
         container.set_item(1, currency);
         container.set_changed();

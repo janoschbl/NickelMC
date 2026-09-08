@@ -82,6 +82,7 @@ pub fn enchantment(
         lapis,
         player_slots,
         enchantment_seed,
+        table_changes_seen: 0,
         costs: [0; OFFER_COUNT],
         enchant_clue: [-1; OFFER_COUNT],
         level_clue: [-1; OFFER_COUNT],
@@ -104,6 +105,8 @@ pub struct EnchantmentKind {
     player_slots: PlayerInventorySections,
     /// Full-precision vanilla `enchantmentSeed`; `seed_slot` carries its low 16 bits.
     enchantment_seed: i32,
+    /// `enchant_slots.times_changed()` when the offers were last computed.
+    table_changes_seen: u32,
     costs: [i32; OFFER_COUNT],
     /// Registry id of the shown enchantment per offer, or -1.
     enchant_clue: [i32; OFFER_COUNT],
@@ -184,8 +187,18 @@ impl EnchantmentKind {
         list
     }
 
+    /// `enchant_slots.times_changed()` as seen through `guard`.
+    fn table_changes(&self, guard: &ContainerLockGuard) -> Option<u32> {
+        guard
+            .get_typed::<SimpleContainer>(ContainerId::from_arc(&self.enchant_slots))
+            .map(SimpleContainer::times_changed)
+    }
+
     /// Vanilla `EnchantmentMenu.slotsChanged`: rerolls the three offers for the table item.
     fn update_offers(&mut self, behavior: &mut MenuBehavior, guard: &mut ContainerLockGuard) {
+        if let Some(changes) = self.table_changes(guard) {
+            self.table_changes_seen = changes;
+        }
         let stack = behavior.slots()[self.item.start()].get_item(guard).clone();
         if stack.is_empty() || !stack.is_enchantable() {
             self.clear_offers();
@@ -229,13 +242,18 @@ impl MenuKind for EnchantmentKind {
             && player.is_within_block_interaction_range_with_buffer(self.block_pos, 4.0)
     }
 
-    /// Vanilla `slotsChanged`: rerolls the offers whenever a menu slot changes.
+    /// Vanilla `slotsChanged`: rerolls the offers only when `enchantSlots`
+    /// changed. Vanilla reaches this through that container's `setChanged`
+    /// override, so player-inventory clicks leave the offers alone.
     fn slots_changed(
         &mut self,
         behavior: &mut MenuBehavior,
         guard: &mut ContainerLockGuard,
         _player: &Player,
     ) {
+        if self.table_changes(guard) == Some(self.table_changes_seen) {
+            return;
+        }
         self.update_offers(behavior, guard);
     }
 

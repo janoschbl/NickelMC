@@ -267,10 +267,12 @@ fn enchanting_spends_levels_and_lapis_and_rerolls_the_seed() {
     assert!(table_lapis(&menu).is_empty());
     let experience = player.experience.lock();
     assert_eq!(experience.level(), 27);
-    assert_ne!(experience.enchantment_seed(), SEED);
+    let rerolled_seed = experience.enchantment_seed();
     drop(experience);
     let kind = kind(&menu);
-    assert_ne!(kind.enchantment_seed, SEED);
+    // Vanilla draws the new seed with `random.nextInt()`, which may repeat the
+    // old value, so only the hand-off from player to menu is asserted.
+    assert_eq!(kind.enchantment_seed, rerolled_seed);
     assert_eq!(
         kind.costs, [0; 3],
         "an enchanted item has no further offers"

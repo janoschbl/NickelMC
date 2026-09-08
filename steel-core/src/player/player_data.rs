@@ -508,19 +508,13 @@ impl PersistentPlayerData {
         }
 
         {
-            // Vanilla rerolls a missing or zero `XpSeed` when loading the player.
-            let enchantment_seed = if self.enchantment_seed == 0 {
-                rand::random()
-            } else {
-                self.enchantment_seed
-            };
             let mut experience = player.experience.lock();
             *experience = Experience::from_parts(
                 self.experience_level,
                 self.experience_progress,
                 self.experience_total,
             )
-            .with_enchantment_seed(enchantment_seed);
+            .with_loaded_enchantment_seed(self.enchantment_seed, rand::random);
         }
         player.set_score(self.score);
         player.set_seen_credits(self.seen_credits);

@@ -173,7 +173,7 @@ impl Menu {
     }
 
     /// Forwards a client button press to the menu's kind and reports whether
-    /// the menu changed. Always false for kinds without buttons.
+    /// the kind handled it. Always false for kinds without buttons.
     pub fn click_menu_button(&mut self, button_id: i32, player: &Player) -> bool {
         let Self { behavior, kind, .. } = self;
         kind.click_menu_button(behavior, button_id, player)

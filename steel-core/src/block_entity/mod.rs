@@ -61,6 +61,7 @@ pub(crate) use storage::{
     DetachedBlockEntity, LifecycleDispatchers,
 };
 
+use crate::inventory::container::DEFAULT_DISTANCE_BUFFER;
 use crate::inventory::lock::ContainerRef;
 use crate::player::Player;
 
@@ -332,7 +333,10 @@ impl BlockEntityBase {
             return false;
         };
         ptr::eq(current.base(), self)
-            && player.is_within_block_interaction_range_with_buffer(self.pos, 4.0)
+            && player.is_within_block_interaction_range_with_buffer(
+                self.pos,
+                f64::from(DEFAULT_DISTANCE_BUFFER),
+            )
     }
 }
 

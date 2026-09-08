@@ -35,8 +35,8 @@ pub trait MenuKind: ErasedType + Send + Sync {
     fn on_rename(&mut self, _behavior: &mut MenuBehavior, _name: String, _player: &Player) {}
 
     /// Handles a client button press (vanilla `clickMenuButton`). Returns true
-    /// when the press changed the menu so the caller re-syncs it. No-op for
-    /// kinds without buttons.
+    /// when the press was handled, whether or not it changed anything; the
+    /// caller then re-syncs the menu. No-op for kinds without buttons.
     fn click_menu_button(
         &mut self,
         _behavior: &mut MenuBehavior,

@@ -67,15 +67,18 @@ impl EnchantingTableBlock {
         let provider = world
             .get_block_state(pos.offset(offset.x, offset.y, offset.z))
             .get_block();
+        if !REGISTRY
+            .blocks
+            .is_in_tag(provider, &BlockTag::ENCHANTMENT_POWER_PROVIDER)
+        {
+            return false;
+        }
         let transmitter = world
             .get_block_state(pos.offset(offset.x / 2, offset.y, offset.z / 2))
             .get_block();
         REGISTRY
             .blocks
-            .is_in_tag(provider, &BlockTag::ENCHANTMENT_POWER_PROVIDER)
-            && REGISTRY
-                .blocks
-                .is_in_tag(transmitter, &BlockTag::ENCHANTMENT_POWER_TRANSMITTER)
+            .is_in_tag(transmitter, &BlockTag::ENCHANTMENT_POWER_TRANSMITTER)
     }
 }
 

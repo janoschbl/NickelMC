@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
 
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use steel_math::trig;
 use steel_registry::entity_data::{EntityData::Vector3, Vector3f};
 use steel_utils::{
@@ -43,7 +43,7 @@ impl Goal for SquidRandomMovementGoal {
         };
 
         if squid.no_action_time() > 100 {
-            squid.set_movement_vector(Vec3::ZERO);
+            squid.set_movement_vector(DVec3::ZERO);
             return;
         }
 
@@ -59,7 +59,8 @@ impl Goal for SquidRandomMovementGoal {
             trig::cos(angle) as f32 * 0.2,
             -0.1 + squid.random_next_f32() * 0.2,
             trig::sin(angle) as f32 * 0.2,
-        );
+        )
+        .into();
 
         squid.set_movement_vector(movement);
     }

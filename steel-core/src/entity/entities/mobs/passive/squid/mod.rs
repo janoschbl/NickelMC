@@ -16,7 +16,7 @@ use steel_utils::{
     random::{Random, legacy_random::LegacyRandom},
 };
 
-use crate::entity::AnimalBase;
+use crate::entity::{AnimalBase, ai::goal::SquidFleeGoal};
 use crate::{
     entity::{
         AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
@@ -52,7 +52,7 @@ pub struct SquidEntity {
 }
 
 pub struct SquidState {
-    movement_vector: Vec3,
+    movement_vector: DVec3,
     // I don't know if we want random here, or if its okay to just re-create it in SquidRandomMovementGoal
     random: LegacyRandom,
     tentacle_speed: f32,
@@ -75,10 +75,10 @@ impl SquidEntity {
     }
 
     pub fn has_movement_vector(&self) -> bool {
-        self.state.lock().movement_vector.length_squared() > 1.0e-5_f32
+        self.state.lock().movement_vector.length_squared() > 1.0e-5_f64
     }
 
-    pub fn set_movement_vector(&self, new_vec: Vec3) {
+    pub fn set_movement_vector(&self, new_vec: DVec3) {
         self.state.lock().movement_vector = new_vec;
     }
 
@@ -90,7 +90,7 @@ impl SquidEntity {
         self.state.lock().random.next_i32_bounded(bound)
     }
 
-    pub fn movement_vector(&self) -> Vec3 {
+    pub fn movement_vector(&self) -> DVec3 {
         self.state.lock().movement_vector
     }
 
@@ -218,7 +218,9 @@ impl SquidEntity {
         // Add goals here
         {
             let mut goal_selector = mob_base.goal_selector().lock();
-            goal_selector.add_goal(0, SquidRandomMovementGoal::new());
+            // Fleeing must outrank the always-available random movement goal.
+            goal_selector.add_goal(0, SquidFleeGoal::new());
+            goal_selector.add_goal(1, SquidRandomMovementGoal::new());
         }
 
         Self {
@@ -230,7 +232,7 @@ impl SquidEntity {
             animal_base,
             entity_data: SyncMutex::new(entity_data),
             state: SyncMutex::new(SquidState {
-                movement_vector: Vec3::ZERO,
+                movement_vector: DVec3::ZERO,
                 random,
                 tentacle_speed: 1.0 / (tentical_random + 1.0) * 0.2,
                 tentacle_movement: 0.0,

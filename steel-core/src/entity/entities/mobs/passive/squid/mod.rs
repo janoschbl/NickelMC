@@ -102,12 +102,12 @@ impl SquidEntity {
         )
     }
 
-    fn rotate_vector(&self, vector: Vec3) -> Vec3 {
+    fn rotate_vector(&self, vector: DVec3) -> DVec3 {
         let (yaw, pitch) = self.rotation();
 
         vector
-            .rotate_x(yaw.to_radians())
-            .rotate_y(-pitch.to_radians())
+            .rotate_x(pitch.to_radians() as f64)
+            .rotate_y(-yaw.to_radians() as f64)
     }
 
     fn spawn_ink(&self) {
@@ -122,26 +122,14 @@ impl SquidEntity {
         let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
 
         for _ in 0..30 {
-            let direction = self.rotate_vector(Vec3::new(
-                self.random_next_f32() * 0.6 - 0.3,
-                -1.0,
-                self.random_next_f32() * 0.6 - 0.3,
+            let direction = self.rotate_vector(DVec3::new(
+                self.random_next_f32() as f64 * 0.6 - 0.3,
+                -1.0 as f64,
+                self.random_next_f32() as f64 * 0.6 - 0.3,
             ));
-
             let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
-            let offset = direction * (position_scale + self.random_next_f32() * 2.0);
-
-            world.send_particles(
-                particle.clone(),
-                particle_position,
-                0,
-                DVec3::new(
-                    f64::from(offset.x),
-                    f64::from(offset.y),
-                    f64::from(offset.z),
-                ),
-                0.1,
-            );
+            let offset = direction * (position_scale + self.random_next_f32() * 2.0) as f64;
+            world.send_particles(particle.clone(), particle_position, 0, offset, 0.1);
         }
     }
 

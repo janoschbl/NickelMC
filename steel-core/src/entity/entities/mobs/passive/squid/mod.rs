@@ -3,29 +3,40 @@ use std::{f32::consts::PI, ops::Add, sync::Weak};
 use glam::{DVec3, Vec3};
 use steel_macros::entity_behavior;
 use steel_registry::{
-    entity_data::{ParticleData, Vector3f},
-    entity_type::EntityTypeRef,
-    sound_event::SoundEvent,
+    entity_data::{EntityPose, ParticleData},
+    entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
     sound_events,
     vanilla_entity_data::SquidEntityData,
-    vanilla_mob_effects::{self, LEVITATION},
+    vanilla_mob_effects::LEVITATION,
     vanilla_particle_types,
 };
 use steel_utils::{
     DowncastType, DowncastTypeKey, entity_events,
-    geometry::AabbVector,
     locks::SyncMutex,
     random::{Random, legacy_random::LegacyRandom},
 };
 
+use crate::entity::AnimalBase;
 use crate::{
     entity::{
-        AgeableMobBase, AnimalBase, Entity, EntityBase, EntityBaseLoad, LivingEntity,
-        LivingEntityBase, Mob, MobBase, PathfinderMob, ai::goal::SquidRandomMovementGoal,
+        AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
+        LivingEntity, LivingEntityBase, Mob, MobBase, PathfinderMob,
+        ai::goal::SquidRandomMovementGoal,
     },
     physics::{MoveResult, MoverType},
     world::World,
 };
+
+const SQUID_BABY_WIDTH: f32 = 0.5;
+const SQUID_BABY_HEIGHT: f32 = 0.5;
+const SQUID_BABY_EYE_HEIGHT: f32 = 0.37;
+
+const SQUID_BABY_DIMENSIONS: EntityDimensions = EntityDimensions::new_with_attachments(
+    SQUID_BABY_WIDTH,
+    SQUID_BABY_HEIGHT,
+    SQUID_BABY_EYE_HEIGHT,
+    EntityAttachments::fallback(),
+);
 
 #[entity_behavior(class = "Squid")]
 pub struct SquidEntity {
@@ -117,7 +128,7 @@ impl SquidEntity {
                 self.random_next_f32() * 0.6 - 0.3,
             ));
 
-            let position_scale = if self.is_baby() { 0.1 } else { 0.3 };
+            let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
             let offset = direction * (position_scale + self.random_next_f32() * 2.0);
 
             world.send_particles(
@@ -272,6 +283,21 @@ impl Entity for SquidEntity {
         // TODO: Magic number
         0.08
     }
+
+    fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
+        let scale = LivingEntity::get_scale(self);
+        if AgeableMob::is_baby(self) {
+            SQUID_BABY_DIMENSIONS.scale(scale)
+        } else if self.entity_type.fixed {
+            self.entity_type.dimensions
+        } else {
+            self.entity_type.dimensions.scale(scale)
+        }
+    }
+
+    fn synced_data(&self) -> Option<&dyn EntitySyncedData> {
+        Some(&self.entity_data)
+    }
 }
 
 impl LivingEntity for SquidEntity {
@@ -311,7 +337,8 @@ impl LivingEntity for SquidEntity {
         let result = Mob::mob_ai_step(self);
         self.tick_squid_movement();
         self.update_squid_rotation();
-        // TODO: TICK AGE HERE
+
+        AgeableMob::tick_ageable_mob(self);
         result
     }
 
@@ -324,6 +351,28 @@ impl LivingEntity for SquidEntity {
 
     fn death_sound(&self) -> Option<steel_registry::sound_event::SoundEventRef> {
         Some(&sound_events::ENTITY_SQUID_DEATH)
+    }
+}
+
+impl AgeableMob for SquidEntity {
+    fn ageable_base(&self) -> &AgeableMobBase {
+        &self.ageable_base
+    }
+
+    fn is_age_locked(&self) -> bool {
+        *self.entity_data.lock().ageable_mob().age_locked.get()
+    }
+
+    fn set_age_locked(&self, age_locked: bool) {
+        self.entity_data
+            .lock()
+            .ageable_mob_mut()
+            .age_locked
+            .set(age_locked);
+    }
+
+    fn set_synced_baby(&self, baby: bool) {
+        self.entity_data.lock().ageable_mob_mut().baby.set(baby);
     }
 }
 
@@ -350,6 +399,15 @@ impl Mob for SquidEntity {
 
     fn ambient_sound(&self) -> Option<steel_registry::sound_event::SoundEventRef> {
         Some(&sound_events::ENTITY_SQUID_AMBIENT)
+    }
+
+    fn finalize_spawn(
+        &self,
+        world: &std::sync::Arc<World>,
+        spawn_reason: crate::entity::EntitySpawnReason,
+        group_data: Option<crate::entity::SpawnGroupData>,
+    ) -> Option<crate::entity::SpawnGroupData> {
+        self.finalize_spawn_ageable_mob(world, spawn_reason, group_data)
     }
 }
 

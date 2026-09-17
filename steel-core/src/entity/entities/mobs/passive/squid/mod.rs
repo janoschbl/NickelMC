@@ -63,6 +63,9 @@ pub struct SquidEntity {
 }
 
 pub struct SquidState {
+    x_body_rot: f32,
+    // Required for inking on fleeing.
+    x_body_rot_old: f32,
     movement_vector: DVec3,
     // I don't know if we want random here, or if its okay to just re-create it in SquidRandomMovementGoal
     random: LegacyRandom,
@@ -130,22 +133,12 @@ impl SquidEntity {
     ///
     /// Equivalent to `Squid.rotateVector()` in vanilla.
     fn rotate_vector(&self, vector: DVec3) -> DVec3 {
-        let (yaw, pitch) = self.rotation();
+        let x_rot = f64::from(self.state.lock().x_body_rot_old).to_radians();
+        let y_rot = f64::from(-self.living_rotation_state().y_body_rot_o().to_radians());
 
-        let x_rot = f64::from(pitch).to_radians();
-        let y_rot = -f64::from(yaw).to_radians(); // Inverted!
+        let vector = vector.rotate_x(x_rot).rotate_y(y_rot);
 
-        let (sin_x, cos_x) = x_rot.sin_cos();
-
-        let v = DVec3::new(
-            vector.x,
-            vector.y * cos_x + vector.z * sin_x,
-            vector.z * cos_x - vector.y * sin_x,
-        );
-
-        let (sin_y, cos_y) = y_rot.sin_cos();
-
-        DVec3::new(v.x * cos_y + v.z * sin_y, v.y, v.z * cos_y - v.x * sin_y)
+        vector
     }
 
     fn spawn_ink(&self) {
@@ -155,8 +148,7 @@ impl SquidEntity {
 
         self.make_sound(Some(&sound_events::ENTITY_SQUID_SQUIRT));
 
-        // Vanilla adds -1 to the y position, but from testing that puts the ink particle way too far below the squid
-        let position = self.position();
+        let position = self.position() + self.rotate_vector(DVec3::new(0.0, -1.0, 0.0));
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
         let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
         let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
@@ -227,22 +219,22 @@ impl SquidEntity {
     }
 
     fn update_squid_rotation(&self) {
-        let (yaw, pitch) = self.rotation();
+        let mut state = self.state.lock();
+        state.x_body_rot_old = state.x_body_rot;
 
         if self.is_in_water() {
             let movement = self.velocity();
             let horizontal = movement.x.hypot(movement.z);
 
-            let target_yaw = (-movement.x.atan2(movement.z)).to_degrees() as f32;
-            let target_pitch = (-horizontal.atan2(movement.y)).to_degrees() as f32;
+            let y_body_rot = self.living_rotation_state().y_body_rot();
+            let y_body_rot = y_body_rot
+                + (-((movement.x.atan2(movement.z)).to_degrees() as f32) - y_body_rot) * 0.1;
 
-            let yaw = yaw + (target_yaw - yaw) * 0.1;
-            let pitch = pitch + (target_pitch - pitch) * 0.1;
-
-            self.set_rotation((yaw, pitch));
+            self.set_y_body_rot(y_body_rot);
+            state.x_body_rot +=
+                (-((horizontal.atan2(movement.y)).to_degrees() as f32) - state.x_body_rot) * 0.1;
         } else {
-            let pitch = pitch + (-90.0 - pitch) * 0.02;
-            self.set_rotation((yaw, pitch));
+            state.x_body_rot += (-90.0 - state.x_body_rot) * 0.02;
         }
     }
 
@@ -277,6 +269,8 @@ impl SquidEntity {
             ageable_base,
             entity_data: SyncMutex::new(entity_data),
             state: SyncMutex::new(SquidState {
+                x_body_rot: 0.0,
+                x_body_rot_old: 0.0,
                 movement_vector: DVec3::ZERO,
                 random,
                 tentacle_speed: 1.0 / (tentacle_random + 1.0) * 0.2,
@@ -371,8 +365,8 @@ impl LivingEntity for SquidEntity {
     fn ai_step(&self) -> Option<MoveResult> {
         let result = Mob::mob_ai_step(self);
 
-        self.tick_squid_movement();
         self.update_squid_rotation();
+        self.tick_squid_movement();
 
         AgeableMob::tick_ageable_mob(self);
         result

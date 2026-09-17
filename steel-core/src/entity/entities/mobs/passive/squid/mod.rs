@@ -1,6 +1,6 @@
-use std::{f32::consts::PI, ops::Add, sync::Weak};
+use std::{f32::consts::PI, sync::Weak};
 
-use glam::{DVec3, Vec3};
+use glam::DVec3;
 use steel_macros::entity_behavior;
 use steel_registry::{
     entity_data::{EntityPose, ParticleData},
@@ -86,6 +86,10 @@ impl SquidEntity {
         self.state.lock().random.next_f32()
     }
 
+    pub fn random_next_f64(&self) -> f64 {
+        self.state.lock().random.next_f64()
+    }
+
     pub fn random_next_i32_bounded(&self, bound: i32) -> i32 {
         self.state.lock().random.next_i32_bounded(bound)
     }
@@ -105,9 +109,34 @@ impl SquidEntity {
     fn rotate_vector(&self, vector: DVec3) -> DVec3 {
         let (yaw, pitch) = self.rotation();
 
-        vector
-            .rotate_x(pitch.to_radians() as f64)
-            .rotate_y(-yaw.to_radians() as f64)
+        let x_rot = f64::from(pitch).to_radians();
+        let y_rot = -f64::from(yaw).to_radians(); // Inverted!
+
+        // Minecraft Vec3.xRot()
+        //  float cos = Mth.cos((double)radians);
+        //  float sin = Mth.sin((double)radians);
+        //  double xx = this.x;
+        //  double yy = this.y * (double)cos + this.z * (double)sin;
+        //  double zz = this.z * (double)cos - this.y * (double)sin;
+        //  return new Vec3(xx, yy, zz);
+        let (sin_x, cos_x) = x_rot.sin_cos();
+
+        let v = DVec3::new(
+            vector.x,
+            vector.y * cos_x + vector.z * sin_x,
+            vector.z * cos_x - vector.y * sin_x,
+        );
+
+        // Minecraft Vec3.yRot()
+        //  float cos = Mth.cos((double)radians);
+        //  float sin = Mth.sin((double)radians);
+        //  double xx = this.x * (double)cos + this.z * (double)sin;
+        //  double yy = this.y;
+        //  double zz = this.z * (double)cos - this.x * (double)sin;
+        //  return new Vec3(xx, yy, zz);
+        let (sin_y, cos_y) = y_rot.sin_cos();
+
+        DVec3::new(v.x * cos_y + v.z * sin_y, v.y, v.z * cos_y - v.x * sin_y)
     }
 
     fn spawn_ink(&self) {
@@ -117,7 +146,8 @@ impl SquidEntity {
 
         self.make_sound(Some(&sound_events::ENTITY_SQUID_SQUIRT));
 
-        let position = self.position() + DVec3::new(0.0, -1.0, 0.0);
+        // Vanilla adds -1 to the y position, but from testing that puts the ink particle way too far below the squid
+        let position = self.position();
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
         let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
 
@@ -191,16 +221,15 @@ impl SquidEntity {
         let movement = self.velocity();
         let horizontal = movement.x.hypot(movement.z);
 
-        if movement.length_squared() <= f64::EPSILON {
-            return;
-        }
+        let (current_yaw, current_pitch) = self.rotation();
 
         let target_yaw = (-movement.x.atan2(movement.z)).to_degrees() as f32;
+        let target_pitch = (-horizontal.atan2(movement.y)).to_degrees() as f32;
 
-        let (current_yaw, current_pitch) = self.rotation();
         let yaw = current_yaw + (target_yaw - current_yaw) * 0.1;
+        let pitch = current_pitch + (target_pitch - current_pitch) * 0.1;
 
-        self.set_rotation((yaw, current_pitch));
+        self.set_rotation((yaw, pitch));
     }
 
     fn new_with_base(base: EntityBase, entity_type: EntityTypeRef) -> Self {

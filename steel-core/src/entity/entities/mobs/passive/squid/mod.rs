@@ -1,10 +1,14 @@
-use std::{f32::consts::PI, sync::Weak};
+use std::{
+    f32::consts::{PI, TAU},
+    sync::{Arc, Weak},
+};
 
 use glam::DVec3;
 use steel_macros::entity_behavior;
 use steel_registry::{
     entity_data::{EntityPose, ParticleData},
     entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
+    sound_event::SoundEventRef,
     sound_events, vanilla_attributes,
     vanilla_entity_data::SquidEntityData,
     vanilla_mob_effects::LEVITATION,
@@ -16,7 +20,10 @@ use steel_utils::{
     random::{Random, legacy_random::LegacyRandom},
 };
 
-use crate::entity::{AnimalBase, EntityMovementEmission, ai::goal::SquidFleeGoal};
+use crate::entity::{
+    EntityMovementEmission, EntitySpawnReason, SpawnGroupData, ai::goal::SquidFleeGoal,
+    damage::DamageSource,
+};
 use crate::{
     entity::{
         AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
@@ -38,14 +45,18 @@ const SQUID_BABY_DIMENSIONS: EntityDimensions = EntityDimensions::new_with_attac
     EntityAttachments::fallback(),
 );
 
+const SQUID_AIR_DRAG: f64 = 0.98;
+const SQUID_GRAVITY: f64 = 0.08;
+const SQUID_SOUND_VOLUME: f32 = 0.4;
+
 #[entity_behavior(class = "Squid")]
+/// Vanilla Squid entity
 pub struct SquidEntity {
     base: EntityBase,
     entity_type: EntityTypeRef,
     living_base: LivingEntityBase,
     mob_base: MobBase,
     ageable_base: AgeableMobBase,
-    animal_base: AnimalBase,
     entity_data: SyncMutex<SquidEntityData>,
 
     state: SyncMutex<SquidState>,
@@ -59,13 +70,13 @@ pub struct SquidState {
     tentacle_movement: f32,
 }
 
-const SQUID_AIR_DRAG: f64 = 0.98;
-
+// SAFETY: This key is owned by Steel and uniquely identifies `SquidEntity`.
 unsafe impl DowncastType for SquidEntity {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/squid");
 }
 
 impl SquidEntity {
+    /// Creates a new Squid entity
     #[must_use]
     pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {
         Self::new_with_base(
@@ -74,30 +85,39 @@ impl SquidEntity {
         )
     }
 
+    /// Checks if the squid has a movement vector.
+    ///
+    /// Equivalent to `Squid.hasMovementVector()` in vanilla.
     pub fn has_movement_vector(&self) -> bool {
-        self.state.lock().movement_vector.length_squared() > 1.0e-5_f64
+        self.state.lock().movement_vector.length_squared() > 1.0e-5
     }
 
+    /// Sets the squid's movement vector
     pub fn set_movement_vector(&self, new_vec: DVec3) {
         self.state.lock().movement_vector = new_vec;
     }
 
+    /// Returns the next random f32
     pub fn random_next_f32(&self) -> f32 {
         self.state.lock().random.next_f32()
     }
 
+    /// Returns the next random f64
     pub fn random_next_f64(&self) -> f64 {
         self.state.lock().random.next_f64()
     }
 
+    /// Returns the next random i32 within the upper bound
     pub fn random_next_i32_bounded(&self, bound: i32) -> i32 {
         self.state.lock().random.next_i32_bounded(bound)
     }
 
+    /// Returns the squid's movement vector
     pub fn movement_vector(&self) -> DVec3 {
         self.state.lock().movement_vector
     }
 
+    /// Recreates a squid from saved entity state
     #[must_use]
     pub fn from_saved(entity_type: EntityTypeRef, load: EntityBaseLoad) -> Self {
         Self::new_with_base(
@@ -106,19 +126,15 @@ impl SquidEntity {
         )
     }
 
+    /// Rotates a vector
+    ///
+    /// Equivalent to `Squid.rotateVector()` in vanilla.
     fn rotate_vector(&self, vector: DVec3) -> DVec3 {
         let (yaw, pitch) = self.rotation();
 
         let x_rot = f64::from(pitch).to_radians();
         let y_rot = -f64::from(yaw).to_radians(); // Inverted!
 
-        // Minecraft Vec3.xRot()
-        //  float cos = Mth.cos((double)radians);
-        //  float sin = Mth.sin((double)radians);
-        //  double xx = this.x;
-        //  double yy = this.y * (double)cos + this.z * (double)sin;
-        //  double zz = this.z * (double)cos - this.y * (double)sin;
-        //  return new Vec3(xx, yy, zz);
         let (sin_x, cos_x) = x_rot.sin_cos();
 
         let v = DVec3::new(
@@ -127,13 +143,6 @@ impl SquidEntity {
             vector.z * cos_x - vector.y * sin_x,
         );
 
-        // Minecraft Vec3.yRot()
-        //  float cos = Mth.cos((double)radians);
-        //  float sin = Mth.sin((double)radians);
-        //  double xx = this.x * (double)cos + this.z * (double)sin;
-        //  double yy = this.y;
-        //  double zz = this.z * (double)cos - this.x * (double)sin;
-        //  return new Vec3(xx, yy, zz);
         let (sin_y, cos_y) = y_rot.sin_cos();
 
         DVec3::new(v.x * cos_y + v.z * sin_y, v.y, v.z * cos_y - v.x * sin_y)
@@ -150,29 +159,29 @@ impl SquidEntity {
         let position = self.position();
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
         let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
+        let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
 
         for _ in 0..30 {
             let direction = self.rotate_vector(DVec3::new(
-                self.random_next_f32() as f64 * 0.6 - 0.3,
-                -1.0 as f64,
-                self.random_next_f32() as f64 * 0.6 - 0.3,
+                self.random_next_f64() * 0.6 - 0.3,
+                -1.0,
+                self.random_next_f64() * 0.6 - 0.3,
             ));
-            let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
-            let offset = direction * (position_scale + self.random_next_f32() * 2.0) as f64;
+            let offset = direction * (position_scale + self.random_next_f64() * 2.0);
             world.send_particles(particle.clone(), particle_position, 0, offset, 0.1);
         }
     }
 
     fn tick_squid_movement(&self) {
-        let (tentacle_movement, movement_vector, animation_synch) = {
+        let (tentacle_movement, movement_vector, animation_sync) = {
             let mut state = self.state.lock();
 
             state.tentacle_movement += state.tentacle_speed;
 
-            let animation_synch = state.tentacle_movement > std::f32::consts::TAU;
+            let animation_sync = state.tentacle_movement > TAU;
 
-            if animation_synch {
-                state.tentacle_movement -= std::f32::consts::TAU;
+            if animation_sync {
+                state.tentacle_movement -= TAU;
 
                 if state.random.next_i32_bounded(10) == 0 {
                     state.tentacle_speed = 1.0 / (state.random.next_f32() + 1.0) * 0.2;
@@ -182,11 +191,11 @@ impl SquidEntity {
             (
                 state.tentacle_movement,
                 state.movement_vector,
-                animation_synch,
+                animation_sync,
             )
         };
 
-        if animation_synch {
+        if animation_sync {
             self.broadcast_entity_event(entity_events::EntityStatus::SquidAnimSynch);
         }
 
@@ -196,9 +205,9 @@ impl SquidEntity {
 
                 if tentacle_scale > 0.75 {
                     self.set_velocity(DVec3::new(
-                        f64::from(movement_vector.x),
-                        f64::from(movement_vector.y),
-                        f64::from(movement_vector.z),
+                        movement_vector.x,
+                        movement_vector.y,
+                        movement_vector.z,
                     ));
                 }
             } else {
@@ -239,24 +248,20 @@ impl SquidEntity {
 
     fn new_with_base(base: EntityBase, entity_type: EntityTypeRef) -> Self {
         let living_base = LivingEntityBase::new(entity_type);
-        {
-            living_base
-                .attributes()
-                .lock()
-                .set_base_value(&vanilla_attributes::MAX_HEALTH, 10.0);
-        }
+        living_base
+            .attributes()
+            .lock()
+            .set_base_value(vanilla_attributes::MAX_HEALTH, 10.0);
 
         let mob_base = MobBase::new();
         let ageable_base = AgeableMobBase::new();
-        let animal_base = AnimalBase::new();
-        AnimalBase::initialize_pathfinding_malus(&mob_base);
+
         let mut entity_data = SquidEntityData::new();
         living_base.initialize_synced_data(&mut entity_data);
 
         let mut random = LegacyRandom::from_seed(rand::random());
-        let tentical_random = random.next_f32();
+        let tentacle_random = random.next_f32();
 
-        // Add goals here
         {
             let mut goal_selector = mob_base.goal_selector().lock();
             // Fleeing must outrank the always-available random movement goal.
@@ -270,12 +275,11 @@ impl SquidEntity {
             living_base,
             mob_base,
             ageable_base,
-            animal_base,
             entity_data: SyncMutex::new(entity_data),
             state: SyncMutex::new(SquidState {
                 movement_vector: DVec3::ZERO,
                 random,
-                tentacle_speed: 1.0 / (tentical_random + 1.0) * 0.2,
+                tentacle_speed: 1.0 / (tentacle_random + 1.0) * 0.2,
                 tentacle_movement: 0.0,
             }),
         }
@@ -287,16 +291,11 @@ impl Entity for SquidEntity {
         &self.base
     }
 
-    fn hurt(
-        &self,
-        world: &World,
-        source: &crate::entity::damage::DamageSource,
-        amount: f32,
-    ) -> bool {
+    fn hurt(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
         let hurt = LivingEntity::hurt_server(self, world, source, amount);
 
         if hurt && self.last_hurt_by_mob().is_some() {
-            self.spawn_ink()
+            self.spawn_ink();
         }
 
         hurt
@@ -307,7 +306,7 @@ impl Entity for SquidEntity {
     }
 
     fn entity_type(&self) -> EntityTypeRef {
-        &self.entity_type
+        self.entity_type
     }
 
     fn base_tick(&self) {
@@ -315,8 +314,7 @@ impl Entity for SquidEntity {
     }
 
     fn get_default_gravity(&self) -> f64 {
-        // TODO: Magic number
-        0.08
+        SQUID_GRAVITY
     }
 
     fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
@@ -341,8 +339,7 @@ impl LivingEntity for SquidEntity {
     }
 
     fn sound_volume(&self) -> f32 {
-        // MAGIC NUMBER!
-        0.4
+        SQUID_SOUND_VOLUME
     }
 
     fn can_breathe_underwater(&self) -> bool {
@@ -373,6 +370,7 @@ impl LivingEntity for SquidEntity {
 
     fn ai_step(&self) -> Option<MoveResult> {
         let result = Mob::mob_ai_step(self);
+
         self.tick_squid_movement();
         self.update_squid_rotation();
 
@@ -380,14 +378,11 @@ impl LivingEntity for SquidEntity {
         result
     }
 
-    fn hurt_sound(
-        &self,
-        _source: &crate::entity::damage::DamageSource,
-    ) -> Option<steel_registry::sound_event::SoundEventRef> {
+    fn hurt_sound(&self, _source: &DamageSource) -> Option<SoundEventRef> {
         Some(&sound_events::ENTITY_SQUID_HURT)
     }
 
-    fn death_sound(&self) -> Option<steel_registry::sound_event::SoundEventRef> {
+    fn death_sound(&self) -> Option<SoundEventRef> {
         Some(&sound_events::ENTITY_SQUID_DEATH)
     }
 }
@@ -435,16 +430,16 @@ impl Mob for SquidEntity {
         self.entity_data.lock().mob_mut().mob_flags.set(flags);
     }
 
-    fn ambient_sound(&self) -> Option<steel_registry::sound_event::SoundEventRef> {
+    fn ambient_sound(&self) -> Option<SoundEventRef> {
         Some(&sound_events::ENTITY_SQUID_AMBIENT)
     }
 
     fn finalize_spawn(
         &self,
-        world: &std::sync::Arc<World>,
-        spawn_reason: crate::entity::EntitySpawnReason,
-        group_data: Option<crate::entity::SpawnGroupData>,
-    ) -> Option<crate::entity::SpawnGroupData> {
+        world: &Arc<World>,
+        spawn_reason: EntitySpawnReason,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
         self.finalize_spawn_ageable_mob(world, spawn_reason, group_data)
     }
 }

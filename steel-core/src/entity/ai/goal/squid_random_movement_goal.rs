@@ -1,6 +1,6 @@
-use std::f64::consts::PI;
+use std::f64::consts::TAU;
 
-use glam::{DVec3, Vec3};
+use glam::DVec3;
 use steel_math::trig;
 use steel_utils::Downcast;
 
@@ -10,12 +10,12 @@ use crate::entity::{
     entities::SquidEntity,
 };
 
-pub struct SquidRandomMovementGoal {}
+pub struct SquidRandomMovementGoal;
 
 impl SquidRandomMovementGoal {
     #[must_use]
     pub(crate) const fn new() -> Self {
-        Self {}
+        Self
     }
 }
 
@@ -41,19 +41,18 @@ impl Goal for SquidRandomMovementGoal {
         }
 
         if squid.random_next_i32_bounded(50) != 0
-            && squid.is_in_water() // WasInWater() in java seems to be functionally equivilent to this?
+            && squid.is_in_water()
             && squid.has_movement_vector()
         {
             return;
         }
 
-        let angle = f64::from(squid.random_next_f32()) * PI * 2.0;
-        let movement = Vec3::new(
-            trig::cos(angle) as f32 * 0.2,
-            -0.1 + squid.random_next_f32() * 0.2,
-            trig::sin(angle) as f32 * 0.2,
-        )
-        .into();
+        let angle = f64::from(squid.random_next_f32()) * TAU;
+        let movement = DVec3::new(
+            (trig::cos(angle) * 0.2).into(),
+            -0.1 + squid.random_next_f64() * 0.2,
+            (trig::sin(angle) * 0.2).into(),
+        );
 
         squid.set_movement_vector(movement);
     }

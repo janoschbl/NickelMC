@@ -136,9 +136,7 @@ impl SquidEntity {
         let x_rot = f64::from(self.state.lock().x_body_rot_old).to_radians();
         let y_rot = f64::from(-self.living_rotation_state().y_body_rot_o().to_radians());
 
-        let vector = vector.rotate_x(x_rot).rotate_y(y_rot);
-
-        vector
+        vector.rotate_x(x_rot).rotate_y(y_rot)
     }
 
     fn spawn_ink(&self) {

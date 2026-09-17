@@ -5,7 +5,7 @@ use steel_macros::entity_behavior;
 use steel_registry::{
     entity_data::{EntityPose, ParticleData},
     entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
-    sound_events,
+    sound_events, vanilla_attributes,
     vanilla_entity_data::SquidEntityData,
     vanilla_mob_effects::LEVITATION,
     vanilla_particle_types,
@@ -16,7 +16,7 @@ use steel_utils::{
     random::{Random, legacy_random::LegacyRandom},
 };
 
-use crate::entity::{AnimalBase, ai::goal::SquidFleeGoal};
+use crate::entity::{AnimalBase, EntityMovementEmission, ai::goal::SquidFleeGoal};
 use crate::{
     entity::{
         AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
@@ -218,22 +218,34 @@ impl SquidEntity {
     }
 
     fn update_squid_rotation(&self) {
-        let movement = self.velocity();
-        let horizontal = movement.x.hypot(movement.z);
+        let (yaw, pitch) = self.rotation();
 
-        let (current_yaw, current_pitch) = self.rotation();
+        if self.is_in_water() {
+            let movement = self.velocity();
+            let horizontal = movement.x.hypot(movement.z);
 
-        let target_yaw = (-movement.x.atan2(movement.z)).to_degrees() as f32;
-        let target_pitch = (-horizontal.atan2(movement.y)).to_degrees() as f32;
+            let target_yaw = (-movement.x.atan2(movement.z)).to_degrees() as f32;
+            let target_pitch = (-horizontal.atan2(movement.y)).to_degrees() as f32;
 
-        let yaw = current_yaw + (target_yaw - current_yaw) * 0.1;
-        let pitch = current_pitch + (target_pitch - current_pitch) * 0.1;
+            let yaw = yaw + (target_yaw - yaw) * 0.1;
+            let pitch = pitch + (target_pitch - pitch) * 0.1;
 
-        self.set_rotation((yaw, pitch));
+            self.set_rotation((yaw, pitch));
+        } else {
+            let pitch = pitch + (-90.0 - pitch) * 0.02;
+            self.set_rotation((yaw, pitch));
+        }
     }
 
     fn new_with_base(base: EntityBase, entity_type: EntityTypeRef) -> Self {
         let living_base = LivingEntityBase::new(entity_type);
+        {
+            living_base
+                .attributes()
+                .lock()
+                .set_base_value(&vanilla_attributes::MAX_HEALTH, 10.0);
+        }
+
         let mob_base = MobBase::new();
         let ageable_base = AgeableMobBase::new();
         let animal_base = AnimalBase::new();
@@ -290,6 +302,10 @@ impl Entity for SquidEntity {
         hurt
     }
 
+    fn movement_emission(&self) -> EntityMovementEmission {
+        EntityMovementEmission::Events
+    }
+
     fn entity_type(&self) -> EntityTypeRef {
         &self.entity_type
     }
@@ -329,6 +345,10 @@ impl LivingEntity for SquidEntity {
         0.4
     }
 
+    fn can_breathe_underwater(&self) -> bool {
+        true
+    }
+
     fn get_health(&self) -> f32 {
         *self.entity_data.lock().living_entity().health.get()
     }
@@ -343,8 +363,7 @@ impl LivingEntity for SquidEntity {
             .set(clamped);
     }
 
-    fn travel(&self, input: DVec3) -> Option<MoveResult> {
-        if self.is_in_water() {}
+    fn travel(&self, _input: DVec3) -> Option<MoveResult> {
         self.move_entity(MoverType::SelfMovement, self.velocity())
     }
 

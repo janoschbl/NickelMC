@@ -16,7 +16,7 @@ use crate::{
 
 const SQUID_FLEE_SPEED: f64 = 3.0;
 const SQUID_FLEE_MIN_DISTANCE: f64 = 5.0;
-const SQUID_FLEE_MAX_DISTANCE: f64 = 10.0;
+const SQUID_FLEE_MAX_DISTANCE: f64 = 10.0; // Minecraft doesn't use this?
 
 pub struct SquidFleeGoal {
     flee_ticks: i32,
@@ -56,7 +56,7 @@ impl Goal for SquidFleeGoal {
         };
 
         let Some(squid) = mob.downcast_ref::<SquidEntity>() else {
-            tracing::warn!("SquidRandomMovementGoal assigned to non-squid entity");
+            tracing::warn!("SquidFleeGoal assigned to non-squid entity");
             return;
         };
 
@@ -81,10 +81,8 @@ impl Goal for SquidFleeGoal {
         if distance > 0.0 {
             flee_to = flee_to.normalize();
 
-            let avoid_speed = if distance > SQUID_FLEE_MAX_DISTANCE {
-                SQUID_FLEE_SPEED
-                    - (distance - SQUID_FLEE_MIN_DISTANCE)
-                        / (SQUID_FLEE_MAX_DISTANCE - SQUID_FLEE_MIN_DISTANCE)
+            let avoid_speed = if distance > SQUID_FLEE_MIN_DISTANCE {
+                SQUID_FLEE_SPEED - (distance - SQUID_FLEE_MIN_DISTANCE) / SQUID_FLEE_MIN_DISTANCE
             } else {
                 SQUID_FLEE_SPEED
             };

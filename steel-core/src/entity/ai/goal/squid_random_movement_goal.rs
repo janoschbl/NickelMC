@@ -2,18 +2,11 @@ use std::f64::consts::PI;
 
 use glam::{DVec3, Vec3};
 use steel_math::trig;
-use steel_registry::entity_data::{EntityData::Vector3, Vector3f};
-use steel_utils::{
-    Downcast,
-    random::{Random, legacy_random::LegacyRandom},
-};
+use steel_utils::Downcast;
 
 use crate::entity::{
-    Entity, LivingEntity,
-    ai::goal::{
-        random_stroll::RandomStrollGoal,
-        selector::{Goal, GoalControls},
-    },
+    Entity, LivingEntity, PathfinderMob,
+    ai::goal::selector::{Goal, GoalControls},
     entities::SquidEntity,
 };
 
@@ -27,16 +20,16 @@ impl SquidRandomMovementGoal {
 }
 
 impl Goal for SquidRandomMovementGoal {
-    fn controls(&self) -> super::selector::GoalControls {
+    fn controls(&self) -> GoalControls {
         GoalControls::MOVE
     }
 
-    fn can_use(&mut self, _mob: &dyn crate::entity::PathfinderMob) -> bool {
+    fn can_use(&mut self, _mob: &dyn PathfinderMob) -> bool {
         // Always true in Squid.java
         true
     }
 
-    fn tick(&mut self, mob: &dyn crate::entity::PathfinderMob) {
+    fn tick(&mut self, mob: &dyn PathfinderMob) {
         let Some(squid) = mob.downcast_ref::<SquidEntity>() else {
             tracing::warn!("SquidRandomMovementGoal assigned to non-squid entity");
             return;
@@ -48,7 +41,7 @@ impl Goal for SquidRandomMovementGoal {
         }
 
         if squid.random_next_i32_bounded(50) != 0
-            && squid.is_in_water() // TODO: Should be was_in_water() according to vanilla code
+            && squid.is_in_water() // WasInWater() in java seems to be functionally equivilent to this?
             && squid.has_movement_vector()
         {
             return;

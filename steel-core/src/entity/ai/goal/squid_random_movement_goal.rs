@@ -6,7 +6,10 @@ use steel_utils::Downcast;
 
 use crate::entity::{
     Entity, LivingEntity, PathfinderMob,
-    ai::goal::selector::{Goal, GoalControls},
+    ai::goal::{
+        reduced_tick_delay,
+        selector::{Goal, GoalControls},
+    },
     entities::SquidEntity,
 };
 
@@ -40,7 +43,7 @@ impl Goal for SquidRandomMovementGoal {
             return;
         }
 
-        if squid.random_next_i32_bounded(50) != 0
+        if squid.random_next_i32_bounded(reduced_tick_delay(50)) != 0
             && squid.is_in_water()
             && squid.has_movement_vector()
         {

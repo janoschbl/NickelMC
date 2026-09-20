@@ -5,6 +5,7 @@ use std::{
 
 use glam::DVec3;
 use steel_macros::entity_behavior;
+use steel_math::vector;
 use steel_registry::{
     entity_data::{EntityPose, ParticleData},
     entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
@@ -48,7 +49,15 @@ const SQUID_BABY_DIMENSIONS: EntityDimensions = EntityDimensions::new_with_attac
 const SQUID_AIR_DRAG: f64 = 0.98;
 const SQUID_GRAVITY: f64 = 0.08;
 const SQUID_SOUND_VOLUME: f32 = 0.4;
+const INK_PARTICLE_COUNT: u32 = 30;
+/// Vanilla `AgeableWaterCreature.getAmbientSoundInterval`.
+const SQUID_AMBIENT_SOUND_INTERVAL: i32 = 120;
 
+// TODO(ageable-water-creature): vanilla `Squid extends AgeableWaterCreature`.
+// Still missing from that layer: `handleAirSupply`, `checkSpawnObstruction` and
+// `setPathfindingMalus(PathType.WATER, 0.0)`. `getAmbientSoundInterval` and
+// `getBaseExperienceReward` sit on this entity until the trait exists; `Dolphin`
+// is the only other consumer.
 #[entity_behavior(class = "Squid")]
 /// Vanilla Squid entity
 pub struct SquidEntity {
@@ -67,7 +76,8 @@ pub struct SquidState {
     // Required for inking on fleeing.
     x_body_rot_old: f32,
     movement_vector: DVec3,
-    // I don't know if we want random here, or if its okay to just re-create it in SquidRandomMovementGoal
+    /// Vanilla's `Entity.random`. Owned by the squid so the movement goal and
+    /// the ink burst draw from one stream, matching vanilla's ordering.
     random: LegacyRandom,
     tentacle_speed: f32,
     tentacle_movement: f32,
@@ -105,11 +115,6 @@ impl SquidEntity {
         self.state.lock().random.next_f32()
     }
 
-    /// Returns the next random f64
-    pub fn random_next_f64(&self) -> f64 {
-        self.state.lock().random.next_f64()
-    }
-
     /// Returns the next random i32 within the upper bound
     pub fn random_next_i32_bounded(&self, bound: i32) -> i32 {
         self.state.lock().random.next_i32_bounded(bound)
@@ -129,14 +134,30 @@ impl SquidEntity {
         )
     }
 
-    /// Rotates a vector
-    ///
-    /// Equivalent to `Squid.rotateVector()` in vanilla.
+    /// Vanilla `Squid.rotateVector`, squid-local space into world space.
     fn rotate_vector(&self, vector: DVec3) -> DVec3 {
-        let x_rot = f64::from(self.state.lock().x_body_rot_old).to_radians();
-        let y_rot = f64::from(-self.living_rotation_state().y_body_rot_o().to_radians());
+        let x_rot = self.state.lock().x_body_rot_old.to_radians();
+        let y_rot = -self.living_rotation_state().y_body_rot_o().to_radians();
 
-        vector.rotate_x(x_rot).rotate_y(y_rot)
+        vector::y_rot(vector::x_rot(vector, x_rot), y_rot)
+    }
+
+    /// Vanilla `Squid.getInkParticle`.
+    #[expect(
+        clippy::unused_self,
+        reason = "vanilla instance method that GlowSquid overrides"
+    )]
+    fn ink_particle(&self) -> ParticleData {
+        ParticleData::simple(&vanilla_particle_types::SQUID_INK)
+    }
+
+    /// Vanilla `Squid.getSquirtSound`.
+    #[expect(
+        clippy::unused_self,
+        reason = "vanilla instance method that GlowSquid overrides"
+    )]
+    fn squirt_sound(&self) -> SoundEventRef {
+        &sound_events::ENTITY_SQUID_SQUIRT
     }
 
     fn spawn_ink(&self) {
@@ -144,20 +165,20 @@ impl SquidEntity {
             return;
         };
 
-        self.make_sound(Some(&sound_events::ENTITY_SQUID_SQUIRT));
+        self.make_sound(Some(self.squirt_sound()));
 
         let position = self.position() + self.rotate_vector(DVec3::new(0.0, -1.0, 0.0));
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
-        let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
+        let particle = self.ink_particle();
         let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
 
-        for _ in 0..30 {
+        for _ in 0..INK_PARTICLE_COUNT {
             let direction = self.rotate_vector(DVec3::new(
-                self.random_next_f64() * 0.6 - 0.3,
+                f64::from(self.random_next_f32()) * 0.6 - 0.3,
                 -1.0,
-                self.random_next_f64() * 0.6 - 0.3,
+                f64::from(self.random_next_f32()) * 0.6 - 0.3,
             ));
-            let offset = direction * (position_scale + self.random_next_f64() * 2.0);
+            let offset = direction * (position_scale + f64::from(self.random_next_f32()) * 2.0);
             world.send_particles(particle.clone(), particle_position, 0, offset, 0.1);
         }
     }
@@ -216,9 +237,15 @@ impl SquidEntity {
         self.set_velocity(DVec3::new(0.0, y * SQUID_AIR_DRAG, 0.0));
     }
 
-    fn update_squid_rotation(&self) {
+    /// Copies the body pitch to vanilla `xBodyRotO`, which
+    /// [`Self::rotate_vector`] reads. `yBodyRotO` is advanced by the base tick.
+    fn advance_body_rotation(&self) {
         let mut state = self.state.lock();
         state.x_body_rot_old = state.x_body_rot;
+    }
+
+    fn update_squid_rotation(&self) {
+        let mut state = self.state.lock();
 
         if self.is_in_water() {
             let movement = self.velocity();
@@ -229,6 +256,8 @@ impl SquidEntity {
                 + (-((movement.x.atan2(movement.z)).to_degrees() as f32) - y_body_rot) * 0.1;
 
             self.set_y_body_rot(y_body_rot);
+            // Vanilla `setYRot(this.yBodyRot)`.
+            self.set_rotation((y_body_rot, self.rotation().1));
             state.x_body_rot +=
                 (-((horizontal.atan2(movement.y)).to_degrees() as f32) - state.x_body_rot) * 0.1;
         } else {
@@ -254,9 +283,12 @@ impl SquidEntity {
 
         {
             let mut goal_selector = mob_base.goal_selector().lock();
-            // Fleeing must outrank the always-available random movement goal.
-            goal_selector.add_goal(0, SquidFleeGoal::new());
-            goal_selector.add_goal(1, SquidRandomMovementGoal::new());
+            // Neither goal claims a control, so both run every tick and the
+            // selector ticks them in insertion order. Registering the random
+            // movement first is what lets fleeing overwrite it; the priority is
+            // unused for goals without controls.
+            goal_selector.add_goal(0, SquidRandomMovementGoal::new());
+            goal_selector.add_goal(1, SquidFleeGoal::new());
         }
 
         Self {
@@ -334,10 +366,6 @@ impl LivingEntity for SquidEntity {
         SQUID_SOUND_VOLUME
     }
 
-    fn can_breathe_underwater(&self) -> bool {
-        true
-    }
-
     fn get_health(&self) -> f32 {
         *self.entity_data.lock().living_entity().health.get()
     }
@@ -363,8 +391,11 @@ impl LivingEntity for SquidEntity {
     fn ai_step(&self) -> Option<MoveResult> {
         let result = Mob::mob_ai_step(self);
 
-        self.update_squid_rotation();
+        // Vanilla `Squid.aiStep` derives the body rotations from the velocity
+        // it just wrote, so movement has to run before rotation.
+        self.advance_body_rotation();
         self.tick_squid_movement();
+        self.update_squid_rotation();
 
         AgeableMob::tick_ageable_mob(self);
         result
@@ -376,6 +407,10 @@ impl LivingEntity for SquidEntity {
 
     fn death_sound(&self) -> Option<SoundEventRef> {
         Some(&sound_events::ENTITY_SQUID_DEATH)
+    }
+
+    fn base_experience_reward(&self) -> i32 {
+        1 + rand::random_range(0..3)
     }
 }
 
@@ -426,6 +461,10 @@ impl Mob for SquidEntity {
         Some(&sound_events::ENTITY_SQUID_AMBIENT)
     }
 
+    fn ambient_sound_interval(&self) -> i32 {
+        SQUID_AMBIENT_SOUND_INTERVAL
+    }
+
     fn finalize_spawn(
         &self,
         world: &Arc<World>,
@@ -437,3 +476,6 @@ impl Mob for SquidEntity {
 }
 
 impl PathfinderMob for SquidEntity {}
+
+#[cfg(test)]
+mod tests;

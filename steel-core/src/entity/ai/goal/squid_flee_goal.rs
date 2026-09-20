@@ -16,7 +16,6 @@ use crate::{
 
 const SQUID_FLEE_SPEED: f64 = 3.0;
 const SQUID_FLEE_MIN_DISTANCE: f64 = 5.0;
-const SQUID_FLEE_MAX_DISTANCE: f64 = 10.0; // Minecraft doesn't use this?
 
 pub struct SquidFleeGoal {
     flee_ticks: i32,
@@ -30,7 +29,8 @@ impl SquidFleeGoal {
 
 impl Goal for SquidFleeGoal {
     fn controls(&self) -> GoalControls {
-        GoalControls::MOVE
+        // Vanilla's `SquidFleeGoal` never calls `setFlags`.
+        GoalControls::EMPTY
     }
 
     fn can_use(&mut self, mob: &dyn PathfinderMob) -> bool {
@@ -72,32 +72,33 @@ impl Goal for SquidFleeGoal {
         let block_state = world.get_block_state(block_pos);
         let fluid_state = block_state.get_fluid_state();
 
-        if !fluid_state.is_water() && !block_state.is_air() {
-            return;
-        }
+        if fluid_state.is_water() || block_state.is_air() {
+            let distance = flee_to.length();
 
-        let distance = flee_to.length();
+            if distance > 0.0 {
+                // Vanilla calls `fleeTo.normalize()` here and throws the result
+                // away, because `Vec3` is immutable. It therefore scales the raw
+                // offset, not a unit vector -- do not "fix" this.
+                let avoid_speed = if distance > SQUID_FLEE_MIN_DISTANCE {
+                    SQUID_FLEE_SPEED
+                        - (distance - SQUID_FLEE_MIN_DISTANCE) / SQUID_FLEE_MIN_DISTANCE
+                } else {
+                    SQUID_FLEE_SPEED
+                };
 
-        if distance > 0.0 {
-            flee_to = flee_to.normalize();
-
-            let avoid_speed = if distance > SQUID_FLEE_MIN_DISTANCE {
-                SQUID_FLEE_SPEED - (distance - SQUID_FLEE_MIN_DISTANCE) / SQUID_FLEE_MIN_DISTANCE
-            } else {
-                SQUID_FLEE_SPEED
-            };
-
-            if avoid_speed > 0.0 {
-                flee_to *= avoid_speed;
+                if avoid_speed > 0.0 {
+                    flee_to *= avoid_speed;
+                }
             }
+
+            if block_state.is_air() {
+                flee_to.y = 0.0;
+            }
+
+            squid.set_movement_vector(flee_to / 20.0);
         }
 
-        if block_state.is_air() {
-            flee_to.y = 0.0;
-        }
-
-        squid.set_movement_vector(flee_to / 20.0);
-
+        // Vanilla emits the bubble trail regardless of what is ahead.
         if self.flee_ticks % 10 == 5 {
             world.send_particles(
                 ParticleData::simple(&vanilla_particle_types::BUBBLE),
@@ -107,5 +108,17 @@ impl Goal for SquidFleeGoal {
                 0.0,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Claiming a control would run this goal instead of, not alongside,
+    /// the random movement goal.
+    #[test]
+    fn flee_goal_claims_no_controls() {
+        assert_eq!(SquidFleeGoal::new().controls(), GoalControls::EMPTY);
     }
 }

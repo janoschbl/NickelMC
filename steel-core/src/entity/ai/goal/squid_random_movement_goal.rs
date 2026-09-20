@@ -24,7 +24,8 @@ impl SquidRandomMovementGoal {
 
 impl Goal for SquidRandomMovementGoal {
     fn controls(&self) -> GoalControls {
-        GoalControls::MOVE
+        // Vanilla's `SquidRandomMovementGoal` never calls `setFlags`.
+        GoalControls::EMPTY
     }
 
     fn can_use(&mut self, _mob: &dyn PathfinderMob) -> bool {
@@ -53,10 +54,24 @@ impl Goal for SquidRandomMovementGoal {
         let angle = f64::from(squid.random_next_f32()) * TAU;
         let movement = DVec3::new(
             (trig::cos(angle) * 0.2).into(),
-            -0.1 + squid.random_next_f64() * 0.2,
+            -0.1 + f64::from(squid.random_next_f32()) * 0.2,
             (trig::sin(angle) * 0.2).into(),
         );
 
         squid.set_movement_vector(movement);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without controls this keeps running while the squid flees.
+    #[test]
+    fn random_movement_goal_claims_no_controls() {
+        assert_eq!(
+            SquidRandomMovementGoal::new().controls(),
+            GoalControls::EMPTY
+        );
     }
 }

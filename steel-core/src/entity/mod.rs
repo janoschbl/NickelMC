@@ -862,6 +862,7 @@ pub mod projectile;
 mod reference;
 mod registry;
 mod spawn;
+mod spawn_placements;
 mod storage;
 mod synced_data;
 mod ticking;
@@ -931,6 +932,7 @@ pub(crate) use spawn::{
     SpawnGroupData, add_spawned_entity, apply_implicit_item_stack_components,
     create_entity_instance, load_entity_recursive_owned, spawn_entity,
 };
+pub(crate) use spawn_placements::SpawnPlacements;
 pub(crate) use storage::{EntityStorage, EntityStorageAddResult};
 pub use synced_data::{EntitySyncedData, LivingEntitySyncedData};
 pub(crate) use ticking::{

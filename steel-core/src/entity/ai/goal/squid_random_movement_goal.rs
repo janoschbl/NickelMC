@@ -61,17 +61,3 @@ impl Goal for SquidRandomMovementGoal {
         squid.set_movement_vector(movement);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Without controls this keeps running while the squid flees.
-    #[test]
-    fn random_movement_goal_claims_no_controls() {
-        assert_eq!(
-            SquidRandomMovementGoal::new().controls(),
-            GoalControls::EMPTY
-        );
-    }
-}

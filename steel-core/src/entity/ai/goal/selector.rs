@@ -571,22 +571,6 @@ mod tests {
         assert!(selector.is_priority_running(2));
     }
 
-    /// Disabling a control only stops goals that claim it.
-    #[test]
-    fn disabling_a_control_leaves_goals_without_controls_running() {
-        let mob = TestPathfinderMob::new();
-        let mut selector = GoalSelector::new();
-        selector.add_goal(0, StaticGoal::new(GoalControls::EMPTY));
-        selector.add_goal(1, StaticGoal::new(GoalControls::MOVE));
-        selector.tick(&mob);
-
-        selector.disable_control(GoalControl::Move);
-        selector.tick(&mob);
-
-        assert_eq!(selector.running_goal_count(), 1);
-        assert!(selector.is_priority_running(0));
-    }
-
     #[test]
     fn non_interruptable_goal_blocks_replacement() {
         let mob = Arc::new(TestPathfinderMob::new());

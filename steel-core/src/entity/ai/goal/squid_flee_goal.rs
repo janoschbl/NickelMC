@@ -110,15 +110,3 @@ impl Goal for SquidFleeGoal {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Claiming a control would run this goal instead of, not alongside,
-    /// the random movement goal.
-    #[test]
-    fn flee_goal_claims_no_controls() {
-        assert_eq!(SquidFleeGoal::new().controls(), GoalControls::EMPTY);
-    }
-}

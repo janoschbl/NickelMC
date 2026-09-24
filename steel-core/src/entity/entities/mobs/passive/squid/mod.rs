@@ -170,7 +170,11 @@ impl SquidEntity {
         let position = self.position() + self.rotate_vector(DVec3::new(0.0, -1.0, 0.0));
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
         let particle = self.ink_particle();
-        let position_scale = if AgeableMob::is_baby(self) { 0.1 } else { 0.3 };
+        let position_scale = if AgeableMob::is_baby(self) {
+            0.1_f32
+        } else {
+            0.3_f32
+        };
 
         for _ in 0..INK_PARTICLE_COUNT {
             let direction = self.rotate_vector(DVec3::new(
@@ -178,7 +182,7 @@ impl SquidEntity {
                 -1.0,
                 f64::from(self.random_next_f32()) * 0.6 - 0.3,
             ));
-            let offset = direction * (position_scale + f64::from(self.random_next_f32()) * 2.0);
+            let offset = direction * f64::from(position_scale + self.random_next_f32() * 2.0_f32);
             world.send_particles(particle.clone(), particle_position, 0, offset, 0.1);
         }
     }

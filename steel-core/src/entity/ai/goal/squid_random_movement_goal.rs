@@ -1,4 +1,4 @@
-use std::f64::consts::TAU;
+use std::f32::consts::TAU;
 
 use glam::DVec3;
 use steel_math::trig;
@@ -51,11 +51,11 @@ impl Goal for SquidRandomMovementGoal {
             return;
         }
 
-        let angle = f64::from(squid.random_next_f32()) * TAU;
+        let angle = squid.random_next_f32() * TAU;
         let movement = DVec3::new(
-            (trig::cos(angle) * 0.2).into(),
-            -0.1 + f64::from(squid.random_next_f32()) * 0.2,
-            (trig::sin(angle) * 0.2).into(),
+            f64::from(trig::cos(f64::from(angle)) * 0.2_f32),
+            f64::from(-0.1_f32 + squid.random_next_f32() * 0.2_f32),
+            f64::from(trig::sin(f64::from(angle)) * 0.2_f32),
         );
 
         squid.set_movement_vector(movement);

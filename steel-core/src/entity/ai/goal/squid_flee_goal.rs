@@ -1,8 +1,4 @@
-use glam::DVec3;
-use steel_registry::{
-    blocks::block_state_ext::BlockStateExt, entity_data::ParticleData, fluid::FluidStateExt,
-    vanilla_particle_types,
-};
+use steel_registry::{blocks::block_state_ext::BlockStateExt, fluid::FluidStateExt};
 use steel_utils::{BlockPos, Downcast};
 
 use crate::{
@@ -96,17 +92,6 @@ impl Goal for SquidFleeGoal {
             }
 
             squid.set_movement_vector(flee_to / 20.0);
-        }
-
-        // Vanilla emits the bubble trail regardless of what is ahead.
-        if self.flee_ticks % 10 == 5 {
-            world.send_particles(
-                ParticleData::simple(&vanilla_particle_types::BUBBLE),
-                DVec3::new(squid_pos.x, squid_pos.y, squid_pos.z),
-                0,
-                DVec3::ZERO,
-                0.0,
-            );
         }
     }
 }

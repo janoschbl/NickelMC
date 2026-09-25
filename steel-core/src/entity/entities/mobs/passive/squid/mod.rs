@@ -46,7 +46,7 @@ const SQUID_BABY_DIMENSIONS: EntityDimensions = EntityDimensions::new_with_attac
     EntityAttachments::fallback(),
 );
 
-const SQUID_AIR_DRAG: f64 = 0.98;
+const SQUID_AIR_DRAG: f32 = 0.98;
 const SQUID_GRAVITY: f64 = 0.08;
 const SQUID_SOUND_VOLUME: f32 = 0.4;
 const INK_PARTICLE_COUNT: u32 = 30;
@@ -238,7 +238,18 @@ impl SquidEntity {
                 0.05 * f64::from(effect.amplifier() + 1)
             });
 
-        self.set_velocity(DVec3::new(0.0, y * SQUID_AIR_DRAG, 0.0));
+        if let Some(living_entity) = self.as_living_entity() {
+            self.set_velocity(DVec3::new(
+                0.0,
+                // `LivingEntity.air_travel_vertical_friction` returns the same logic as vanilla `LivingEntity.getAirDrag`.
+                //
+                // TODO: depending on how `LivingEntity.air_travel_vertical_friction` implements `FlyingAnimal`'s
+                // different base friction value, the input value may change here (e.g. replace with
+                // a const value added to `LivingEntity`).
+                y * f64::from(living_entity.air_travel_vertical_friction(SQUID_AIR_DRAG)),
+                0.0,
+            ));
+        }
     }
 
     /// Copies the body pitch to vanilla `xBodyRotO`, which

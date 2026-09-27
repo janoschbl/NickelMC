@@ -93,8 +93,6 @@ impl SquidEntity {
     }
 
     /// Checks if the squid has a movement vector.
-    ///
-    /// Equivalent to `Squid.hasMovementVector()` in vanilla.
     pub fn has_movement_vector(&self) -> bool {
         self.state.lock().movement_vector.length_squared() > 1.0e-5
     }

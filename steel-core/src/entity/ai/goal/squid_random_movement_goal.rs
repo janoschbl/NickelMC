@@ -24,12 +24,10 @@ impl SquidRandomMovementGoal {
 
 impl Goal for SquidRandomMovementGoal {
     fn controls(&self) -> GoalControls {
-        // Vanilla's `SquidRandomMovementGoal` never calls `setFlags`.
         GoalControls::EMPTY
     }
 
     fn can_use(&mut self, _mob: &dyn PathfinderMob) -> bool {
-        // Always true in Squid.java
         true
     }
 

@@ -1,21 +1,7 @@
-//! Port of Mojang `net.minecraft.world.phys.Vec3`'s axis rotations.
+//! Rotation helpers for `DVec3` using Steel trig lookup table.
 //!
-//! Named after the vanilla methods rather than `rotate_x` / `rotate_y`, because
-//! [`glam::DVec3`] has inherent methods by those names that rotate the opposite
-//! way around X. `yRot` agrees between the two, so the mismatch hides easily.
-//!
-//! # Vanilla reference
-//! ```java
-//! public Vec3 xRot(final float radians) {
-//!     float cos = Mth.cos(radians);
-//!     float sin = Mth.sin(radians);
-//!     double xx = this.x;
-//!     double yy = this.y * cos + this.z * sin;
-//!     double zz = this.z * cos - this.y * sin;
-//!     return new Vec3(xx, yy, zz);
-//! }
-//! ```
-//! `yRot` and `zRot` have the same shape, each holding its own axis fixed.
+//! Port of `net.minecraft.world.phys.Vec3`'s axis rotations, with X and Z using
+//! a different rotation direction than `glam`'s builtin methods.
 
 use glam::DVec3;
 
@@ -27,7 +13,7 @@ fn cos_sin(radians: f32) -> (f64, f64) {
     (f64::from(trig::cos(angle)), f64::from(trig::sin(angle)))
 }
 
-/// Vanilla `Vec3.xRot`.
+/// Rotates the vector around the X axis and positive angles rotate +Y toward -Z
 #[inline]
 #[must_use]
 pub fn x_rot(vector: DVec3, radians: f32) -> DVec3 {
@@ -39,7 +25,7 @@ pub fn x_rot(vector: DVec3, radians: f32) -> DVec3 {
     )
 }
 
-/// Vanilla `Vec3.yRot`.
+/// Rotates the vector around the Y axis and positive angles rotate +X toward -Z
 #[inline]
 #[must_use]
 pub fn y_rot(vector: DVec3, radians: f32) -> DVec3 {
@@ -51,7 +37,7 @@ pub fn y_rot(vector: DVec3, radians: f32) -> DVec3 {
     )
 }
 
-/// Vanilla `Vec3.zRot`.
+/// Rotates the vector around the Z axis and positive angles rotate +X toward -Y
 #[inline]
 #[must_use]
 pub fn z_rot(vector: DVec3, radians: f32) -> DVec3 {

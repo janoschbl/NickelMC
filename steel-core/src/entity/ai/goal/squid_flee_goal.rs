@@ -25,7 +25,6 @@ impl SquidFleeGoal {
 
 impl Goal for SquidFleeGoal {
     fn controls(&self) -> GoalControls {
-        // Vanilla's `SquidFleeGoal` never calls `setFlags`.
         GoalControls::EMPTY
     }
 
@@ -72,9 +71,9 @@ impl Goal for SquidFleeGoal {
             let distance = flee_to.length();
 
             if distance > 0.0 {
-                // Vanilla calls `fleeTo.normalize()` here and throws the result
-                // away, because `Vec3` is immutable. It therefore scales the raw
-                // offset, not a unit vector -- do not "fix" this.
+                // Vanilla calls `fleeTo.normalize()` but throws the result due to `fleeTo` being
+                // an immutable value. As the normalized vector does not get used, we should NOT
+                // normalize the vector in Steel.
                 let avoid_speed = if distance > SQUID_FLEE_MIN_DISTANCE {
                     SQUID_FLEE_SPEED
                         - (distance - SQUID_FLEE_MIN_DISTANCE) / SQUID_FLEE_MIN_DISTANCE

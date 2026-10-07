@@ -1,9 +1,11 @@
 use std::{
     f32::consts::{PI, TAU},
+    f64::consts,
     sync::{Arc, Weak},
 };
 
 use glam::DVec3;
+use simdnbt::{borrow, owned};
 use steel_macros::entity_behavior;
 use steel_math::vector;
 use steel_registry::{
@@ -239,8 +241,7 @@ impl SquidEntity {
             let horizontal = movement.x.hypot(movement.z);
 
             let y_body_rot = self.living_rotation_state().y_body_rot();
-            let movement_rot =
-                -(movement.x.atan2(movement.z) * (180.0 / std::f64::consts::PI)) as f32;
+            let movement_rot = -(movement.x.atan2(movement.z) * (180.0 / consts::PI)) as f32;
 
             let y_body_rot = y_body_rot + (movement_rot - y_body_rot) * 0.1;
 
@@ -366,12 +367,12 @@ impl Entity for SquidEntity {
         Some(&self.entity_data)
     }
 
-    fn save_additional(&self, nbt: &mut simdnbt::owned::NbtCompound) {
+    fn save_additional(&self, nbt: &mut owned::NbtCompound) {
         self.save_mob(nbt);
         self.save_ageable_mob(nbt);
     }
 
-    fn load_additional(&self, nbt: simdnbt::borrow::NbtCompound<'_, '_>) {
+    fn load_additional(&self, nbt: borrow::NbtCompound<'_, '_>) {
         self.load_mob(nbt);
         self.load_ageable_mob(nbt);
     }
@@ -401,9 +402,7 @@ impl LivingEntity for SquidEntity {
     }
 
     fn travel(&self, entity: &SharedEntity, _input: DVec3) -> Option<MoveResult> {
-        entity
-            .clone()
-            .move_entity(MoverType::SelfMovement, self.velocity())
+        Arc::clone(entity).move_entity(MoverType::SelfMovement, self.velocity())
     }
 
     fn server_ai_step(&self, entity: &SharedEntity) {

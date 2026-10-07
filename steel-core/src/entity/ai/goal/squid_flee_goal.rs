@@ -43,7 +43,7 @@ impl Goal for SquidFleeGoal {
         self.flee_ticks = 0;
     }
 
-    fn tick(&mut self, mob: &dyn PathfinderMob, _entity: &SharedEntity) {
+    fn tick(&mut self, mob: &dyn PathfinderMob, entity: &SharedEntity) {
         self.flee_ticks += 1;
 
         let Some(attacker) = mob.last_hurt_by_mob() else {
@@ -59,7 +59,7 @@ impl Goal for SquidFleeGoal {
             return;
         };
 
-        let squid_pos = _entity.position();
+        let squid_pos = entity.position();
         let attacker_pos = attacker.position();
         let mut flee_to = squid_pos - attacker_pos;
 

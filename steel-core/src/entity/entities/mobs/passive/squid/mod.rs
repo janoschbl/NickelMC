@@ -23,7 +23,7 @@ use crate::{
     behavior::InteractionResult,
     entity::{
         AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
-        LivingEntity, LivingEntityBase, Mob, MobBase, PathfinderMob,
+        LivingEntity, LivingEntityBase, Mob, MobBase, PathfinderMob, SharedEntity,
         ai::goal::SquidRandomMovementGoal,
     },
     physics::{MoveResult, MoverType},
@@ -400,16 +400,18 @@ impl LivingEntity for SquidEntity {
             .set(clamped);
     }
 
-    fn travel(&self, _input: DVec3) -> Option<MoveResult> {
-        self.move_entity(MoverType::SelfMovement, self.velocity())
+    fn travel(&self, entity: &SharedEntity, _input: DVec3) -> Option<MoveResult> {
+        entity
+            .clone()
+            .move_entity(MoverType::SelfMovement, self.velocity())
     }
 
-    fn server_ai_step(&self) {
-        Mob::mob_server_ai_step(self);
+    fn server_ai_step(&self, entity: &SharedEntity) {
+        Mob::mob_server_ai_step(self, entity);
     }
 
-    fn ai_step(&self) -> Option<MoveResult> {
-        let result = Mob::mob_ai_step(self);
+    fn ai_step(&self, entity: &SharedEntity) -> Option<MoveResult> {
+        let result = Mob::mob_ai_step(self, entity);
 
         // Vanilla `Squid.aiStep` derives the body rotations from the velocity
         // it just wrote, so movement has to run before rotation.
@@ -465,8 +467,8 @@ impl Mob for SquidEntity {
         AgeableMob::mob_interact_ageable(self, player, hand)
     }
 
-    fn tick_goal_selectors(&self) {
-        PathfinderMob::tick_pathfinder_goal_selectors(self);
+    fn tick_goal_selectors(&self, entity: &SharedEntity) {
+        PathfinderMob::tick_pathfinder_goal_selectors(self, entity);
     }
 
     fn tick_path_navigation(&self) {

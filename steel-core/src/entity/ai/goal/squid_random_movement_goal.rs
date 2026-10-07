@@ -5,7 +5,7 @@ use steel_math::trig;
 use steel_utils::Downcast;
 
 use crate::entity::{
-    Entity, LivingEntity, PathfinderMob,
+    Entity, LivingEntity, PathfinderMob, SharedEntity,
     ai::goal::{
         reduced_tick_delay,
         selector::{Goal, GoalControls},
@@ -31,7 +31,7 @@ impl Goal for SquidRandomMovementGoal {
         true
     }
 
-    fn tick(&mut self, mob: &dyn PathfinderMob) {
+    fn tick(&mut self, mob: &dyn PathfinderMob, _entity: &SharedEntity) {
         let Some(squid) = mob.downcast_ref::<SquidEntity>() else {
             tracing::warn!("SquidRandomMovementGoal assigned to non-squid entity");
             return;

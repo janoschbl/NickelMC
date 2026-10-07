@@ -10,19 +10,17 @@ use steel_registry::{
     entity_data::{EntityPose, ParticleData},
     entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
     sound_event::SoundEventRef,
-    sound_events, vanilla_attributes,
+    sound_events, vanilla_attributes, vanilla_damage_types,
     vanilla_entity_data::SquidEntityData,
     vanilla_mob_effects::LEVITATION,
     vanilla_particle_types,
 };
-use steel_utils::{DowncastType, DowncastTypeKey, entity_events, locks::SyncMutex};
-
-use crate::entity::{
-    EntityMovementEmission, EntitySpawnReason, SpawnGroupData,
-    ai::{goal::SquidFleeGoal, path::PathType},
-    damage::DamageSource,
+use steel_utils::{
+    DowncastType, DowncastTypeKey, entity_events, locks::SyncMutex, types::InteractionHand,
 };
+
 use crate::{
+    behavior::InteractionResult,
     entity::{
         AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
         LivingEntity, LivingEntityBase, Mob, MobBase, PathfinderMob,
@@ -30,6 +28,14 @@ use crate::{
     },
     physics::{MoveResult, MoverType},
     world::World,
+};
+use crate::{
+    entity::{
+        EntityMovementEmission, EntitySpawnReason, SpawnGroupData,
+        ai::{goal::SquidFleeGoal, path::PathType},
+        damage::DamageSource,
+    },
+    player::Player,
 };
 
 const SQUID_BABY_WIDTH: f32 = 0.5;
@@ -49,6 +55,8 @@ const SQUID_SOUND_VOLUME: f32 = 0.4;
 const INK_PARTICLE_COUNT: u32 = 30;
 /// Vanilla `AgeableWaterCreature.getAmbientSoundInterval`.
 const SQUID_AMBIENT_SOUND_INTERVAL: i32 = 120;
+
+const SQUID_SQUIRT_SOUND: SoundEventRef = &sound_events::ENTITY_SQUID_SQUIRT;
 
 // TODO(ageable-water-creature): vanilla `Squid extends AgeableWaterCreature`.
 // Still missing from that layer: `handleAirSupply`, `checkSpawnObstruction` and
@@ -124,34 +132,16 @@ impl SquidEntity {
         vector::y_rot(vector::x_rot(vector, x_rot), y_rot)
     }
 
-    /// Vanilla `Squid.getInkParticle`.
-    #[expect(
-        clippy::unused_self,
-        reason = "vanilla instance method that GlowSquid overrides"
-    )]
-    fn ink_particle(&self) -> ParticleData {
-        ParticleData::simple(&vanilla_particle_types::SQUID_INK)
-    }
-
-    /// Vanilla `Squid.getSquirtSound`.
-    #[expect(
-        clippy::unused_self,
-        reason = "vanilla instance method that GlowSquid overrides"
-    )]
-    fn squirt_sound(&self) -> SoundEventRef {
-        &sound_events::ENTITY_SQUID_SQUIRT
-    }
-
     fn spawn_ink(&self) {
         let Some(world) = self.level() else {
             return;
         };
 
-        self.make_sound(Some(self.squirt_sound()));
+        self.make_sound(Some(self::SQUID_SQUIRT_SOUND));
 
         let position = self.position() + self.rotate_vector(DVec3::new(0.0, -1.0, 0.0));
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
-        let particle = self.ink_particle();
+        let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
         let position_scale = if AgeableMob::is_baby(self) {
             0.1_f32
         } else {
@@ -249,8 +239,10 @@ impl SquidEntity {
             let horizontal = movement.x.hypot(movement.z);
 
             let y_body_rot = self.living_rotation_state().y_body_rot();
-            let y_body_rot = y_body_rot
-                + (-((movement.x.atan2(movement.z)).to_degrees() as f32) - y_body_rot) * 0.1;
+            let movement_rot =
+                -(movement.x.atan2(movement.z) * (180.0 / std::f64::consts::PI)) as f32;
+
+            let y_body_rot = y_body_rot + (movement_rot - y_body_rot) * 0.1;
 
             self.set_y_body_rot(y_body_rot);
             // Vanilla `setYRot(this.yBodyRot)`.
@@ -259,6 +251,24 @@ impl SquidEntity {
                 (-((horizontal.atan2(movement.y)).to_degrees() as f32) - state.x_body_rot) * 0.1;
         } else {
             state.x_body_rot += (-90.0 - state.x_body_rot) * 0.02;
+        }
+    }
+
+    fn handle_air_supply(&self, pre_tick_air_supply: i32) {
+        if LivingEntity::is_alive(self) && !self.is_in_water() {
+            self.set_air_supply(pre_tick_air_supply - 1);
+            if self.should_take_drowning_damage() {
+                self.set_air_supply(0);
+                if let Some(world) = self.level() {
+                    self.hurt(
+                        &world,
+                        &DamageSource::environment(&vanilla_damage_types::DROWN),
+                        2.0,
+                    );
+                }
+            }
+        } else {
+            self.set_air_supply(300);
         }
     }
 
@@ -332,7 +342,9 @@ impl Entity for SquidEntity {
     }
 
     fn base_tick(&self) {
+        let air_supply = self.air_supply();
         Mob::base_tick_mob(self);
+        self.handle_air_supply(air_supply);
     }
 
     fn get_default_gravity(&self) -> f64 {
@@ -352,6 +364,16 @@ impl Entity for SquidEntity {
 
     fn synced_data(&self) -> Option<&dyn EntitySyncedData> {
         Some(&self.entity_data)
+    }
+
+    fn save_additional(&self, nbt: &mut simdnbt::owned::NbtCompound) {
+        self.save_mob(nbt);
+        self.save_ageable_mob(nbt);
+    }
+
+    fn load_additional(&self, nbt: simdnbt::borrow::NbtCompound<'_, '_>) {
+        self.load_mob(nbt);
+        self.load_ageable_mob(nbt);
     }
 }
 
@@ -437,6 +459,10 @@ impl AgeableMob for SquidEntity {
 impl Mob for SquidEntity {
     fn mob_base(&self) -> &MobBase {
         &self.mob_base
+    }
+
+    fn mob_interact(&self, player: &Player, hand: InteractionHand) -> InteractionResult {
+        AgeableMob::mob_interact_ageable(self, player, hand)
     }
 
     fn tick_goal_selectors(&self) {

@@ -19,15 +19,22 @@
 //! `65536 / (2π)` rounded to a double, and the table is indexed by the
 //! low 16 bits of the scaled angle.
 
+<<<<<<< HEAD
 use std::{
     array::from_fn,
     f64::consts::{FRAC_PI_2, PI},
     mem::swap,
     sync::LazyLock,
 };
+=======
+use std::{array, f64::consts::PI, mem, sync::LazyLock};
+>>>>>>> db1e5edeb (minecart implementation)
 
+const ATAN_TABLE_LEN: usize = 257;
+const FRAC_BIAS: f64 = f64::from_bits(4_805_340_802_404_319_232);
 /// `65536 / (2π)` — Mojang's stored constant.
 const INDEX_SCALE: f64 = 10_430.378_350_470_453;
+const ONE_SIXTH: f64 = 0.166_666_666_666_666_66;
 const TABLE_LEN: usize = 65_536;
 const TABLE_MASK: i64 = 0xFFFF;
 
@@ -43,6 +50,18 @@ static SIN_TABLE: LazyLock<Box<[f32; TABLE_LEN]>> = LazyLock::new(|| {
     }
     table
 });
+
+/// Arcsine angles in radians for inputs from 0 to 1 in steps of 1/256.
+static ASIN_TAB: LazyLock<[f64; ATAN_TABLE_LEN]> = LazyLock::new(|| {
+    array::from_fn(|index| {
+        let value = index as f64 / 256.0;
+        value.asin()
+    })
+});
+
+/// Cosines of the angles in [`ASIN_TAB`]
+static COS_TAB: LazyLock<[f64; ATAN_TABLE_LEN]> =
+    LazyLock::new(|| array::from_fn(|index| ASIN_TAB[index].cos()));
 
 /// Vanilla `Mth.sin(double)` — returns the float from the 65536-entry sine
 /// table indexed by the angle's low-16-bit bucket.
@@ -62,6 +81,7 @@ pub fn cos(angle: f64) -> f32 {
     SIN_TABLE[idx]
 }
 
+<<<<<<< HEAD
 const FRAC_BIAS: f64 = f64::from_bits(4_805_340_802_404_319_232);
 static ATAN2_TABLE: LazyLock<[(f64, f64); 257]> = LazyLock::new(|| {
     from_fn(|index| {
@@ -110,6 +130,64 @@ pub fn atan2(mut y: f64, mut x: f64) -> f64 {
     if negative_y {
         theta = -theta;
     }
+=======
+/// Approximates `1 / sqrt(value)` using a fast inverse square root algorithm.
+const fn fast_inv_sqrt(value: f64) -> f64 {
+    let half = 0.5 * value;
+    let bits = value.to_bits() as i64;
+    let bits = 6_910_469_410_427_058_090_i64.wrapping_sub(bits >> 1);
+    let estimate = f64::from_bits(bits as u64);
+
+    estimate * (1.5 - half * estimate * estimate)
+}
+
+/// Returns vanilla's approximate angle in radians for the vector `(x, y)`.
+#[must_use]
+pub fn atan2(mut y: f64, mut x: f64) -> f64 {
+    let d2 = x * x + y * y;
+    if d2.is_nan() {
+        return f64::NAN;
+    }
+
+    let neg_y = y < 0.0;
+    if neg_y {
+        y = -y;
+    }
+
+    let neg_x = x < 0.0;
+    if neg_x {
+        x = -x;
+    }
+
+    let steep = y > x;
+    if steep {
+        mem::swap(&mut x, &mut y);
+    }
+
+    let rinv = fast_inv_sqrt(d2);
+    x *= rinv;
+    y *= rinv;
+
+    let yp = FRAC_BIAS + y;
+    let index = (yp.to_bits() as i32) as usize;
+    let phi = ASIN_TAB[index];
+    let c_phi = COS_TAB[index];
+    let s_phi = yp - FRAC_BIAS;
+    let sd = y * c_phi - x * s_phi;
+    let d = (6.0 + sd * sd) * sd * ONE_SIXTH;
+    let mut theta = phi + d;
+
+    if steep {
+        theta = (PI / 2.0) - theta;
+    }
+    if neg_x {
+        theta = PI - theta;
+    }
+    if neg_y {
+        theta = -theta;
+    }
+
+>>>>>>> db1e5edeb (minecart implementation)
     theta
 }
 
@@ -161,5 +239,23 @@ mod test {
             SIN_TABLE[idx]
         };
         assert_eq!(cos(angle), expected);
+    }
+
+    #[test]
+    fn atan2_matches_java_squid_rotation_inputs() {
+        // Java 25, using the 26.3 Mth implementation and casting before RAD_TO_DEG.
+        for (y, x, expected) in [
+            (0.0, 0.0, 0x0000_0000),
+            (1.0, 1.0, 0x4233_ffff),
+            (0.123, 0.456, 0x4171_8764),
+            (-0.123, 0.456, 0xc171_8764),
+            (0.456, -0.123, 0x42d2_30ec),
+            (-0.456, -0.123, 0xc2d2_30ec),
+            (1.0e-6, 0.2, 0x3995_ef46),
+            (0.2, 1.0e-6, 0x42b3_ffda),
+        ] {
+            assert_eq!((atan2(y, x) as f32 * crate::RAD_TO_DEG).to_bits(), expected);
+        }
+        assert!(atan2(f64::NAN, 1.0).is_nan());
     }
 }

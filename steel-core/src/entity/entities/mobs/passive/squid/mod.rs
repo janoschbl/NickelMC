@@ -1,6 +1,5 @@
 use std::{
-    f32::consts::{PI, TAU},
-    f64::consts,
+    f64::consts::{PI, TAU},
     sync::{Arc, Weak},
 };
 
@@ -104,7 +103,7 @@ impl SquidEntity {
 
     /// Checks if the squid has a movement vector.
     pub fn has_movement_vector(&self) -> bool {
-        self.state.lock().movement_vector.length_squared() > 1.0e-5
+        self.state.lock().movement_vector.length_squared() > f64::from(1.0e-5_f32)
     }
 
     /// Sets the squid's movement vector
@@ -167,10 +166,10 @@ impl SquidEntity {
 
             state.tentacle_movement += state.tentacle_speed;
 
-            let animation_sync = state.tentacle_movement > TAU;
+            let animation_sync = f64::from(state.tentacle_movement) > TAU;
 
             if animation_sync {
-                state.tentacle_movement -= TAU;
+                state.tentacle_movement -= TAU as f32;
 
                 if rand::random_range(0..10) == 0 {
                     state.tentacle_speed = 1.0 / (rand::random::<f32>() + 1.0) * 0.2;
@@ -189,8 +188,8 @@ impl SquidEntity {
         }
 
         if self.is_in_water() {
-            if tentacle_movement < PI {
-                let tentacle_scale = tentacle_movement / PI;
+            if tentacle_movement < PI as f32 {
+                let tentacle_scale = tentacle_movement / PI as f32;
 
                 if tentacle_scale > 0.75 {
                     self.set_velocity(DVec3::new(
@@ -241,15 +240,14 @@ impl SquidEntity {
             let horizontal = movement.x.hypot(movement.z);
 
             let y_body_rot = self.living_rotation_state().y_body_rot();
-            let movement_rot = -(movement.x.atan2(movement.z) * (180.0 / consts::PI)) as f32;
-
-            let y_body_rot = y_body_rot + (movement_rot - y_body_rot) * 0.1;
+            let y_body_rot = y_body_rot
+                + (-(movement.x.atan2(movement.y) as f32).to_degrees() - y_body_rot) * 0.1;
 
             self.set_y_body_rot(y_body_rot);
             // Vanilla `setYRot(this.yBodyRot)`.
             self.set_rotation((y_body_rot, self.rotation().1));
             state.x_body_rot +=
-                (-((horizontal.atan2(movement.y)).to_degrees() as f32) - state.x_body_rot) * 0.1;
+                (-(horizontal.atan2(movement.y) as f32).to_degrees() - state.x_body_rot) * 0.1;
         } else {
             state.x_body_rot += (-90.0 - state.x_body_rot) * 0.02;
         }

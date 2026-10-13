@@ -54,7 +54,7 @@ const SQUID_AIR_DRAG: f32 = 0.98;
 const SQUID_GRAVITY: f64 = 0.08;
 const SQUID_SOUND_VOLUME: f32 = 0.4;
 const INK_PARTICLE_COUNT: u32 = 30;
-/// Vanilla `AgeableWaterCreature.getAmbientSoundInterval`.
+/// Const version of Vanilla `AgeableWaterCreature.getAmbientSoundInterval` function.
 const SQUID_AMBIENT_SOUND_INTERVAL: i32 = 120;
 
 const SQUID_SQUIRT_SOUND: SoundEventRef = &sound_events::ENTITY_SQUID_SQUIRT;
@@ -214,8 +214,6 @@ impl SquidEntity {
         if let Some(living_entity) = self.as_living_entity() {
             self.set_velocity(DVec3::new(
                 0.0,
-                // `LivingEntity.air_travel_vertical_friction` returns the same logic as vanilla `LivingEntity.getAirDrag`.
-                //
                 // TODO: depending on how `LivingEntity.air_travel_vertical_friction` implements `FlyingAnimal`'s
                 // different base friction value, the input value may change here (e.g. replace with
                 // a const value added to `LivingEntity`).
@@ -244,7 +242,6 @@ impl SquidEntity {
                 + (-(movement.x.atan2(movement.y) as f32).to_degrees() - y_body_rot) * 0.1;
 
             self.set_y_body_rot(y_body_rot);
-            // Vanilla `setYRot(this.yBodyRot)`.
             self.set_rotation((y_body_rot, self.rotation().1));
             state.x_body_rot +=
                 (-(horizontal.atan2(movement.y) as f32).to_degrees() - state.x_body_rot) * 0.1;
@@ -291,10 +288,6 @@ impl SquidEntity {
 
         {
             let mut goal_selector = mob_base.goal_selector().lock();
-            // Neither goal claims a control, so both run every tick and the
-            // selector ticks them in insertion order. Registering the random
-            // movement first is what lets fleeing overwrite it; the priority is
-            // unused for goals without controls.
             goal_selector.add_goal(0, SquidRandomMovementGoal::new());
             goal_selector.add_goal(1, SquidFleeGoal::new());
         }

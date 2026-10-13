@@ -403,8 +403,6 @@ impl LivingEntity for SquidEntity {
     fn ai_step(&self, entity: &SharedEntity) -> Option<MoveResult> {
         let result = Mob::mob_ai_step(self, entity);
 
-        // Vanilla `Squid.aiStep` derives the body rotations from the velocity
-        // it just wrote, so movement has to run before rotation.
         self.advance_body_rotation();
         self.tick_squid_movement();
         self.update_squid_rotation();

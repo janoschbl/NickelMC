@@ -320,9 +320,10 @@ impl Entity for SquidEntity {
 
         if hurt && self.last_hurt_by_mob().is_some() {
             self.spawn_ink();
+            return true;
         }
 
-        hurt
+        false
     }
 
     fn movement_emission(&self) -> EntityMovementEmission {

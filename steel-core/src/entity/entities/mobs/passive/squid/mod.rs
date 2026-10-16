@@ -239,7 +239,7 @@ impl SquidEntity {
 
             let y_body_rot = self.living_rotation_state().y_body_rot();
             let y_body_rot = y_body_rot
-                + (-(movement.x.atan2(movement.y) as f32).to_degrees() - y_body_rot) * 0.1;
+                + (-(movement.x.atan2(movement.z) as f32).to_degrees() - y_body_rot) * 0.1;
 
             self.set_y_body_rot(y_body_rot);
             self.set_rotation((y_body_rot, self.rotation().1));

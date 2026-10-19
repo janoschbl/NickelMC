@@ -913,7 +913,7 @@ pub use living_base::{
     LivingTravelInput, MobEffectInstance, MobEffectSyncChange, MobEffectSyncPacket,
     sync_dirty_mob_effects,
 };
-pub use living_entity::LivingEntity;
+pub use living_entity::{LivingEntity, living_entity_loot_ref};
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityLifecycleChanges, EntityMoveError,
     EntityMoveUpdate, EntityOwnership, EntityVisibility, WorldEntityManager,

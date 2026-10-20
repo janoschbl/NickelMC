@@ -58,6 +58,7 @@ const INK_PARTICLE_COUNT: u32 = 30;
 const SQUID_AMBIENT_SOUND_INTERVAL: i32 = 120;
 
 const SQUID_SQUIRT_SOUND: SoundEventRef = &sound_events::ENTITY_SQUID_SQUIRT;
+const SQUID_MOVEMENT_THRESHOLD: f64 = 1.0e-5;
 
 // TODO(ageable-water-creature): vanilla `Squid extends AgeableWaterCreature`.
 // Still missing from that layer: `handleAirSupply`, `checkSpawnObstruction` and
@@ -103,7 +104,7 @@ impl SquidEntity {
 
     /// Checks if the squid has a movement vector.
     pub fn has_movement_vector(&self) -> bool {
-        self.state.lock().movement_vector.length_squared() > f64::from(1.0e-5_f32)
+        self.state.lock().movement_vector.length_squared() > SQUID_MOVEMENT_THRESHOLD
     }
 
     /// Sets the squid's movement vector

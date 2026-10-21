@@ -7,6 +7,12 @@ use steel_registry::vanilla_items;
 use steel_utils::java;
 use steel_utils::random::{Random, weighted_random};
 
+const MAX_BOOKSHELVES: i32 = 15;
+const BASE_COST_RANDOM_BOUND: i32 = 8;
+const ENCHANTABILITY_RANDOM_DIVISOR: i32 = 4;
+const COST_VARIATION: f32 = 0.15;
+const ADDITIONAL_ENCHANTMENT_RANDOM_BOUND: i32 = 50;
+
 /// An enchantment and its level
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct EnchantmentInstance {
@@ -32,9 +38,11 @@ pub(crate) fn get_enchantment_cost<R: Random>(
     if !stack.has(ENCHANTABLE) {
         return 0;
     }
-    let bookcases = bookcases.min(15);
-    let selected =
-        random.next_i32_bounded(8) + 1 + (bookcases >> 1) + random.next_i32_bounded(bookcases + 1);
+    let bookcases = bookcases.min(MAX_BOOKSHELVES);
+    let selected = random.next_i32_bounded(BASE_COST_RANDOM_BOUND)
+        + 1
+        + (bookcases >> 1)
+        + random.next_i32_bounded(bookcases + 1);
     match slot {
         0 => (selected / 3).max(1),
         1 => selected * 2 / 3 + 1,
@@ -56,9 +64,9 @@ pub(crate) fn select_enchantment<R: Random>(
     let enchantability = enchantable.value();
     let mut cost = enchantment_cost
         + 1
-        + random.next_i32_bounded(enchantability / 4 + 1)
-        + random.next_i32_bounded(enchantability / 4 + 1);
-    let random_span = (random.next_f32() + random.next_f32() - 1.0) * 0.15;
+        + random.next_i32_bounded(enchantability / ENCHANTABILITY_RANDOM_DIVISOR + 1)
+        + random.next_i32_bounded(enchantability / ENCHANTABILITY_RANDOM_DIVISOR + 1);
+    let random_span = (random.next_f32() + random.next_f32() - 1.0) * COST_VARIATION;
     cost = java::round_f32(cost as f32 + cost as f32 * random_span).max(1);
 
     let mut candidates = get_available_enchantment_results(cost, stack, source);
@@ -70,7 +78,7 @@ pub(crate) fn select_enchantment<R: Random>(
     {
         results.push(*first);
     }
-    while random.next_i32_bounded(50) <= cost {
+    while random.next_i32_bounded(ADDITIONAL_ENCHANTMENT_RANDOM_BOUND) <= cost {
         if let Some(last) = results.last() {
             filter_compatible_enchantments(&mut candidates, last);
         }
@@ -133,6 +141,10 @@ mod tests {
 
     use super::*;
 
+    const FULL_POWER_BOOKSHELVES: i32 = 15;
+    const HIGH_OFFER_MIN_COST: i32 = 30;
+    const SHARPNESS_OVERLAP_COST: i32 = 30;
+
     fn table_enchantments() -> Box<dyn Iterator<Item = EnchantmentRef>> {
         Box::new(
             REGISTRY
@@ -151,7 +163,10 @@ mod tests {
         let sword = ItemStack::new(&vanilla_items::DIAMOND_SWORD);
         for seed in 0..64 {
             let mut random = LegacyRandom::from_seed(seed);
-            assert!(get_enchantment_cost(&mut random, 2, 15, &sword) >= 30);
+            assert!(
+                get_enchantment_cost(&mut random, 2, FULL_POWER_BOOKSHELVES, &sword)
+                    >= HIGH_OFFER_MIN_COST
+            );
         }
     }
 
@@ -161,7 +176,7 @@ mod tests {
         let sword = ItemStack::new(&vanilla_items::DIAMOND_SWORD);
         // Sharpness level n spans [1 + 11(n - 1), 21 + 11(n - 1)]; 30 fits levels 2 and 3.
         let results = get_available_enchantment_results(
-            30,
+            SHARPNESS_OVERLAP_COST,
             &sword,
             once(&vanilla_enchantments::SHARPNESS as EnchantmentRef),
         );
@@ -174,12 +189,13 @@ mod tests {
         let sharpness = once(&vanilla_enchantments::SHARPNESS as EnchantmentRef);
         let book = ItemStack::new(&vanilla_items::BOOK);
         assert_eq!(
-            get_available_enchantment_results(30, &book, sharpness.clone()).len(),
+            get_available_enchantment_results(SHARPNESS_OVERLAP_COST, &book, sharpness.clone())
+                .len(),
             1
         );
         let axe = ItemStack::new(&vanilla_items::DIAMOND_AXE);
         assert_eq!(
-            get_available_enchantment_results(30, &axe, sharpness),
+            get_available_enchantment_results(SHARPNESS_OVERLAP_COST, &axe, sharpness),
             Vec::new()
         );
     }

@@ -31,27 +31,22 @@ pub struct EnchantingTableBlock {
 const fn bookshelf_offsets() -> [IVec3; 32] {
     let mut offsets = [IVec3::ZERO; 32];
     let mut count = 0;
-    let mut y: i32 = 0;
-    while y <= 1 {
-        let mut x: i32 = -2;
-        while x <= 2 {
-            let mut z: i32 = -2;
-            while z <= 2 {
+    for y in 0..=1 {
+        for x in -2..=2 {
+            for z in -2..=2 {
                 if x.abs() == 2 || z.abs() == 2 {
                     offsets[count] = IVec3::new(x, y, z);
                     count += 1;
                 }
-                z += 1;
             }
-            x += 1;
         }
-        y += 1;
+    }
     }
     offsets
 }
 
 impl EnchantingTableBlock {
-    /// Vanilla `EnchantingTableBlock.BOOKSHELF_OFFSETS`.
+    /// The bookshelf positions offsets for enchanting tables
     pub const BOOKSHELF_OFFSETS: [IVec3; 32] = bookshelf_offsets();
 
     /// Creates a new enchanting table block behavior.
@@ -60,8 +55,7 @@ impl EnchantingTableBlock {
         Self { block }
     }
 
-    /// Vanilla `isValidBookShelf`: a power provider at `offset` with a power
-    /// transmitter (air and other replaceables) halfway between it and the table.
+    /// Checks whether the block at `offset` can provide enchanting power
     #[must_use]
     pub fn is_valid_book_shelf(world: &World, pos: BlockPos, offset: IVec3) -> bool {
         let provider = world
@@ -109,7 +103,7 @@ impl BlockBehavior for EnchantingTableBlock {
         false
     }
 
-    /// Vanilla `useWithoutItem`: opens the menu titled with the table's display name.
+    /// Opens the enchanting table menu
     fn use_without_item(
         &self,
         _state: BlockStateId,
@@ -119,7 +113,6 @@ impl BlockBehavior for EnchantingTableBlock {
         _hit_result: &BlockHitResult,
         _inv: &mut InventoryAccess,
     ) -> InteractionResult {
-        // Vanilla's menu provider is null without the block entity, so the use succeeds but opens nothing.
         let Some(block_entity) = world.get_block_entity(pos) else {
             return InteractionResult::Success;
         };

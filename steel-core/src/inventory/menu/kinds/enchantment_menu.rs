@@ -30,8 +30,6 @@ const LAPIS_SLOT: usize = 1;
 const TABLE_SLOT_COUNT: usize = 2;
 
 /// Builds the enchanting table menu for the table at `pos`.
-///
-/// `enchantment_seed` is the opening player's vanilla `enchantmentSeed`.
 #[must_use]
 pub fn enchantment(
     inventory: Shared<PlayerInventory>,
@@ -58,9 +56,6 @@ pub fn enchantment(
     );
     let player_slots = builder.player_inventory(&inventory);
 
-    // Vanilla data slot order: costs, seed, enchantment clues, level clues.
-    // Array literals (rather than `from_fn`) guarantee left-to-right evaluation,
-    // so the wire order below rests on a documented contract, not an incidental one.
     let cost_slots = [
         builder.data_slot(0),
         builder.data_slot(0),
@@ -78,7 +73,6 @@ pub fn enchantment(
         builder.data_slot(-1),
     ];
 
-    // Vanilla `removed` hands both table slots back to the player.
     builder.drain([item, lapis]);
 
     builder.build(EnchantmentKind {
@@ -110,7 +104,6 @@ pub struct EnchantmentKind {
     item: Section,
     lapis: Section,
     player_slots: PlayerInventorySections,
-    /// Full-precision vanilla `enchantmentSeed`; `seed_slot` carries its low 16 bits.
     enchantment_seed: i32,
     /// `enchant_slots.times_changed()` when the offers were last computed.
     table_changes_seen: u32,
@@ -138,7 +131,7 @@ impl EnchantmentKind {
         i16::from_le_bytes([low, high])
     }
 
-    /// Java `Random(seed)` over an int seed, matching vanilla's `setSeed(int)` widening.
+    /// Get a `LegacyRandom` struct from a seed
     fn seeded_random(seed: i32) -> LegacyRandom {
         LegacyRandom::from_seed(i64::from(seed).cast_unsigned())
     }
@@ -201,7 +194,7 @@ impl EnchantmentKind {
             .map(SimpleContainer::times_changed)
     }
 
-    /// Vanilla `EnchantmentMenu.slotsChanged`: rerolls the three offers for the table item.
+    /// Rerolls the three offers for the table item
     fn update_offers(&mut self, behavior: &mut MenuBehavior, guard: &mut ContainerLockGuard) {
         if let Some(changes) = self.table_changes(guard) {
             self.table_changes_seen = changes;
@@ -213,9 +206,6 @@ impl EnchantmentKind {
             return;
         }
 
-        // Counting bookshelves reads world blocks, not containers, so it does not
-        // need the menu containers locked; run it unlocked to avoid holding the
-        // container guard across an unrelated world-lock acquisition.
         let bookcases = guard.run_unlocked(|| self.count_bookshelves());
         let mut random = Self::seeded_random(self.enchantment_seed);
         for offer in 0..OFFER_COUNT {

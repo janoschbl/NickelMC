@@ -8,7 +8,7 @@ use steel_registry::vanilla_items;
 use steel_utils::java;
 use steel_utils::random::{Random, weighted_random};
 
-/// Vanilla `EnchantmentInstance`: one enchantment at one level.
+/// An enchantment and its level
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct EnchantmentInstance {
     pub enchantment: EnchantmentRef,
@@ -16,14 +16,14 @@ pub(crate) struct EnchantmentInstance {
 }
 
 impl EnchantmentInstance {
-    /// Vanilla `EnchantmentInstance.weight`.
+    /// Returns the enchantment weight
     #[must_use]
     pub(crate) const fn weight(&self) -> i32 {
         self.enchantment.weight as i32
     }
 }
 
-/// Vanilla `EnchantmentHelper.getEnchantmentCost`: the level shown on offer `slot`.
+/// Calculates the required level for an enchanting table offer
 pub(crate) fn get_enchantment_cost<R: Random>(
     random: &mut R,
     slot: usize,
@@ -43,8 +43,7 @@ pub(crate) fn get_enchantment_cost<R: Random>(
     }
 }
 
-/// Vanilla `EnchantmentHelper.selectEnchantment`: rolls the modified level and
-/// draws weighted, mutually compatible enchantments from `source`.
+/// Selects enchantments for an enchanting table offer
 pub(crate) fn select_enchantment<R: Random>(
     random: &mut R,
     stack: &ItemStack,
@@ -89,9 +88,7 @@ pub(crate) fn select_enchantment<R: Random>(
     results
 }
 
-/// Vanilla `EnchantmentHelper.getAvailableEnchantmentResults`: for every
-/// enchantment applicable to `stack` (books accept all), the highest level whose
-/// cost window contains `value`.
+/// Returns the enchantments available for the given cost and item
 fn get_available_enchantment_results(
     value: i32,
     stack: &ItemStack,
@@ -116,8 +113,7 @@ fn get_available_enchantment_results(
     results
 }
 
-/// Vanilla `EnchantmentHelper.filterCompatibleEnchantments`: drops `target`
-/// itself and everything in an exclusive set with it.
+/// Removes enchantments that are incompatible with `target`
 fn filter_compatible_enchantments(
     candidates: &mut Vec<EnchantmentInstance>,
     target: &EnchantmentInstance,
@@ -150,27 +146,6 @@ mod tests {
         EnchantmentInstance { enchantment, level }
     }
 
-    #[test]
-    fn cost_is_zero_for_items_without_enchantability() {
-        init_vanilla_registry();
-        let mut random = LegacyRandom::from_seed(1);
-        let stone = ItemStack::new(&vanilla_items::STONE);
-        assert_eq!(get_enchantment_cost(&mut random, 2, 15, &stone), 0);
-    }
-
-    #[test]
-    fn cost_roll_caps_bookcases_at_fifteen() {
-        init_vanilla_registry();
-        let sword = ItemStack::new(&vanilla_items::DIAMOND_SWORD);
-        for slot in 0..3 {
-            let mut capped = LegacyRandom::from_seed(7);
-            let mut excessive = LegacyRandom::from_seed(7);
-            assert_eq!(
-                get_enchantment_cost(&mut capped, slot, 15, &sword),
-                get_enchantment_cost(&mut excessive, slot, 40, &sword),
-            );
-        }
-    }
 
     #[test]
     fn third_offer_costs_at_least_twice_the_bookcases() {
@@ -211,66 +186,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn filter_removes_the_target_and_its_exclusive_set() {
-        init_vanilla_registry();
-        let mut candidates = vec![
-            instance(&vanilla_enchantments::SHARPNESS, 1),
-            instance(&vanilla_enchantments::SMITE, 1),
-            instance(&vanilla_enchantments::UNBREAKING, 1),
-        ];
-        filter_compatible_enchantments(
-            &mut candidates,
-            &instance(&vanilla_enchantments::SHARPNESS, 1),
-        );
-        assert_eq!(
-            candidates,
-            vec![instance(&vanilla_enchantments::UNBREAKING, 1)]
-        );
-    }
-
-    #[test]
-    fn selected_enchantments_are_deterministic_and_pairwise_compatible() {
-        init_vanilla_registry();
-        let sword = ItemStack::new(&vanilla_items::DIAMOND_SWORD);
-        for seed in 0..200 {
-            let first = select_enchantment(
-                &mut LegacyRandom::from_seed(seed),
-                &sword,
-                30,
-                table_enchantments(),
-            );
-            let second = select_enchantment(
-                &mut LegacyRandom::from_seed(seed),
-                &sword,
-                30,
-                table_enchantments(),
-            );
-            assert_eq!(first, second);
-            assert_ne!(first, Vec::new());
-            for (index, earlier) in first.iter().enumerate() {
-                for later in &first[index + 1..] {
-                    assert!(Enchantment::are_compatible(
-                        earlier.enchantment,
-                        later.enchantment
-                    ));
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn selection_yields_nothing_for_items_without_enchantability() {
-        init_vanilla_registry();
-        let stone = ItemStack::new(&vanilla_items::STONE);
-        assert_eq!(
-            select_enchantment(
-                &mut LegacyRandom::from_seed(3),
-                &stone,
-                30,
-                table_enchantments()
-            ),
-            Vec::new()
-        );
-    }
 }

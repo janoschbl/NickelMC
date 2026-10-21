@@ -6,9 +6,6 @@ use crate::inventory::container::Container;
 /// A Simple Container
 pub struct SimpleContainer {
     items: Vec<ItemStack>,
-    /// Bumped by every `set_changed`, like vanilla `Inventory.timesChanged`, so
-    /// menus can tell whether this container changed during a click the way
-    /// vanilla menus hook `SimpleContainer.setChanged`.
     times_changed: u32,
 }
 

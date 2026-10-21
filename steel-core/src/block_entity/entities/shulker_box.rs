@@ -276,8 +276,7 @@ impl ShulkerBoxBlockEntity {
         self.container.lock().is_empty()
     }
 
-    /// Collect all the items inside the shulker box into an `ItemContainerContents`,
-    /// vanilla `ItemContainerContents.fromItems(getItems())`.
+    /// Collect all the items inside the shulker box into an `ItemContainerContents`
     ///
     /// # Panics
     /// Panics if shulker box somehow has more than 256 slots. This should never happen
@@ -385,8 +384,7 @@ impl BlockEntity for ShulkerBoxBlockEntity {
         nbt.insert("Items", NbtList::Compound(items));
     }
 
-    /// Vanilla `BaseContainerBlockEntity.applyImplicitComponents`, container part:
-    /// `CONTAINER` (or empty) is copied into the slots.
+/// Copies the container component into the block entity inventory
     fn apply_implicit_components(&self, components: &mut ImplicitComponentGetter<'_>) {
         let contents = components.get_or_default(CONTAINER, ItemContainerContents::empty());
 
@@ -406,7 +404,7 @@ impl BlockEntity for ShulkerBoxBlockEntity {
         }
     }
 
-    /// Vanilla `BaseContainerBlockEntity.collectImplicitComponents`, container part.
+    /// Stores the block entity inventory in the container component
     fn collect_implicit_components(&self, components: &mut DataComponentMap) {
         components.set(CONTAINER, Some(self.container_contents()));
     }

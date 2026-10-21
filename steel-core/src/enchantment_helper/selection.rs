@@ -1,10 +1,10 @@
 //! Enchanting table costs and weighted enchantment selection.
 
+use steel_math::round_f32;
 use steel_registry::data_components::vanilla_components::ENCHANTABLE;
 use steel_registry::enchantment::{Enchantment, EnchantmentRef};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_items;
-use steel_utils::java;
 use steel_utils::random::{Random, weighted_random};
 
 const MAX_BOOKSHELVES: i32 = 15;
@@ -67,7 +67,7 @@ pub(crate) fn select_enchantment<R: Random>(
         + random.next_i32_bounded(enchantability / ENCHANTABILITY_RANDOM_DIVISOR + 1)
         + random.next_i32_bounded(enchantability / ENCHANTABILITY_RANDOM_DIVISOR + 1);
     let random_span = (random.next_f32() + random.next_f32() - 1.0) * COST_VARIATION;
-    cost = java::round_f32(cost as f32 + cost as f32 * random_span).max(1);
+    cost = round_f32(cost as f32 + cost as f32 * random_span).max(1);
 
     let mut candidates = get_available_enchantment_results(cost, stack, source);
     if candidates.is_empty() {

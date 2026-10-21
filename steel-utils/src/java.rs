@@ -149,42 +149,9 @@ fn floating_to_string(
     output
 }
 
-/// `jdk.internal.math.FloatConsts`, derived the way the JDK derives them.
-mod float_consts {
-    pub const SIZE: i32 = (size_of::<f32>() * 8) as i32;
-    /// Significand width including the implicit bit.
-    pub const SIGNIFICAND_WIDTH: i32 = f32::MANTISSA_DIGITS as i32;
-    pub const EXP_BIAS: i32 = (1 << (SIZE - SIGNIFICAND_WIDTH - 1)) - 1;
-    pub const EXP_BIT_MASK: i32 =
-        ((1 << (SIZE - SIGNIFICAND_WIDTH)) - 1) << (SIGNIFICAND_WIDTH - 1);
-    pub const SIGNIF_BIT_MASK: i32 = (1 << (SIGNIFICAND_WIDTH - 1)) - 1;
-}
-
-/// Rounds ties toward positive infinity, unlike [`f32::round`], which rounds
-/// them away from zero. Matches Java's `Math.round(float)`, including saturation
-/// and NaN handling, without rounding up values just below a half-integer.
-#[must_use]
-pub const fn round_f32(value: f32) -> i32 {
-    use float_consts::{EXP_BIAS, EXP_BIT_MASK, SIGNIF_BIT_MASK, SIGNIFICAND_WIDTH, SIZE};
-
-    let bits = value.to_bits() as i32;
-    let biased_exp = (bits & EXP_BIT_MASK) >> (SIGNIFICAND_WIDTH - 1);
-    let shift = (SIGNIFICAND_WIDTH - 2 + EXP_BIAS) - biased_exp;
-    // The JDK spells this `(shift & -32) == 0`: a finite value whose ulp lies in [2^-32, 1).
-    if shift >= 0 && shift < SIZE {
-        let mut r = (bits & SIGNIF_BIT_MASK) | (SIGNIF_BIT_MASK + 1);
-        if bits < 0 {
-            r = -r;
-        }
-        ((r >> shift) + 1) >> 1
-    } else {
-        value as i32
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{float_to_string, is_blank, is_space_char, is_whitespace, round_f32};
+    use super::{float_to_string, is_blank, is_space_char, is_whitespace};
 
     #[test]
     fn matches_java_whitespace_exclusions() {
@@ -217,16 +184,5 @@ mod tests {
         assert_eq!(float_to_string(-0.0), "-0.0");
         assert_eq!(float_to_string(90.0), "90.0");
         assert_eq!(float_to_string(45.5), "45.5");
-    }
-
-    #[test]
-    fn round_f32_matches_java_math_round_on_halves() {
-        assert_eq!(round_f32(2.5), 3);
-        assert_eq!(round_f32(-2.5), -2);
-        assert_eq!(round_f32(2.4), 2);
-        assert_eq!(round_f32(-2.6), -3);
-        assert_eq!(round_f32(0.499_999_97), 0);
-        assert_eq!(round_f32(f32::NAN), 0);
-        assert_eq!(round_f32(1.0e10), i32::MAX);
     }
 }

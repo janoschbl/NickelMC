@@ -7,7 +7,6 @@ use crate::inventory::lock::{ContainerLockGuard, ContainerRef};
 use crate::inventory::slots::{NormalSlot, Slot, SlotStorage};
 
 /// The enchanting table item slot accepts anything but holds a single item
-
 pub struct EnchantItemSlot {
     base: NormalSlot,
 }

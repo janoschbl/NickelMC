@@ -27,20 +27,24 @@ pub struct EnchantingTableBlock {
     block: BlockRef,
 }
 
-/// Every offset two blocks out from the table, at table height and one above.
 const fn bookshelf_offsets() -> [IVec3; 32] {
     let mut offsets = [IVec3::ZERO; 32];
     let mut count = 0;
-    for y in 0..=1 {
-        for x in -2..=2 {
-            for z in -2..=2 {
+    let mut y: i32 = 0;
+    while y <= 1 {
+        let mut x: i32 = -2;
+        while x <= 2 {
+            let mut z: i32 = -2;
+            while z <= 2 {
                 if x.abs() == 2 || z.abs() == 2 {
                     offsets[count] = IVec3::new(x, y, z);
                     count += 1;
                 }
+                z += 1;
             }
+            x += 1;
         }
-    }
+        y += 1;
     }
     offsets
 }
@@ -120,7 +124,7 @@ impl BlockBehavior for EnchantingTableBlock {
             return InteractionResult::Success;
         };
         let title = table.display_name();
-        let inventory = player.inventory.clone();
+        let inventory = Arc::clone(&player.inventory);
         let enchantment_seed = player.experience.lock().enchantment_seed();
         player.open_menu(title, move |context| {
             enchantment(
@@ -137,23 +141,11 @@ impl BlockBehavior for EnchantingTableBlock {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use glam::DVec3;
-    use steel_registry::{
-        data_components::vanilla_components::CUSTOM_NAME, init_vanilla_registry,
-        item_stack::ItemStack, vanilla_blocks, vanilla_items,
-    };
-    use steel_utils::{
-        ChunkPos, Direction,
-        types::{InteractionHand, UpdateFlags},
-    };
-    use text_components::TextComponent;
+    use steel_registry::{init_vanilla_registry, vanilla_blocks};
+    use steel_utils::{ChunkPos, types::UpdateFlags};
 
     use super::*;
     use crate::behavior::init_behaviors;
-    use crate::behavior::items::BlockItem;
-    use crate::behavior::{PlacementOrientation, PlacementSource};
     use crate::block_entity::init_block_entities;
     use crate::entity::Entity as _;
     use crate::test_support::{TestPlayerBuilder, fresh_test_world, insert_ready_full_chunk};

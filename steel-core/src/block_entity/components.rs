@@ -25,7 +25,6 @@ pub struct ImplicitComponentGetter<'a> {
 
 impl<'a> ImplicitComponentGetter<'a> {
     pub(super) fn new(stack: &'a ItemStack) -> Self {
-        // Vanilla seeds the implicit set with the two placement-only components.
         let consumed = [BLOCK_ENTITY_DATA.key().clone(), BLOCK_STATE.key().clone()]
             .into_iter()
             .collect();

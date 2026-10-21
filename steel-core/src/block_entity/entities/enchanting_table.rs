@@ -1,8 +1,4 @@
 //! Enchanting table block entity.
-//!
-//! Server-side it only carries the optional custom name used as the menu
-//! title. Vanilla's book animation (`bookAnimationTick`) is client-only, so
-//! there is no ticker.
 
 use std::sync::{Arc, Weak};
 
@@ -46,7 +42,7 @@ impl EnchantingTableBlockEntity {
         }
     }
 
-    /// Vanilla `getName`: the custom name, or `container.enchant`.
+    /// Returns the custom name or the default enchanting table name
     #[must_use]
     pub fn display_name(&self) -> TextComponent {
         self.name
@@ -55,13 +51,13 @@ impl EnchantingTableBlockEntity {
             .unwrap_or_else(|| TextComponent::translated(translations::CONTAINER_ENCHANT.msg()))
     }
 
-    /// Vanilla `getCustomName`.
+    /// Returns the custom name if set
     #[must_use]
     pub fn custom_name(&self) -> Option<TextComponent> {
         self.name.lock().clone()
     }
 
-    /// Vanilla `setCustomName`. Callers persist the change with `set_changed`.
+    /// Sets the custom name
     pub fn set_custom_name(&self, name: Option<TextComponent>) {
         *self.name.lock() = name;
     }
@@ -74,7 +70,6 @@ impl BlockEntity for EnchantingTableBlockEntity {
 
     fn load_additional(&self, nbt: &BorrowedNbtCompound<'_>) {
         let nbt_view: BorrowedNbtCompoundView<'_, '_> = nbt.into();
-        // Vanilla `parseCustomNameSafe` drops unreadable names instead of failing the load.
         *self.name.lock() = nbt_view
             .get("CustomName")
             .and_then(|tag| TextComponent::from_nbt(&tag.to_owned()));

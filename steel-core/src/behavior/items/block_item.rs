@@ -165,8 +165,7 @@ impl BlockItem {
         self.place_with(context, Self::place_block)
     }
 
-    /// Vanilla `BlockItem.updateBlockEntityComponents`: hands the placed stack's
-    /// components to the new block entity.
+    /// Applies the placed item components to the block entity
     fn update_block_entity_components(context: &BlockPlaceContext<'_>, pos: BlockPos) {
         let Some(block_entity) = context.world.get_block_entity(pos) else {
             return;

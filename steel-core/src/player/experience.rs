@@ -5,11 +5,11 @@ use crate::entity::Entity;
 
 use super::Player;
 
-/// Vanilla player experience state.
+/// Player experience state.
 ///
-/// These three fields are intentionally independent. Vanilla commands and save
-/// data can change one without recomputing the others. The player's score is
-/// synchronized entity data and is owned by [`super::Player`], not experience.
+/// Level, progress, and total points are independent: commands and save data
+/// can change one without recomputing the others. The player's score belongs
+/// to [`super::Player`]'s synchronized entity data.
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Experience {
     level: i32,
@@ -115,7 +115,7 @@ impl Experience {
         self.progress
     }
 
-    /// Zero until a save provides one or the player enchants for the first time
+    /// Returns the enchantment seed; zero until loaded or the player first enchants
     #[must_use]
     pub const fn enchantment_seed(&self) -> i32 {
         self.enchantment_seed
@@ -128,15 +128,14 @@ impl Experience {
         self
     }
 
-    /// A missing or Zero `XpSeed` is replaced with a seed drawn from `reroll`
+    /// Replaces a missing or zero saved `XpSeed` with a seed drawn from `reroll`
     #[must_use]
     pub fn with_loaded_enchantment_seed(self, saved: i32, reroll: impl FnOnce() -> i32) -> Self {
         let seed = if saved == 0 { reroll() } else { saved };
         self.with_enchantment_seed(seed)
     }
 
-    /// Adds (or removes, if negative) experience levels, resetting progress
-    /// and total points to zero if the level would drop below zero.
+    /// Adds levels with saturation, clearing progress and points if the result is negative.
     pub const fn add_levels(&mut self, additional_levels: i32) {
         if additional_levels == 0 {
             return;
@@ -163,8 +162,7 @@ impl Experience {
         self.dirty = true;
     }
 
-    /// Adds raw experience points, rolling progress over into level changes
-    /// as it crosses 0.0 or 1.0.
+    /// Adds raw points, updating progress and level as thresholds are crossed.
     #[expect(
         clippy::cast_precision_loss,
         reason = "vanilla performs these calculations with Java float precision"

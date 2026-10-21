@@ -195,9 +195,7 @@ impl ShulkerBoxBlockEntity {
         }
     }
 
-    /// Builds the item form of a placed, possibly-filled shulker box.
-    /// Vanilla `ShulkerBoxBlockEntity.collectComponents()` +
-    /// `BaseContainerBlockEntity.collectImplicitComponents(CONTAINER)`.
+    /// Builds a shulker box item containing the stored inventory.
     pub fn shulker_box_as_item(&self, state: BlockStateId) -> ItemStack {
         let block_item = REGISTRY.items.by_block(state.get_block());
 
@@ -384,7 +382,7 @@ impl BlockEntity for ShulkerBoxBlockEntity {
         nbt.insert("Items", NbtList::Compound(items));
     }
 
-/// Copies the container component into the block entity inventory
+    /// Copies the container component into the block entity inventory
     fn apply_implicit_components(&self, components: &mut ImplicitComponentGetter<'_>) {
         let contents = components.get_or_default(CONTAINER, ItemContainerContents::empty());
 

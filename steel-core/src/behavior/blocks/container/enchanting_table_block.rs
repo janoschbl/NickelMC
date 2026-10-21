@@ -46,7 +46,7 @@ const fn bookshelf_offsets() -> [IVec3; 32] {
 }
 
 impl EnchantingTableBlock {
-    /// The bookshelf positions offsets for enchanting tables
+    /// Bookshelf offsets around an enchanting table
     pub const BOOKSHELF_OFFSETS: [IVec3; 32] = bookshelf_offsets();
 
     /// Creates a new enchanting table block behavior.

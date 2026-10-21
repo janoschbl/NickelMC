@@ -26,7 +26,7 @@ const OFFER_COUNT: usize = 3;
 const ITEM_SLOT: usize = 0;
 /// Index of the lapis lazuli within `enchant_slots`.
 const LAPIS_SLOT: usize = 1;
-/// Vanilla `new SimpleContainer(2)`: the item slot and the lapis slot.
+/// Combined item and lapis slot count.
 const TABLE_SLOT_COUNT: usize = 2;
 
 /// Builds the enchanting table menu for the table at `pos`.
@@ -131,7 +131,7 @@ impl EnchantmentKind {
         i16::from_le_bytes([low, high])
     }
 
-    /// Get a `LegacyRandom` struct from a seed
+    /// Creates the offer RNG from the player's enchantment seed
     fn seeded_random(seed: i32) -> LegacyRandom {
         LegacyRandom::from_seed(i64::from(seed).cast_unsigned())
     }
@@ -162,8 +162,7 @@ impl EnchantmentKind {
             .count() as i32
     }
 
-    /// Vanilla `EnchantmentMenu.getEnchantmentList`: reseeds `random` with
-    /// `seed + slot` and selects the offer; books drop one result when several were rolled.
+    /// Selects an offer using `seed + slot`; books discard one result if several are rolled.
     fn enchantment_list(
         &self,
         random: &mut LegacyRandom,
@@ -233,7 +232,7 @@ impl EnchantmentKind {
 }
 
 impl MenuKind for EnchantmentKind {
-    /// Vanilla `stillValid`: the table must still stand there and be in reach.
+    /// Requires the table to remain in place and within reach.
     fn still_valid(&self, _behavior: &MenuBehavior, player: &Player) -> bool {
         self.world.get_block_state(self.block_pos).get_block() == &vanilla_blocks::ENCHANTING_TABLE
             && player.is_within_block_interaction_range_with_buffer(
@@ -242,9 +241,7 @@ impl MenuKind for EnchantmentKind {
             )
     }
 
-    /// Vanilla `slotsChanged`: rerolls the offers only when `enchantSlots`
-    /// changed. Vanilla reaches this through that container's `setChanged`
-    /// override, so player-inventory clicks leave the offers alone.
+    /// Rerolls offers only when the table slots change, ignoring player-inventory clicks.
     fn slots_changed(
         &mut self,
         behavior: &mut MenuBehavior,
@@ -257,7 +254,7 @@ impl MenuKind for EnchantmentKind {
         self.update_offers(behavior, guard);
     }
 
-    /// Vanilla `clickMenuButton`: applies offer `button_id` when the player can pay.
+    /// Applies the selected offer when the player can pay.
     fn click_menu_button(
         &mut self,
         behavior: &mut MenuBehavior,
@@ -277,7 +274,6 @@ impl MenuKind for EnchantmentKind {
         let enchantment_cost = offer as i32 + 1;
         let has_infinite_materials = player.has_infinite_materials();
 
-        // Only the table container takes part; the player inventory stays unlocked.
         let mut guard = ContainerLockGuard::lock_all(&[ContainerRef::from(&self.enchant_slots)]);
         let container_id = ContainerId::from_arc(&self.enchant_slots);
         let Some(container) = guard.get(container_id) else {
@@ -299,9 +295,6 @@ impl MenuKind for EnchantmentKind {
             return false;
         }
 
-        // The seed here is discarded immediately: `enchantment_list` reseeds `random`
-        // with `seed + offer` before using it, mirroring vanilla's reuse of one
-        // long-lived `random` field rather than seeding fresh for the roll itself.
         let mut random = Self::seeded_random(self.enchantment_seed);
         let new_enchantments = self.enchantment_list(&mut random, &stack, offer, self.costs[offer]);
         if new_enchantments.is_empty() {
@@ -314,11 +307,8 @@ impl MenuKind for EnchantmentKind {
             self.enchantment_seed = experience.enchantment_seed();
         }
 
-        // Vanilla `transmuteCopy`: a book keeps its count and components as an enchanted book.
-        // `with_count_and_patch` approximates it via `sanitize_against`, which drops patch
-        // entries equal to the new prototype's default, where vanilla's `forget` drops any
-        // entry the new item defines a default for regardless of value. The two differ only
-        // for patches unreachable through gameplay; identical for anything reachable in play.
+        // Unlike vanilla transmuteCopy, sanitizing only drops patches equal to the new
+        // prototype's defaults. Custom patches can therefore survive the conversion.
         let mut enchanted = if stack.is(&vanilla_items::BOOK) {
             ItemStack::with_count_and_patch(
                 &vanilla_items::ENCHANTED_BOOK,
@@ -357,8 +347,8 @@ impl MenuKind for EnchantmentKind {
         true
     }
 
-    /// Vanilla `quickMoveStack`: table slots empty into the inventory, lapis goes
-    /// to its slot, and anything else moves a single item into the empty item slot.
+    /// Moves table items back to inventory, lapis to its slot, and one other item
+    /// into the empty item slot.
     fn quick_move(
         &mut self,
         behavior: &mut MenuBehavior,

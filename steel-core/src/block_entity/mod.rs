@@ -436,20 +436,18 @@ pub trait BlockEntity: ErasedType + Send + Sync {
 
     /// Reads the components this entity represents through its own fields.
     ///
-    /// Vanilla `BlockEntity.applyImplicitComponents`: every component read from
-    /// `components` is consumed and kept out of the stored component map.
+    /// Every component read is excluded from the stored component map.
     fn apply_implicit_components(&self, _components: &mut ImplicitComponentGetter<'_>) {}
 
     /// Adds the components this entity represents through its own fields.
     ///
-    /// Vanilla `BlockEntity.collectImplicitComponents`; the inverse of
-    /// [`Self::apply_implicit_components`].
+    /// The inverse of [`Self::apply_implicit_components`].
     fn collect_implicit_components(&self, _components: &mut DataComponentMap) {}
 
     /// Applies the placed stack's components: implicit ones through
     /// [`Self::apply_implicit_components`], the rest into the stored component map.
     ///
-    /// Vanilla `BlockEntity.applyComponentsFromItemStack`; final, do not override.
+    /// Do not override; customize [`Self::apply_implicit_components`] instead.
     fn apply_components_from_item_stack(&self, stack: &ItemStack) {
         let mut getter = ImplicitComponentGetter::new(stack);
         self.apply_implicit_components(&mut getter);
@@ -459,7 +457,7 @@ pub trait BlockEntity: ErasedType + Send + Sync {
 
     /// Returns the stored components together with the implicit ones.
     ///
-    /// Vanilla `BlockEntity.collectComponents`; final, do not override.
+    /// Do not override; customize [`Self::collect_implicit_components`] instead.
     fn collect_components(&self) -> DataComponentMap {
         let mut components = self.base().stored_components();
         self.collect_implicit_components(&mut components);

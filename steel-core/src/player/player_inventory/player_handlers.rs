@@ -239,15 +239,13 @@ impl Player {
         self.finish_open_menu_callback(menu);
     }
 
-    /// Handles a container button click (vanilla `handleContainerButtonClick`):
-    /// enchanting table offers, and later stonecutter, loom, and lectern buttons.
+    /// Dispatches a container button click to the open menu.
     pub fn handle_container_button_click(&self, packet: SContainerButtonClick) {
         self.reset_last_action_time();
         match self.take_open_menu_for_callback(Some(packet.container_id)) {
             Ok(mut menu) => {
                 if self.game_mode() == GameType::Spectator {
-                    // Vanilla `handleContainerButtonClick` silently drops spectator
-                    // clicks; the resync only happens in `handleContainerClick`.
+                    // Spectator button clicks are ignored without resynchronizing the menu.
                 } else if !menu.still_valid(self) {
                     log::debug!(
                         "Player {} interacted with invalid menu {}",

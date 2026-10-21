@@ -1,11 +1,11 @@
-//! Vanilla `WeightedRandom`: weighted selection over an arbitrary slice.
+//! Weighted selection over an arbitrary slice.
 
 use crate::random::Random;
 
-/// Sums `weight` over `items`, mirroring vanilla `WeightedRandom.getTotalWeight`.
+/// Sums `weight` over `items`.
 ///
 /// # Panics
-/// Panics if the sum exceeds `i32::MAX`, like vanilla's `IllegalArgumentException`.
+/// Panics if the sum exceeds `i32::MAX`.
 #[must_use]
 pub fn get_total_weight<T>(items: &[T], weight: impl Fn(&T) -> i32) -> i32 {
     let total: i64 = items.iter().map(|item| i64::from(weight(item))).sum();
@@ -16,12 +16,11 @@ pub fn get_total_weight<T>(items: &[T], weight: impl Fn(&T) -> i32) -> i32 {
     total as i32
 }
 
-/// Picks one entry with probability proportional to its weight, mirroring
-/// vanilla `WeightedRandom.getRandomItem`. Returns `None`, without touching
-/// `random`, when the total weight is zero.
+/// Picks an entry with probability proportional to its weight. A zero total
+/// weight returns `None` without consuming random values.
 ///
 /// # Panics
-/// Panics if the total weight is negative, like vanilla.
+/// Panics if the total weight is negative.
 pub fn get_random_item<'a, T, R: Random>(
     random: &mut R,
     items: &'a [T],
@@ -36,8 +35,7 @@ pub fn get_random_item<'a, T, R: Random>(
     get_weighted_item(items, selection, weight)
 }
 
-/// Walks `items` subtracting each weight from `index` and returns the entry
-/// that drives it negative, mirroring vanilla `WeightedRandom.getWeightedItem`.
+/// Returns the entry whose cumulative weight range contains `index`.
 #[must_use]
 pub fn get_weighted_item<T>(items: &[T], mut index: i32, weight: impl Fn(&T) -> i32) -> Option<&T> {
     items.iter().find(|item| {

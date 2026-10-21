@@ -577,9 +577,7 @@ pub(crate) fn build() -> TokenStream {
 
 /// Turns a `#namespace:path` tag reference into a static `Identifier` expression.
 ///
-/// Vanilla models these fields as `HolderSet`s that may also list entries
-/// directly; the extracted vanilla data only uses tags, so anything else is a
-/// build error rather than a silently wrong type.
+/// Extracted enchantment item sets use tags; direct entry lists are rejected.
 fn tag_ref_to_tokens(enchantment: &str, field: &str, tag_ref: &str) -> TokenStream {
     let Some(tag) = tag_ref.strip_prefix('#') else {
         panic!("enchantment {enchantment}: {field} {tag_ref:?} is not a tag reference");
@@ -591,7 +589,6 @@ fn tag_ref_to_tokens(enchantment: &str, field: &str, tag_ref: &str) -> TokenStre
     }
 }
 
-/// `Some(tag)` / `None` tokens for an optional tag reference field.
 fn optional_tag_ref_to_tokens(
     enchantment: &str,
     field: &str,

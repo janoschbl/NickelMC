@@ -1,8 +1,7 @@
 //! Item-component application for block entities.
 //!
-//! Vanilla `BlockEntity.applyComponents` lets each block entity read the
-//! components it represents through its own fields (a chest's `CUSTOM_NAME`,
-//! a beehive's `BEES`) and stores every other patched component verbatim.
+//! Components read into entity fields are kept separate from the remaining
+//! item component patch.
 
 use rustc_hash::FxHashSet;
 use steel_registry::data_components::{
@@ -12,12 +11,8 @@ use steel_registry::data_components::{
 use steel_registry::item_stack::ItemStack;
 use steel_utils::{DowncastType, Identifier};
 
-/// Component view handed to [`super::BlockEntity::apply_implicit_components`].
-///
-/// Mirrors the recording `DataComponentGetter` inside vanilla
-/// `BlockEntity.applyComponents`: reads resolve against the placed stack's
-/// effective components, and every type read is remembered so it stays out
-/// of the block entity's stored component map.
+/// Reads effective item components and tracks which ones are represented by
+/// entity fields, excluding them from the stored component map.
 pub struct ImplicitComponentGetter<'a> {
     stack: &'a ItemStack,
     consumed: FxHashSet<Identifier>,
@@ -49,8 +44,7 @@ impl<'a> ImplicitComponentGetter<'a> {
         self.get(component).unwrap_or(default)
     }
 
-    /// Vanilla `patch.forget(implicitComponents::contains).split().added()`:
-    /// the stack's set components that no implicit read claimed.
+    /// Returns patched components that were set and not read into entity fields.
     pub(super) fn remaining_stored_components(self) -> DataComponentMap {
         let mut components = DataComponentMap::new();
         for (key, entry) in self.stack.components_patch().iter() {

@@ -99,7 +99,6 @@ mod tests {
     };
     use steel_registry::item_stack::ItemStack;
     use steel_registry::{init_vanilla_registry, vanilla_blocks, vanilla_items};
-    use steel_utils::translations;
 
     use super::*;
     use crate::test_support::fresh_test_world;

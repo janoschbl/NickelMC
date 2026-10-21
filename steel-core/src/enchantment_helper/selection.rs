@@ -133,10 +133,7 @@ fn filter_compatible_enchantments(
 mod tests {
     use std::iter::once;
 
-    use steel_registry::vanilla_enchantment_tags::EnchantmentTag;
-    use steel_registry::{
-        REGISTRY, TaggedRegistryExt, init_vanilla_registry, vanilla_enchantments, vanilla_items,
-    };
+    use steel_registry::{init_vanilla_registry, vanilla_enchantments, vanilla_items};
     use steel_utils::random::legacy_random::LegacyRandom;
 
     use super::*;
@@ -144,14 +141,6 @@ mod tests {
     const FULL_POWER_BOOKSHELVES: i32 = 15;
     const HIGH_OFFER_MIN_COST: i32 = 30;
     const SHARPNESS_OVERLAP_COST: i32 = 30;
-
-    fn table_enchantments() -> Box<dyn Iterator<Item = EnchantmentRef>> {
-        Box::new(
-            REGISTRY
-                .enchantments
-                .iter_tag(&EnchantmentTag::IN_ENCHANTING_TABLE),
-        )
-    }
 
     fn instance(enchantment: EnchantmentRef, level: u32) -> EnchantmentInstance {
         EnchantmentInstance { enchantment, level }

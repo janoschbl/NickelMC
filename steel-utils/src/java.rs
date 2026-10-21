@@ -151,22 +151,18 @@ fn floating_to_string(
 
 /// `jdk.internal.math.FloatConsts`, derived the way the JDK derives them.
 mod float_consts {
-    /// `Float.SIZE`.
     pub const SIZE: i32 = (size_of::<f32>() * 8) as i32;
-    /// `SIGNIFICAND_WIDTH`: the significand width including the implicit bit.
+    /// Significand width including the implicit bit.
     pub const SIGNIFICAND_WIDTH: i32 = f32::MANTISSA_DIGITS as i32;
-    /// `EXP_BIAS`.
     pub const EXP_BIAS: i32 = (1 << (SIZE - SIGNIFICAND_WIDTH - 1)) - 1;
-    /// `EXP_BIT_MASK`.
     pub const EXP_BIT_MASK: i32 =
         ((1 << (SIZE - SIGNIFICAND_WIDTH)) - 1) << (SIGNIFICAND_WIDTH - 1);
-    /// `SIGNIF_BIT_MASK`.
     pub const SIGNIF_BIT_MASK: i32 = (1 << (SIGNIFICAND_WIDTH - 1)) - 1;
 }
 
-/// Rounds like Java's `Math.round(float)`: half-up at the exact midpoint,
-/// using the JDK's bit-level algorithm so floats just below `n + 0.5` do not
-/// round up through float addition. Saturates and maps NaN to 0 like Java.
+/// Rounds ties toward positive infinity, unlike [`f32::round`], which rounds
+/// them away from zero. Matches Java's `Math.round(float)`, including saturation
+/// and NaN handling, without rounding up values just below a half-integer.
 #[must_use]
 pub const fn round_f32(value: f32) -> i32 {
     use float_consts::{EXP_BIAS, EXP_BIT_MASK, SIGNIF_BIT_MASK, SIGNIFICAND_WIDTH, SIZE};

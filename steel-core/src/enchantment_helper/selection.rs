@@ -1,5 +1,4 @@
-//! Vanilla `EnchantmentHelper` enchanting-table selection: the cost roll, the
-//! candidate window scan, and the weighted picks that build an offer.
+//! Enchanting table costs and weighted enchantment selection.
 
 use steel_registry::data_components::vanilla_components::ENCHANTABLE;
 use steel_registry::enchantment::{Enchantment, EnchantmentRef};
@@ -146,7 +145,6 @@ mod tests {
         EnchantmentInstance { enchantment, level }
     }
 
-
     #[test]
     fn third_offer_costs_at_least_twice_the_bookcases() {
         init_vanilla_registry();
@@ -185,5 +183,4 @@ mod tests {
             Vec::new()
         );
     }
-
 }

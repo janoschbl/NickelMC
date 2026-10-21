@@ -13,7 +13,7 @@ pub mod gaussian;
 pub mod legacy_random;
 /// Precomputed name hashes for positional random seeding.
 pub mod name_hash;
-/// Vanilla `WeightedRandom` selection helpers.
+/// Weighted random selection helpers.
 pub mod weighted_random;
 /// This module contains vanilla's feature-decoration `WorldgenRandom` wrapper.
 pub mod worldgen_random;

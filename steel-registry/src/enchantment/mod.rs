@@ -18,7 +18,7 @@ pub struct EnchantmentCost {
 }
 
 impl EnchantmentCost {
-    /// Vanilla `Enchantment.Cost.calculate`: `base + per_level_above_first * (level - 1)`.
+    /// Calculates the cost for `level`.
     #[must_use]
     pub const fn calculate(self, level: i32) -> i32 {
         self.base + self.per_level_above_first * (level - 1)
@@ -120,20 +120,19 @@ impl Enchantment {
         REGISTRY.items.is_in_tag(item, &self.supported_items)
     }
 
-    /// Vanilla `Enchantment.getMinCost`.
+    /// Minimum enchanting cost for `level`.
     #[must_use]
     pub const fn get_min_cost(&self, level: i32) -> i32 {
         self.min_cost.calculate(level)
     }
 
-    /// Vanilla `Enchantment.getMaxCost`.
+    /// Maximum enchanting cost for `level`.
     #[must_use]
     pub const fn get_max_cost(&self, level: i32) -> i32 {
         self.max_cost.calculate(level)
     }
 
-    /// Vanilla `Enchantment.isPrimaryItem`: supported, and inside `primary_items`
-    /// when that narrower tag is set.
+    /// Requires a supported item that also matches `primary_items` when set.
     pub fn is_primary_item(&self, item: ItemRef) -> bool {
         if !self.can_enchant(item) {
             return false;

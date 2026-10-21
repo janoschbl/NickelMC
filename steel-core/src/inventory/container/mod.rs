@@ -17,8 +17,7 @@ use steel_registry::blocks::properties::Direction;
 use steel_registry::item_stack::ItemStack;
 use steel_utils::ErasedType;
 
-/// Vanilla `Container.DEFAULT_DISTANCE_BUFFER`: the reach slack for container
-/// and menu `stillValid` checks.
+/// Extra reach allowed when validating containers and menus.
 pub const DEFAULT_DISTANCE_BUFFER: f32 = 4.0;
 
 /// Something that contains items.

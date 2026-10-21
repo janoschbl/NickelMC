@@ -106,7 +106,7 @@ pub struct PersistentPlayerData {
     /// Vanilla `Player.totalExperience`, updated by point grants but independent of level/progress.
     pub experience_total: i32,
 
-    /// Vanilla `XpSeed`; zero until the player has enchanted once.
+    /// Saved enchantment seed (`XpSeed`); zero is rerolled when loaded.
     pub enchantment_seed: i32,
 
     /// Vanilla death-screen score. Point grants change it with Java `int` wrapping.

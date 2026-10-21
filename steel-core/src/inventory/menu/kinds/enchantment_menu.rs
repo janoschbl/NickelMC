@@ -29,6 +29,9 @@ const LAPIS_SLOT: usize = 1;
 /// Combined item and lapis slot count.
 const TABLE_SLOT_COUNT: usize = 2;
 
+const ENCHANT_SOUND_MIN_PITCH: f32 = 0.9;
+const ENCHANT_SOUND_PITCH_RANGE: f32 = 0.1;
+
 /// Builds the enchanting table menu for the table at `pos`.
 #[must_use]
 pub fn enchantment(
@@ -85,8 +88,8 @@ pub fn enchantment(
         enchantment_seed,
         table_changes_seen: 0,
         costs: [0; OFFER_COUNT],
-        enchant_clue: [-1; OFFER_COUNT],
-        level_clue: [-1; OFFER_COUNT],
+        enchant_clue: [None; OFFER_COUNT],
+        level_clue: [None; OFFER_COUNT],
         cost_slots,
         seed_slot,
         enchant_clue_slots,
@@ -108,10 +111,10 @@ pub struct EnchantmentKind {
     /// `enchant_slots.times_changed()` when the offers were last computed.
     table_changes_seen: u32,
     costs: [i32; OFFER_COUNT],
-    /// Registry id of the shown enchantment per offer, or -1.
-    enchant_clue: [i32; OFFER_COUNT],
-    /// Level of the shown enchantment per offer, or -1.
-    level_clue: [i32; OFFER_COUNT],
+    /// Registry id of the shown enchantment per offer
+    enchant_clue: [Option<i32>; OFFER_COUNT],
+    /// Level of the shown enchantment per offer
+    level_clue: [Option<i32>; OFFER_COUNT],
     cost_slots: [DataSlot; OFFER_COUNT],
     seed_slot: DataSlot,
     enchant_clue_slots: [DataSlot; OFFER_COUNT],
@@ -139,9 +142,14 @@ impl EnchantmentKind {
     fn sync_data(&self, behavior: &mut MenuBehavior) {
         for offer in 0..OFFER_COUNT {
             self.cost_slots[offer].set(behavior, Self::client_value(self.costs[offer]));
-            self.enchant_clue_slots[offer]
-                .set(behavior, Self::client_value(self.enchant_clue[offer]));
-            self.level_clue_slots[offer].set(behavior, Self::client_value(self.level_clue[offer]));
+            self.enchant_clue_slots[offer].set(
+                behavior,
+                self.enchant_clue[offer].map_or(-1, Self::client_value),
+            );
+            self.level_clue_slots[offer].set(
+                behavior,
+                self.level_clue[offer].map_or(-1, Self::client_value),
+            );
         }
         self.seed_slot
             .set(behavior, Self::client_value(self.enchantment_seed));
@@ -149,8 +157,8 @@ impl EnchantmentKind {
 
     const fn clear_offers(&mut self) {
         self.costs = [0; OFFER_COUNT];
-        self.enchant_clue = [-1; OFFER_COUNT];
-        self.level_clue = [-1; OFFER_COUNT];
+        self.enchant_clue = [None; OFFER_COUNT];
+        self.level_clue = [None; OFFER_COUNT];
     }
 
     fn count_bookshelves(&self) -> i32 {
@@ -209,8 +217,8 @@ impl EnchantmentKind {
         let mut random = Self::seeded_random(self.enchantment_seed);
         for offer in 0..OFFER_COUNT {
             self.costs[offer] = get_enchantment_cost(&mut random, offer, bookcases, &stack);
-            self.enchant_clue[offer] = -1;
-            self.level_clue[offer] = -1;
+            self.enchant_clue[offer] = None;
+            self.level_clue[offer] = None;
             if self.costs[offer] < offer as i32 + 1 {
                 self.costs[offer] = 0;
             }
@@ -224,8 +232,8 @@ impl EnchantmentKind {
                 continue;
             }
             let clue = list[random.next_i32_bounded(list.len() as i32) as usize];
-            self.enchant_clue[offer] = clue.enchantment.id() as i32;
-            self.level_clue[offer] = clue.level as i32;
+            self.enchant_clue[offer] = Some(clue.enchantment.id() as i32);
+            self.level_clue[offer] = Some(clue.level as i32);
         }
         self.sync_data(behavior);
     }
@@ -341,7 +349,7 @@ impl MenuKind for EnchantmentKind {
             SoundSource::Blocks,
             self.block_pos,
             1.0,
-            rand::random::<f32>() * 0.1 + 0.9,
+            rand::random::<f32>() * ENCHANT_SOUND_PITCH_RANGE + ENCHANT_SOUND_MIN_PITCH,
             None,
         );
         true

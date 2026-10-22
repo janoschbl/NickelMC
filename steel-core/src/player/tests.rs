@@ -1817,6 +1817,8 @@ fn start_using_fixture_item(
     count: i32,
     duration: i32,
 ) -> ActiveItemUseState {
+    init_vanilla_registry();
+    init_behaviors();
     player.inventory.lock().set_item_in_hand(
         InteractionHand::MainHand,
         ItemStack::with_count(item, count),

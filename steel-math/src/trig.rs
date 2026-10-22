@@ -136,6 +136,26 @@ mod test {
     use super::*;
 
     #[test]
+    fn atan2_matches_the_vanilla_java_approximation() {
+        // Java 26.3 Mth.atan2 oracle; using the platform atan2 would fail the
+        // shallow-angle case even though its mathematical answer is closer.
+        for (y, x, expected) in [
+            (0.5, 1.0, 0.463_647_263_461_001_2),
+            (1.0, 0.5, 1.107_149_063_333_895_4),
+            (-0.5, 1.0, -0.463_647_263_461_001_2),
+            (0.5, -1.0, 2.677_945_390_128_791_7),
+            (-1.0, -0.5, -2.034_443_590_255_898),
+            (1.0, 1.0, 0.785_398_136_641_139_8),
+            (0.001, 2.0, 0.000_499_154_032_592_071_5),
+        ] {
+            assert!((atan2(y, x) - expected).abs() < 1.0e-15, "y={y}, x={x}");
+        }
+        assert!(atan2(f64::NAN, 1.0).is_nan());
+        assert_eq!(atan2(-0.0, 1.0).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(atan2(0.0, 0.0).to_bits(), 0.0_f64.to_bits());
+    }
+
+    #[test]
     fn sin_at_zero_is_zero() {
         assert_eq!(sin(0.0), 0.0);
         assert_eq!(cos(0.0), 1.0);

@@ -124,7 +124,7 @@ impl Entity for EndCrystalEntity {
                     ExplosionInteraction::Block,
                 );
                 options.damage_source = source.causing_entity().map(|attacker| {
-                    DamageSource::explosion(crystal.clone(), Some(attacker.clone()))
+                    DamageSource::explosion(crystal.clone(), Some(Arc::clone(attacker)))
                 });
                 options.source = crystal;
                 if let Some(world) = self.level() {

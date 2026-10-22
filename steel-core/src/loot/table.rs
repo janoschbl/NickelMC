@@ -66,9 +66,11 @@ impl LootTable {
     }
 
     /// Collects and splits output into legal item stack sizes.
+    ///
+    /// Enabled-feature filtering from vanilla's createStackSplitter is deferred:
+    /// World has no enabled-feature contract and item definitions carry no required
+    /// feature sets. This does not claim parity for feature-restricted items.
     pub fn get_random_items(&self, context: &mut LootContext<'_>) -> LootResult<Vec<ItemStack>> {
-        // TODO: Filter items against the world's enabled feature flags before
-        // stack splitting, as vanilla's createStackSplitter does.
         let mut items = Vec::new();
         self.emit_raw(context, &mut |_, mut item| {
             // Vanilla forwards sub-maximal stacks, including empty ones. Fill

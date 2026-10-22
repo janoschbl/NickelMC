@@ -29,12 +29,56 @@ fn inputs() -> impl IntoIterator<Item = (&'static str, serde_json::Value)> {
             json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:tag","items":"#minecraft:creeper_drop_music_discs","expand":true,"weight":2},{"type":"minecraft:item","name":"minecraft:diamond"}]}]}),
         ),
         (
-            "UNSUPPORTED_AFTER_OUTPUT",
-            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond"}]},{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:iron_ingot","modifier":{"type":"minecraft:enchant_randomly"}}]}]}),
+            "ERROR_AFTER_OUTPUT",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond"}]}]}),
         ),
         (
-            "CONDITIONAL_UNSUPPORTED",
-            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","modifier":{"type":"minecraft:enchant_randomly","condition":{"type":"minecraft:random_chance","chance":0.0}}}]}]}),
+            "CONDITIONAL_MAP",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","modifier":{"type":"minecraft:exploration_map","condition":{"type":"minecraft:random_chance","chance":0.0}}}]}]}),
+        ),
+        (
+            "EXPLORATION_MAP",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:map","modifier":[{"type":"minecraft:set_count","count":3},{"type":"minecraft:set_name","name":"Unchanged"},{"type":"minecraft:exploration_map"}]}]}]}),
+        ),
+        (
+            "DAMAGE_FRACTION",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond_pickaxe","modifier":[{"type":"minecraft:set_damage","damage":0.25},{"type":"minecraft:set_damage","damage":0.1,"add":true}]}]}]}),
+        ),
+        (
+            "DAMAGE_NON_DAMAGEABLE",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","modifier":{"type":"minecraft:set_damage","damage":{"type":"minecraft:uniform","min":0.0,"max":1.0}}}]}]}),
+        ),
+        (
+            "COPY_STATE",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:bee_nest","modifier":{"type":"minecraft:copy_state","block":"minecraft:bee_nest","properties":["honey_level"]}}]}]}),
+        ),
+        (
+            "STEW_DURATION",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:suspicious_stew","modifier":[{"type":"minecraft:set_stew_effect","effects":[{"type":"minecraft:poison","duration":3}]},{"type":"minecraft:set_stew_effect","effects":[{"type":"minecraft:instant_health","duration":2}]}]}]}]}),
+        ),
+        (
+            "FISHING_HOOK_ANY",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","condition":{"type":"minecraft:entity_properties","entity":"this","predicate":{"minecraft:type_specific/fishing_hook":{}}}}]}]}),
+        ),
+        (
+            "MISSING_CUBE_MOB",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","condition":{"type":"minecraft:entity_properties","entity":"this","predicate":{"minecraft:type_specific/cube_mob":{}}}}]}]}),
+        ),
+        (
+            "MISSING_RAIDER",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","condition":{"type":"minecraft:entity_properties","entity":"this","predicate":{"minecraft:type_specific/raider":{"has_raid":true}}}}]}]}),
+        ),
+        (
+            "MISSING_FROG",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","condition":{"type":"minecraft:entity_properties","entity":"this","predicate":{"minecraft:components":{"minecraft:frog/variant":"minecraft:warm"}}}}]}]}),
+        ),
+        (
+            "COPY_BEES",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:bee_nest","modifier":{"type":"minecraft:copy_components","source":"block_entity","include":["minecraft:bees"]}}]}]}),
+        ),
+        (
+            "DYNAMIC_OWNER",
+            json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:dynamic","name":"minecraft:sherds"}]}]}),
         ),
         (
             "OVERSIZED",

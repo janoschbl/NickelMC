@@ -32,7 +32,7 @@ use steel_registry::{
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random;
-use steel_utils::random::{RandomSource, legacy_random::LegacyRandom};
+use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
@@ -532,24 +532,30 @@ impl FishingHookEntity {
                     };
 
                     if let Some(luck) = luck {
-                        let mut rng = rng();
+                        let Some(level) = self.level() else {
+                            return damage;
+                        };
+                        let items = level.with_loot_random(
+                            &vanilla_loot_tables::GAMEPLAY_FISHING,
+                            0,
+                            |loot_rng| {
+                                // This is equivalent to `LootParams params` in the java src.
+                                let mut loot_ctx = LootContext::new(loot_rng)
+                                    .with_origin(
+                                        self.position().x,
+                                        self.position().y,
+                                        self.position().z,
+                                    )
+                                    .with_tool(rod)
+                                    .with_this_entity(entity_loot_ref(self, None))
+                                    .with_luck(luck as f32 + player.get_luck());
 
-                        let mut loot_rng =
-                            RandomSource::Legacy(LegacyRandom::from_seed(rng.random()));
-                        // This is equivalent to `LootParams params` in the java src.
-                        let mut loot_ctx = LootContext::new(&mut loot_rng)
-                            .with_origin(self.position().x, self.position().y, self.position().z)
-                            .with_tool(rod)
-                            .with_this_entity(entity_loot_ref(self, None))
-                            .with_luck(luck as f32 + player.get_luck());
-
-                        let level = self.level();
-                        if let Some(world) = level.as_deref() {
-                            loot_ctx = loot_ctx.with_world(world);
-                        }
-                        let items = match vanilla_loot_tables::GAMEPLAY_FISHING
-                            .get_random_items(&mut loot_ctx)
-                        {
+                                loot_ctx = loot_ctx.with_world(&level);
+                                vanilla_loot_tables::GAMEPLAY_FISHING
+                                    .get_random_items(&mut loot_ctx)
+                            },
+                        );
+                        let items = match items {
                             Ok(items) => items,
                             Err(error) => {
                                 log::error!("Failed to generate fishing loot: {error}");
@@ -841,6 +847,10 @@ impl FishingHookEntity {
 }
 
 impl Entity for FishingHookEntity {
+    fn fishing_hook_open_water(&self) -> Option<bool> {
+        Some(self.hook_state.lock().open_water)
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }

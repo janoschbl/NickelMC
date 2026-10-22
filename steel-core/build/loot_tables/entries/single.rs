@@ -61,13 +61,11 @@ impl CompileEntry for DynamicEntry {
             quality,
             ..
         } = self;
-        let operation = format!("dynamic:{name}");
-        // TODO: Emit context-provided named dynamic drops when selected, including
-        // decorated-pot sherds, instead of rejecting every dynamic entry.
+        let key = identifier(name);
         Compiler::weighted_candidate(
             *weight,
             *quality,
-            quote! { |ctx, _| ctx.unsupported(#operation) },
+            quote! { |ctx, output| ctx.emit_dynamic(&#key, output) },
         )
     }
 }

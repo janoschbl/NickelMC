@@ -249,7 +249,7 @@ impl Player {
                 } else if !menu.still_valid(self) {
                     log::debug!(
                         "Player {} interacted with invalid menu {}",
-                        self.gameprofile.name,
+                        self.gameprofile.name(),
                         packet.container_id
                     );
                 } else if menu.click_menu_button(packet.button_id, self) {

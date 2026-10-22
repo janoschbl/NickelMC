@@ -114,8 +114,9 @@ mod tests {
     #[test]
     fn display_name_falls_back_to_the_container_translation() {
         init_vanilla_registry();
-        let world = fresh_test_world("enchanting_table_default_name");
-        let table = table(&world);
+        let world_fixture = fresh_test_world("enchanting_table_default_name");
+        let world = &world_fixture.world;
+        let table = table(world);
         assert_eq!(table.custom_name(), None);
         assert_eq!(
             table.display_name(),
@@ -126,22 +127,23 @@ mod tests {
     #[test]
     fn custom_name_round_trips_through_nbt() {
         init_vanilla_registry();
-        let world = fresh_test_world("enchanting_table_name_round_trip");
-        let named = table(&world);
+        let world_fixture = fresh_test_world("enchanting_table_name_round_trip");
+        let world = &world_fixture.world;
+        let named = table(world);
         let name = TextComponent::from("Arcane Desk".to_string());
         named.set_custom_name(Some(name.clone()));
         let saved = named.save_custom_only();
 
-        let restored = table(&world);
+        let restored = table(world);
         restored
             .load_with_owned_components(&saved)
             .expect("saved table NBT should load");
         assert_eq!(restored.custom_name(), Some(name.clone()));
         assert_eq!(restored.display_name(), name);
 
-        let unnamed = table(&world);
+        let unnamed = table(world);
         unnamed
-            .load_with_owned_components(&table(&world).save_custom_only())
+            .load_with_owned_components(&table(world).save_custom_only())
             .expect("empty table NBT should load");
         assert_eq!(unnamed.custom_name(), None);
     }
@@ -149,8 +151,9 @@ mod tests {
     #[test]
     fn applying_item_components_consumes_the_custom_name_and_stores_the_rest() {
         init_vanilla_registry();
-        let world = fresh_test_world("enchanting_table_apply_components");
-        let table = table(&world);
+        let world_fixture = fresh_test_world("enchanting_table_apply_components");
+        let world = &world_fixture.world;
+        let table = table(world);
         let name = TextComponent::from("Arcane Desk".to_string());
         let mut stack = ItemStack::new(&vanilla_items::ENCHANTING_TABLE);
         stack.set(CUSTOM_NAME, name.clone());
@@ -171,8 +174,9 @@ mod tests {
     #[test]
     fn applying_item_components_skips_placement_only_components() {
         init_vanilla_registry();
-        let world = fresh_test_world("enchanting_table_apply_placement_components");
-        let table = table(&world);
+        let world_fixture = fresh_test_world("enchanting_table_apply_placement_components");
+        let world = &world_fixture.world;
+        let table = table(world);
         let Some(custom_data) = CustomData::try_from_compound(NbtCompound::new()) else {
             panic!("an empty compound should be valid custom data");
         };
@@ -191,8 +195,9 @@ mod tests {
     #[test]
     fn applying_an_unnamed_item_clears_a_previous_custom_name() {
         init_vanilla_registry();
-        let world = fresh_test_world("enchanting_table_apply_clears_name");
-        let table = table(&world);
+        let world_fixture = fresh_test_world("enchanting_table_apply_clears_name");
+        let world = &world_fixture.world;
+        let table = table(world);
         table.set_custom_name(Some(TextComponent::from("Old".to_string())));
 
         table.apply_components_from_item_stack(&ItemStack::new(&vanilla_items::ENCHANTING_TABLE));

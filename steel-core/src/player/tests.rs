@@ -258,6 +258,105 @@ fn removed_entity_ids(packet: &EncodedPacket) -> Vec<i32> {
     entity_ids
 }
 
+#[test]
+fn combat_death_sends_assisted_fall_message_and_drops_inventory_once() {
+    use steel_registry::packets::play::{
+        C_PLAYER_COMBAT_END, C_PLAYER_COMBAT_ENTER, C_PLAYER_COMBAT_KILL,
+    };
+    use text_components::content::Content;
+
+    init_vanilla_registry();
+    init_behaviors();
+    let fixture = fresh_test_world("combat_death_packets_and_drops");
+    let world = &fixture.world;
+    insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+    let sent = Arc::new(SyncMutex::new(Vec::new()));
+    let connection = Arc::new(PlayerConnection::Other(Box::new(RecordingConnection {
+        sent_packets: Arc::clone(&sent),
+        closed: AtomicBool::new(false),
+    })));
+    let victim = TestPlayerBuilder::new(Arc::clone(world), "Victim", next_entity_id())
+        .connection(connection)
+        .build();
+    victim.set_client_loaded(true);
+    victim
+        .inventory
+        .lock()
+        .set_item(0, ItemStack::with_count(&vanilla_items::DIAMOND, 3));
+    let attacker = TestPlayerBuilder::new(Arc::clone(world), "Attacker", next_entity_id()).build();
+    assert!(world.players.insert(Arc::clone(&victim)));
+    assert!(victim.hurt(
+        world,
+        &DamageSource::direct(
+            &vanilla_damage_types::PLAYER_ATTACK,
+            Arc::<Player>::clone(&attacker),
+        ),
+        2.0
+    ));
+    for _ in 0..7 {
+        victim.advance_tick_count();
+    }
+    victim.living_base().set_invulnerable_time(0);
+    victim.set_fall_distance(6.0);
+    assert!(victim.hurt(
+        world,
+        &DamageSource::environment(&vanilla_damage_types::FALL),
+        100.0
+    ));
+    // A repeated death callback must neither send another kill nor duplicate drops.
+    victim.die(&DamageSource::environment(&vanilla_damage_types::FALL));
+    assert!(victim.inventory.lock().is_empty());
+    let drops = world.get_entities_in_aabb_matching(
+        &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),
+        |entity| entity.entity_type() == &vanilla_entities::ITEM,
+    );
+    assert_eq!(drops.len(), 1);
+    assert_eq!(
+        drops[0]
+            .downcast_ref::<ItemEntity>()
+            .expect("dropped item")
+            .get_item(),
+        ItemStack::with_count(&vanilla_items::DIAMOND, 3)
+    );
+
+    let mut combat_packets = Vec::new();
+    for packet in sent.lock().iter() {
+        let mut cursor = Cursor::new(packet.encoded_data.as_slice());
+        let _length = VarInt::read(&mut cursor).expect("packet length");
+        let id = VarInt::read(&mut cursor).expect("packet id").0;
+        match id {
+            C_PLAYER_COMBAT_ENTER => combat_packets.push(id),
+            C_PLAYER_COMBAT_KILL => {
+                combat_packets.push(id);
+                assert_eq!(VarInt::read(&mut cursor).expect("victim id").0, victim.id());
+                let message = TextComponent::read(&mut cursor).expect("death message");
+                let Content::Translate(translation) = &message.content else {
+                    panic!("translated death message");
+                };
+                assert_eq!(translation.key, "death.fell.assist");
+                assert_eq!(
+                    translation.args.as_ref().expect("message args")[1],
+                    attacker.display_name()
+                );
+            }
+            C_PLAYER_COMBAT_END => {
+                combat_packets.push(id);
+                assert_eq!(VarInt::read(&mut cursor).expect("combat duration").0, 7);
+            }
+            _ => continue,
+        }
+        assert_eq!(cursor.position() as usize, packet.encoded_data.len());
+    }
+    assert_eq!(
+        combat_packets,
+        [
+            C_PLAYER_COMBAT_ENTER,
+            C_PLAYER_COMBAT_KILL,
+            C_PLAYER_COMBAT_END
+        ]
+    );
+}
+
 fn test_player(world: Arc<World>) -> Arc<Player> {
     let player = TestPlayerBuilder::new(world, "TestPlayer", 1).build();
     player.set_client_loaded(true);
@@ -576,11 +675,11 @@ fn death_keeps_menu_items_until_entity_removal() {
     );
 
     for _ in 1..DEATH_DURATION {
-        player.tick_death();
+        player.base_tick();
     }
     assert_eq!(transient.lock().get_item(0).count(), 3);
 
-    player.tick_death();
+    player.base_tick();
 
     assert!(transient.lock().get_item(0).is_empty());
     assert!(crafting.lock().get_item(0).is_empty());

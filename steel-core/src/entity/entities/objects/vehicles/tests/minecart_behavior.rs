@@ -6,7 +6,7 @@ use steel_utils::{ChunkPos, types::UpdateFlags};
 use super::*;
 use crate::behavior::init_behaviors;
 use crate::entity::entities::objects::vehicles::MinecartEntity;
-use crate::entity::{Entity, EntityEventSource};
+use crate::entity::{Entity, EntityEventSource, EntityFluidContact, next_entity_id};
 use crate::test_support::{TestWorld, fresh_test_world, insert_ready_full_chunk};
 
 fn assert_close(actual: f64, expected: f64) {
@@ -135,6 +135,100 @@ fn powered_rail_accelerates_after_slowdown_and_caps_only_displacement() {
 
         assert_vec_close(displacement, DVec3::new(expected_distance, 0.0, 0.0));
         assert_vec_close(velocity, DVec3::new(expected_speed, 0.0, 0.0));
+    }
+}
+
+#[test]
+fn powered_rail_kickstart_prefers_the_west_conductor() {
+    for (conductors, expected_x) in [
+        (&[Direction::West][..], 0.02),
+        (&[Direction::East][..], -0.02),
+        (&[Direction::West, Direction::East][..], 0.02),
+        (&[][..], 0.0),
+    ] {
+        let (displacement, velocity) =
+            run_flat_track_case("minecart_kickstart", true, 0.0, conductors);
+        assert_vec_close(displacement, DVec3::ZERO);
+        assert_vec_close(velocity, DVec3::new(expected_x, 0.0, 0.0));
+    }
+}
+
+#[test]
+fn waterlogged_slopes_reduce_gravity_before_drag_and_height_correction() {
+    // 26.3 OldMinecartBehavior: slope acceleration 1/128 (one fifth in water),
+    // then empty-cart drag, water float drag, then the 0.05 height correction.
+    for (water, distance, speed) in [
+        (false, 0.007_812_5, 0.007_890_625),
+        (true, 0.001_562_5, 0.001_503_124_982_118_606_6),
+    ] {
+        for (shape, direction) in [
+            (RailShape::AscendingEast, DVec3::NEG_X),
+            (RailShape::AscendingWest, DVec3::X),
+            (RailShape::AscendingNorth, DVec3::Z),
+            (RailShape::AscendingSouth, DVec3::NEG_Z),
+        ] {
+            let fixture = test_world("minecart_waterlogged_slope", ChunkPos::new(0, 0));
+            let world = &fixture.world;
+            let pos = BlockPos::new(8, 64, 8);
+            let flags = UpdateFlags::UPDATE_NONE | UpdateFlags::UPDATE_SKIP_ON_PLACE;
+            let state = vanilla_blocks::RAIL
+                .default_state()
+                .set_value(RAIL_SHAPE, shape)
+                .set_value(&BlockStateProperties::WATERLOGGED, water);
+            assert!(world.set_block(pos.below(), vanilla_blocks::STONE.default_state(), flags));
+            assert!(world.set_block(pos, state, flags));
+            let start = DVec3::new(8.5, 64.5625, 8.5);
+            let cart = Arc::new(MinecartEntity::new(
+                &vanilla_entities::MINECART,
+                next_entity_id(),
+                start,
+                Arc::downgrade(world),
+            ));
+            let entity = Arc::clone(&cart).into_shared_entity();
+            world
+                .try_add_entity(Arc::clone(&entity))
+                .expect("cart should enter the loaded chunk");
+            cart.base()
+                .set_fluid_contact(EntityFluidContact::from_parts(
+                    if water { 0.5 } else { 0.0 },
+                    0.0,
+                    false,
+                    false,
+                ));
+            cart.set_velocity(DVec3::ZERO);
+
+            MinecartBehavior::move_along_track(cart.as_ref(), &entity, world);
+
+            assert_vec_close(
+                cart.position() - start,
+                direction * distance - DVec3::Y * distance,
+            );
+            assert_vec_close(cart.velocity(), direction * speed);
+        }
+    }
+}
+
+#[test]
+fn corner_rails_project_onto_the_diagonal_without_clamping_progress() {
+    let fixture = test_world("minecart_corner_projection", ChunkPos::new(0, 0));
+    let world = &fixture.world;
+    let pos = BlockPos::new(8, 64, 8);
+    let flags = UpdateFlags::UPDATE_NONE | UpdateFlags::UPDATE_SKIP_ON_PLACE;
+    assert!(world.set_block(pos.below(), vanilla_blocks::STONE.default_state(), flags));
+    for (shape, x, z) in [
+        (RailShape::SouthEast, 8.75, 8.75),
+        (RailShape::SouthWest, 8.0, 8.5),
+        (RailShape::NorthWest, 8.25, 8.25),
+        (RailShape::NorthEast, 8.5, 8.0),
+    ] {
+        let state = vanilla_blocks::RAIL
+            .default_state()
+            .set_value(RAIL_SHAPE, shape);
+        assert!(world.set_block(pos, state, flags));
+        assert_vec_close(
+            MinecartBehavior::get_pos(world, 8.25, 64.0, 8.25, None).expect("rail should project"),
+            DVec3::new(x, 64.0625, z),
+        );
     }
 }
 

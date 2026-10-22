@@ -81,7 +81,6 @@ pub fn cos(angle: f64) -> f32 {
     SIN_TABLE[idx]
 }
 
-<<<<<<< HEAD
 const FRAC_BIAS: f64 = f64::from_bits(4_805_340_802_404_319_232);
 static ATAN2_TABLE: LazyLock<[(f64, f64); 257]> = LazyLock::new(|| {
     from_fn(|index| {
@@ -130,64 +129,6 @@ pub fn atan2(mut y: f64, mut x: f64) -> f64 {
     if negative_y {
         theta = -theta;
     }
-=======
-/// Approximates `1 / sqrt(value)` using a fast inverse square root algorithm.
-const fn fast_inv_sqrt(value: f64) -> f64 {
-    let half = 0.5 * value;
-    let bits = value.to_bits() as i64;
-    let bits = 6_910_469_410_427_058_090_i64.wrapping_sub(bits >> 1);
-    let estimate = f64::from_bits(bits as u64);
-
-    estimate * (1.5 - half * estimate * estimate)
-}
-
-/// Returns vanilla's approximate angle in radians for the vector `(x, y)`.
-#[must_use]
-pub fn atan2(mut y: f64, mut x: f64) -> f64 {
-    let d2 = x * x + y * y;
-    if d2.is_nan() {
-        return f64::NAN;
-    }
-
-    let neg_y = y < 0.0;
-    if neg_y {
-        y = -y;
-    }
-
-    let neg_x = x < 0.0;
-    if neg_x {
-        x = -x;
-    }
-
-    let steep = y > x;
-    if steep {
-        mem::swap(&mut x, &mut y);
-    }
-
-    let rinv = fast_inv_sqrt(d2);
-    x *= rinv;
-    y *= rinv;
-
-    let yp = FRAC_BIAS + y;
-    let index = (yp.to_bits() as i32) as usize;
-    let phi = ASIN_TAB[index];
-    let c_phi = COS_TAB[index];
-    let s_phi = yp - FRAC_BIAS;
-    let sd = y * c_phi - x * s_phi;
-    let d = (6.0 + sd * sd) * sd * ONE_SIXTH;
-    let mut theta = phi + d;
-
-    if steep {
-        theta = (PI / 2.0) - theta;
-    }
-    if neg_x {
-        theta = PI - theta;
-    }
-    if neg_y {
-        theta = -theta;
-    }
-
->>>>>>> db1e5edeb (minecart implementation)
     theta
 }
 
@@ -211,6 +152,26 @@ mod test {
             assert_eq!((atan2(y, x) as f32 * crate::RAD_TO_DEG).to_bits(), expected);
         }
         assert!(atan2(f64::NAN, 1.0).is_nan());
+    }
+
+    #[test]
+    fn atan2_matches_the_vanilla_java_approximation() {
+        // Java 26.3 Mth.atan2 oracle; using the platform atan2 would fail the
+        // shallow-angle case even though its mathematical answer is closer.
+        for (y, x, expected) in [
+            (0.5, 1.0, 0.463_647_263_461_001_2),
+            (1.0, 0.5, 1.107_149_063_333_895_4),
+            (-0.5, 1.0, -0.463_647_263_461_001_2),
+            (0.5, -1.0, 2.677_945_390_128_791_7),
+            (-1.0, -0.5, -2.034_443_590_255_898),
+            (1.0, 1.0, 0.785_398_136_641_139_8),
+            (0.001, 2.0, 0.000_499_154_032_592_071_5),
+        ] {
+            assert!((atan2(y, x) - expected).abs() < 1.0e-15, "y={y}, x={x}");
+        }
+        assert!(atan2(f64::NAN, 1.0).is_nan());
+        assert_eq!(atan2(-0.0, 1.0).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(atan2(0.0, 0.0).to_bits(), 0.0_f64.to_bits());
     }
 
     #[test]

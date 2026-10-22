@@ -52,12 +52,12 @@ use super::{
     DEFAULT_SWING_DURATION, DEFAULT_TICKS_REQUIRED_TO_FREEZE, ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
     ENTITY_LOAD_MAX_VERTICAL_POSITION, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
     EntityMoveError, EntityOwnership, EntitySyncedData, EntityVerticalMovementStateUpdate,
-    InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity, LivingEntityBase,
-    LivingTravelInput, MobEffectInstance, RemovalReason, SPEED_MODIFIER_POWDER_SNOW_ID,
-    SharedEntity, block_state_suffocates_eye_box, closest_open_space_direction,
-    fall_damage_reset_clip_target, fall_flying_collision_damage, fall_flying_free_fall_interval,
-    get_input_vector, indirect_passengers, passenger_transition_position,
-    passenger_transition_rotation, remove_after_changing_dimensions,
+    HURT_DURATION_TICKS, InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity,
+    LivingEntityBase, LivingTravelInput, MobEffectInstance, RemovalReason,
+    SPEED_MODIFIER_POWDER_SNOW_ID, SharedEntity, block_state_suffocates_eye_box,
+    closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
+    fall_flying_free_fall_interval, get_input_vector, indirect_passengers,
+    passenger_transition_position, passenger_transition_rotation, remove_after_changing_dimensions,
     should_apply_entity_cramming_damage, should_apply_resolved_movement, start_riding_entities,
     transfer_leashables_to_holder, trapdoor_usable_as_ladder_state,
 };
@@ -779,6 +779,10 @@ impl Entity for LivingFluidTestEntity {
 
     fn entity_type(&self) -> EntityTypeRef {
         self.entity_type
+    }
+
+    fn base_tick(&self) {
+        LivingEntity::base_tick_living_entity(self);
     }
 
     fn is_vehicle(&self) -> bool {

@@ -9,7 +9,7 @@ use steel_utils::{DowncastType, DowncastTypeKey, Identifier};
 
 use super::context::BrainContext;
 use super::memory::{Memories, MemoryModuleType, MemoryValue, PersistentMemoryValue};
-use crate::bootstrap::init_globals_once;
+use crate::bootstrap::init_globals;
 use crate::entity::registry::ENTITIES;
 use crate::entity::{SharedEntity, next_entity_id};
 use crate::test_support::test_world;
@@ -52,7 +52,7 @@ pub(super) const fn test_persistent_memory<V: PersistentMemoryValue + DowncastTy
 
 /// Spawns a pig, detached from any chunk.
 pub(super) fn spawn_pig() -> SharedEntity {
-    init_globals_once();
+    init_globals();
     ENTITIES
         .create(
             &vanilla_entities::PIG,

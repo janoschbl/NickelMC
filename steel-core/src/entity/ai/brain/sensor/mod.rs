@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod tests;
 
+use steel_utils::Identifier;
+
 use super::context::BrainContext;
 use super::memory::MemoryModuleTypeRef;
 
@@ -25,6 +27,32 @@ pub trait Sensor: Send {
 
     /// Runs one scan.
     fn do_tick(&mut self, context: &mut BrainContext<'_>);
+}
+
+/// A reference to a sensor type.
+pub type SensorTypeRef = &'static SensorType;
+
+/// Builds a fresh [`Sensor`] for every brain that uses it.
+///
+/// Sensors carry per-mob state, so brains never share one instance.
+pub struct SensorType {
+    /// Identifies the sensor type.
+    pub key: Identifier,
+    factory: fn() -> Box<dyn Sensor>,
+}
+
+impl SensorType {
+    /// Creates a sensor type whose sensors come from `factory`.
+    #[must_use]
+    pub const fn new(key: Identifier, factory: fn() -> Box<dyn Sensor>) -> Self {
+        Self { key, factory }
+    }
+
+    /// Creates a new sensor of this type.
+    #[must_use]
+    pub fn create(&self) -> Box<dyn Sensor> {
+        (self.factory)()
+    }
 }
 
 /// A sensor plus its countdown to the next scan.

@@ -107,8 +107,14 @@ impl CompileModifier for CopyComponents {
             "unhandled extracted component source"
         );
         let included = if let Some(include) = include {
-            let keys = include.iter().map(|key| identifier(key));
-            quote! { false #(|| key == &#keys)* }
+            let checks = include
+                .iter()
+                .map(|key| {
+                    let key = identifier(key);
+                    quote! { key == &#key }
+                })
+                .collect::<Vec<_>>();
+            Compiler::any(&checks)
         } else {
             quote! { true }
         };
@@ -122,10 +128,15 @@ impl CompileModifier for CopyComponents {
             keys.iter()
                 .any(|key| key == "minecraft:banner_patterns" || key == "minecraft:pot_decorations")
         });
-        quote! {
-            if #needs_deferred_owner && ctx.block_entity.is_none() {
+        let missing_owner = if needs_deferred_owner {
+            quote! { if ctx.block_entity.is_none() {
                 log::error!("Cannot copy banner/pot loot components: the required block-entity foundation is unavailable");
-            }
+            } }
+        } else {
+            quote! {}
+        };
+        quote! {
+            #missing_owner
             if let Some(block_entity) = ctx.block_entity {
                 use crate::block_entity::BlockEntityLifecycleExt as _;
                 let components = block_entity.collect_components()?;

@@ -6,7 +6,7 @@
 pub use crate::blocks::properties::NoteBlockInstrument;
 use crate::loot_table::LootTableRef;
 use glam::DVec3;
-use steel_utils::{BlockPos, random::get_seed};
+use steel_utils::{BlockPos, Identifier, random::get_seed};
 
 use crate::sound_types::SoundType;
 
@@ -57,10 +57,18 @@ pub struct BlockConfig {
     pub instrument: NoteBlockInstrument,
     pub replaceable: bool,
     pub sound_type: SoundType,
-    pub loot_table: Option<LootTableRef>,
+    /// Loot lives in steel-core; the extracted key avoids a registry/core cycle.
+    pub loot_table: Option<&'static Identifier>,
 }
 
 impl BlockConfig {
+    /// Uses the extracted loot table key, including aliases shared by wall variants.
+    #[must_use]
+    pub const fn loot_table(mut self, key: Option<&'static Identifier>) -> Self {
+        self.loot_table = key;
+        self
+    }
+
     /// Starts building a new set of block properties.
     #[must_use]
     pub const fn new() -> Self {

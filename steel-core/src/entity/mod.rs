@@ -55,7 +55,7 @@ use steel_registry::{RegistryEntry, RegistryExt};
 use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vanilla_mob_effects};
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
-use steel_utils::random::{RandomSource, legacy_random::LegacyRandom};
+use steel_utils::random::RandomSource;
 use steel_utils::types::{Difficulty, InteractionHand, UpdateFlags};
 use steel_utils::{
     BlockPos, BlockStateId, ChunkPos, Direction, Downcast as _, ErasedType, Identifier,
@@ -913,7 +913,7 @@ pub use living_base::{
     LivingTravelInput, MobEffectInstance, MobEffectSyncChange, MobEffectSyncPacket,
     sync_dirty_mob_effects,
 };
-pub use living_entity::{LivingEntity, living_entity_loot_ref};
+pub use living_entity::LivingEntity;
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityLifecycleChanges, EntityMoveError,
     EntityMoveUpdate, EntityOwnership, EntityVisibility, WorldEntityManager,

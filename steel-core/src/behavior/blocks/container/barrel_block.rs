@@ -125,11 +125,12 @@ impl BlockBehavior for BarrelBlock {
         else {
             return 0;
         };
-        let Ok(guard) = ContainerLockGuard::lock_all(&[&container_ref]) else {
-            // TODO: Preserve vanilla access ordering so loot-generation contention
-            // cannot become a false zero comparator signal. Returning zero here
-            // also hides generation failures; distinguish them from empty contents.
-            return 0;
+        let guard = match ContainerLockGuard::lock_all(&[&container_ref]) {
+            Ok(guard) => guard,
+            Err(error) => {
+                log::error!("Cannot read barrel comparator at {pos:?}: {error}");
+                return 0;
+            }
         };
         calculate_redstone_signal_from_containers(guard.get(container_ref.container_id()))
     }

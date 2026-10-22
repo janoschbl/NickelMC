@@ -47,6 +47,13 @@ impl BarrelBlockEntity {
 }
 
 impl BlockEntity for BarrelBlockEntity {
+    fn collect_implicit_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) -> std::io::Result<()> {
+        self.storage.collect_components(components)
+    }
+
     fn base(&self) -> &BlockEntityBase {
         &self.storage.base
     }

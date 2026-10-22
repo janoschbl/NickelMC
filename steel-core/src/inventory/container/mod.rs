@@ -11,10 +11,13 @@ pub use crafting::CraftingContainer;
 pub use result::ResultContainer;
 pub use simple::SimpleContainer;
 
-use std::mem;
+use std::{io, mem};
 
 use steel_registry::blocks::properties::Direction;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::{
+    data_components::ItemContainerContents, item_stack_template::ItemStackTemplate,
+};
 use steel_utils::ErasedType;
 
 /// Default distance buffer for container interaction range checks.
@@ -38,6 +41,21 @@ pub const DEFAULT_DISTANCE_BUFFER: f32 = 4.0;
 /// [`crate::inventory::lock::ContainerRef::owned_by_block_entity`], which runs
 /// only after every container lock has been released.
 pub trait Container: ErasedType + Send + Sync {
+    /// Captures slots for the item's container component without dropping invalid stacks.
+    fn collect_contents(&self) -> io::Result<ItemContainerContents> {
+        let slots = self
+            .items()
+            .iter()
+            .map(|item| {
+                if item.is_empty() {
+                    Ok(None)
+                } else {
+                    ItemStackTemplate::from_stack(item).map(Some)
+                }
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        ItemContainerContents::new(slots)
+    }
     /// Returns the items in this container
     fn items(&self) -> &[ItemStack];
     /// Returns mutable references to the items in this container.

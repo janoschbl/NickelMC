@@ -3221,13 +3221,13 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         let Some(entity) = self.as_living_entity() else {
             return DEFAULT_AIR_DRAG;
         };
-        compute_modified_friction(
-            DEFAULT_AIR_DRAG,
+        f64::from(compute_modified_friction(
+            DEFAULT_AIR_DRAG as f32,
             entity
                 .attributes()
                 .lock()
-                .required_value(vanilla_attributes::AIR_DRAG_MODIFIER),
-        )
+                .required_value(vanilla_attributes::AIR_DRAG_MODIFIER) as f32,
+        ))
     }
 
     /// Applies gravity to the entity's velocity.
@@ -3801,7 +3801,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 }
 
-fn compute_modified_friction(friction: f64, modifier: f64) -> f64 {
+fn compute_modified_friction(friction: f32, modifier: f32) -> f32 {
     (1.0 - (1.0 - friction) * modifier).clamp(0.0, 1.0)
 }
 

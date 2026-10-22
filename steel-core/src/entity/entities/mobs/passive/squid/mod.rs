@@ -6,7 +6,7 @@ use std::{
 use glam::DVec3;
 use simdnbt::{borrow, owned};
 use steel_macros::entity_behavior;
-use steel_math::{angle::DEGREE_90, vector};
+use steel_math::{DEG_TO_RAD, DEGREE_90, RAD_TO_DEG, trig, vector};
 use steel_registry::{
     entity_data::{EntityPose, ParticleData},
     entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
@@ -23,9 +23,9 @@ use steel_utils::{
 use crate::{
     behavior::InteractionResult,
     entity::{
-        AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntitySyncedData,
-        LivingEntity, LivingEntityBase, Mob, MobBase, PathfinderMob, SharedEntity,
-        ai::goal::SquidRandomMovementGoal,
+        AgeableMob, AgeableMobBase, Entity, EntityBase, EntityBaseLoad, EntityEventSource,
+        EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase, PathfinderMob,
+        SharedEntity, ai::goal::SquidRandomMovementGoal,
     },
     physics::{MoveResult, MoverType},
     world::World,
@@ -50,22 +50,16 @@ const SQUID_BABY_DIMENSIONS: EntityDimensions = EntityDimensions::new_with_attac
     EntityAttachments::fallback(),
 );
 
-const SQUID_AIR_DRAG: f32 = 0.98;
 const SQUID_GRAVITY: f64 = 0.08;
 const SQUID_SOUND_VOLUME: f32 = 0.4;
 const INK_PARTICLE_COUNT: u32 = 30;
 const ADULT_POSITION_SCALE: f32 = 0.3;
 const BABY_POSITION_SCALE: f32 = 0.1;
-/// Const version of Vanilla `AgeableWaterCreature.getAmbientSoundInterval` function.
 const SQUID_AMBIENT_SOUND_INTERVAL: i32 = 120;
 
 const SQUID_SQUIRT_SOUND: SoundEventRef = &sound_events::ENTITY_SQUID_SQUIRT;
-const SQUID_MOVEMENT_THRESHOLD: f64 = 1.0e-5;
+const SQUID_MOVEMENT_THRESHOLD: f64 = 1.0e-5_f32 as f64;
 
-// TODO(ageable-water-creature): vanilla `Squid extends AgeableWaterCreature`.
-// Still missing from that layer: `checkSpawnObstruction`.
-// Functions `getAmbientSoundInterval` and `getBaseExperienceReward` sit on this
-// entity until the trait exists; `Dolphin` is the only other consumer.
 #[entity_behavior(class = "Squid")]
 /// Vanilla Squid entity
 pub struct SquidEntity {
@@ -129,8 +123,8 @@ impl SquidEntity {
 
     /// Vanilla `Squid.rotateVector`, squid-local space into world space.
     fn rotate_vector(&self, vector: DVec3) -> DVec3 {
-        let x_rot = self.state.lock().x_body_rot_old.to_radians();
-        let y_rot = -self.living_rotation_state().y_body_rot_o().to_radians();
+        let x_rot = self.state.lock().x_body_rot_old * DEG_TO_RAD;
+        let y_rot = -self.living_rotation_state().y_body_rot_o() * DEG_TO_RAD;
 
         vector::y_rot(vector::x_rot(vector, x_rot), y_rot)
     }
@@ -213,16 +207,7 @@ impl SquidEntity {
                 0.05 * f64::from(effect.amplifier() + 1)
             });
 
-        if let Some(living_entity) = self.as_living_entity() {
-            self.set_velocity(DVec3::new(
-                0.0,
-                // TODO: depending on how `LivingEntity.air_travel_vertical_friction` implements `FlyingAnimal`'s
-                // different base friction value, the input value may change here (e.g. replace with
-                // a const value added to `LivingEntity`).
-                y * f64::from(living_entity.air_travel_vertical_friction(SQUID_AIR_DRAG)),
-                0.0,
-            ));
-        }
+        self.set_velocity(DVec3::new(0.0, y * self.get_air_drag(), 0.0));
     }
 
     /// Copies the body pitch to vanilla `xBodyRotO`, which
@@ -237,16 +222,17 @@ impl SquidEntity {
 
         if self.is_in_water() {
             let movement = self.velocity();
-            let horizontal = movement.x.hypot(movement.z);
+            let horizontal = (movement.x * movement.x + movement.z * movement.z).sqrt();
 
             let y_body_rot = self.living_rotation_state().y_body_rot();
             let y_body_rot = y_body_rot
-                + (-(movement.x.atan2(movement.z) as f32).to_degrees() - y_body_rot) * 0.1;
+                + (-(trig::atan2(movement.x, movement.z) as f32) * RAD_TO_DEG - y_body_rot) * 0.1;
 
             self.set_y_body_rot(y_body_rot);
             self.set_rotation((y_body_rot, self.rotation().1));
-            state.x_body_rot +=
-                (-(horizontal.atan2(movement.y) as f32).to_degrees() - state.x_body_rot) * 0.1;
+            state.x_body_rot += (-(trig::atan2(horizontal, movement.y) as f32) * RAD_TO_DEG
+                - state.x_body_rot)
+                * 0.1;
         } else {
             state.x_body_rot += (-DEGREE_90 - state.x_body_rot) * 0.02;
         }
@@ -361,6 +347,24 @@ impl Entity for SquidEntity {
         Some(&self.entity_data)
     }
 
+    fn update_data_before_sync(&self) {
+        if !self.living_base.take_effects_dirty() {
+            return;
+        }
+
+        let display = self.living_base.mob_effect_display_state();
+        {
+            let mut entity_data = self.entity_data.lock();
+            let living = entity_data.living_entity_mut();
+            living.effect_particles.set(display.particles);
+            living.effect_ambience.set(display.ambient);
+        }
+
+        self.entity_data.set_base_invisible_flag(display.invisible);
+        self.entity_data
+            .set_base_glowing_flag(self.has_glowing_tag() || display.glowing);
+    }
+
     fn save_additional(&self, nbt: &mut owned::NbtCompound) {
         self.save_mob(nbt);
         self.save_ageable_mob(nbt);
@@ -452,6 +456,16 @@ impl AgeableMob for SquidEntity {
 impl Mob for SquidEntity {
     fn mob_base(&self) -> &MobBase {
         &self.mob_base
+    }
+
+    fn check_spawn_obstruction(&self, world: &Arc<World>) -> bool {
+        !world.has_entity_in_aabb_matching(&self.bounding_box(), |entity| {
+            entity.id() != self.id()
+                && !entity.is_removed()
+                && !entity.is_spectator()
+                && entity.blocks_building()
+                && !entity.is_passenger_of_same_vehicle(self.as_entity_event_source())
+        })
     }
 
     fn mob_interact(&self, player: &Player, hand: InteractionHand) -> InteractionResult {

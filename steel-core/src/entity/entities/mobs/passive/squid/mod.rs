@@ -63,10 +63,9 @@ const SQUID_SQUIRT_SOUND: SoundEventRef = &sound_events::ENTITY_SQUID_SQUIRT;
 const SQUID_MOVEMENT_THRESHOLD: f64 = 1.0e-5;
 
 // TODO(ageable-water-creature): vanilla `Squid extends AgeableWaterCreature`.
-// Still missing from that layer: `handleAirSupply`, `checkSpawnObstruction` and
-// `setPathfindingMalus(PathType.WATER, 0.0)`. `getAmbientSoundInterval` and
-// `getBaseExperienceReward` sit on this entity until the trait exists; `Dolphin`
-// is the only other consumer.
+// Still missing from that layer: `checkSpawnObstruction`.
+// Functions `getAmbientSoundInterval` and `getBaseExperienceReward` sit on this
+// entity until the trait exists; `Dolphin` is the only other consumer.
 #[entity_behavior(class = "Squid")]
 /// Vanilla Squid entity
 pub struct SquidEntity {

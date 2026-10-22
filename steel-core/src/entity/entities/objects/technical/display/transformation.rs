@@ -70,14 +70,19 @@ impl Transformation {
     }
 
     fn similarity_transform(a: &mut Mat3, q: Mat3) {
-        *a = q.transpose() * *a * q;
+        *a *= q;
+        *a = q.transpose() * *a;
     }
 
+    #[expect(
+        clippy::manual_midpoint,
+        reason = "preserve vanilla's float rounding and overflow"
+    )]
     fn step_jacobi(m: &mut Mat3, result: &mut Quat) {
         if m.col(0)[1] * m.col(0)[1] + m.col(1)[0] * m.col(1)[0] > DECOMPOSITION_EPSILON {
             let g = Self::approx_givens_quat(
                 m.col(0)[0],
-                f32::midpoint(m.col(0)[1], m.col(1)[0]),
+                0.5 * (m.col(0)[1] + m.col(1)[0]),
                 m.col(1)[1],
             );
 
@@ -88,7 +93,7 @@ impl Transformation {
         if m.col(0)[2] * m.col(0)[2] + m.col(2)[0] * m.col(2)[0] > DECOMPOSITION_EPSILON {
             let g = Self::approx_givens_quat(
                 m.col(0)[0],
-                f32::midpoint(m.col(0)[2], m.col(2)[0]),
+                0.5 * (m.col(0)[2] + m.col(2)[0]),
                 m.col(2)[2],
             )
             .inverse();
@@ -100,7 +105,7 @@ impl Transformation {
         if m.col(1)[2] * m.col(1)[2] + m.col(2)[1] * m.col(2)[1] > DECOMPOSITION_EPSILON {
             let g = Self::approx_givens_quat(
                 m.col(1)[1],
-                f32::midpoint(m.col(1)[2], m.col(2)[1]),
+                0.5 * (m.col(1)[2] + m.col(2)[1]),
                 m.col(2)[2],
             );
 
@@ -109,7 +114,7 @@ impl Transformation {
         }
     }
 
-    /// Decomposes a [`Matrix4f`] to form a transformation.
+    /// Decomposes a [`Mat4`] to form a transformation.
     ///
     /// This function uses *singular value decomposition* (or SVD) to split the matrix
     /// into a set of transformation values.
@@ -268,7 +273,7 @@ impl Givens {
 }
 
 impl From<Mat4> for Transformation {
-    /// Decomposes a [`Matrix4f`] to form a [`Transformation`].
+    /// Decomposes a [`Mat4`] to form a [`Transformation`].
     fn from(matrix: Mat4) -> Self {
         Transformation::decompose(matrix)
     }

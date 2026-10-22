@@ -7,10 +7,12 @@ use crate::entity::{Entity, EntityBase};
 use crate::world::World;
 use glam::Mat4;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
+use simdnbt::borrow::NbtTag as BorrowedNbtTag;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use simdnbt::{FromNbtTag, ToNbtTag};
 use steel_registry::blocks::behavior::PushReaction;
 use steel_registry::vanilla_entity_data::DisplayEntityData;
+use steel_utils::nbt::NbtNumeric as _;
 
 /// The default interpolation duration of a display entity.
 pub const DEFAULT_TRANSFORMATION_INTERPOLATION_DURATION: i32 = 0;
@@ -95,6 +97,8 @@ pub trait Display: Entity {
         view: &'b mut impl DisplayView<'a>,
         nbt: BorrowedNbtCompoundView<'_, '_>,
     ) {
+        let int = |name| nbt.get(name).and_then(read_int);
+        let float = |name| nbt.get(name).and_then(|value| value.codec_f32());
         view.set_transformation(
             nbt.get("transformation")
                 .and_then(Transformation::from_nbt_tag)
@@ -102,15 +106,13 @@ pub trait Display: Entity {
         );
 
         view.set_transformation_interpolation_duration(
-            nbt.int("interpolation_duration")
-                .unwrap_or(DEFAULT_TRANSFORMATION_INTERPOLATION_DURATION),
+            int("interpolation_duration").unwrap_or(DEFAULT_TRANSFORMATION_INTERPOLATION_DURATION),
         );
         view.set_transformation_interpolation_delay(
-            nbt.int("start_interpolation")
-                .unwrap_or(DEFAULT_TRANSFORMATION_INTERPOLATION_DELAY),
+            int("start_interpolation").unwrap_or(DEFAULT_TRANSFORMATION_INTERPOLATION_DELAY),
         );
         view.set_pos_rot_interpolation_duration(
-            nbt.int("teleport_duration")
+            int("teleport_duration")
                 .unwrap_or(DEFAULT_POS_ROT_INTERPOLATION_DURATION)
                 .clamp(0, 59),
         );
@@ -119,17 +121,13 @@ pub trait Display: Entity {
                 .and_then(BillboardConstraints::from_nbt_tag)
                 .unwrap_or(DEFAULT_BILLBOARD_CONSTRAINTS),
         );
-        view.set_view_range(nbt.float("view_range").unwrap_or(DEFAULT_VIEW_RANGE));
-        view.set_shadow_radius(nbt.float("shadow_radius").unwrap_or(DEFAULT_SHADOW_RADIUS));
-        view.set_shadow_strength(
-            nbt.float("shadow_strength")
-                .unwrap_or(DEFAULT_SHADOW_STRENGTH),
-        );
-        view.set_width(nbt.float("width").unwrap_or(DEFAULT_WIDTH));
-        view.set_height(nbt.float("height").unwrap_or(DEFAULT_HEIGHT));
+        view.set_view_range(float("view_range").unwrap_or(DEFAULT_VIEW_RANGE));
+        view.set_shadow_radius(float("shadow_radius").unwrap_or(DEFAULT_SHADOW_RADIUS));
+        view.set_shadow_strength(float("shadow_strength").unwrap_or(DEFAULT_SHADOW_STRENGTH));
+        view.set_width(float("width").unwrap_or(DEFAULT_WIDTH));
+        view.set_height(float("height").unwrap_or(DEFAULT_HEIGHT));
         view.set_synced_glow_color_override(
-            nbt.int("glow_color_override")
-                .unwrap_or(DEFAULT_GLOW_COLOR_OVERRIDE),
+            int("glow_color_override").unwrap_or(DEFAULT_GLOW_COLOR_OVERRIDE),
         );
         view.set_brightness_override(nbt.get("brightness").and_then(Brightness::from_nbt_tag));
     }
@@ -228,9 +226,7 @@ pub trait DisplayView<'a>: PrivateDisplayView<'a> {
             .set(duration);
     }
 
-    /// Gets the display entity's *start interpolation delay* (the time to interpolate to a new position due to a teleport), in ticks.
-    ///
-    /// Values are clamped to be between `0` and `59` ticks, inclusive.
+    /// Gets the delay before starting a transformation interpolation, in ticks.
     ///
     /// **Note:** This property is not saved to disk.
     fn transformation_interpolation_delay(&self) -> i32 {
@@ -252,12 +248,12 @@ pub trait DisplayView<'a>: PrivateDisplayView<'a> {
             .set_and_force_dirty(duration, true);
     }
 
-    /// Gets the display entity's *start interpolation delay* (the delay in starting an interpolation), in ticks.
+    /// Gets the display entity's position/rotation interpolation duration, in ticks.
     fn pos_rot_interpolation_duration(&self) -> i32 {
         *self.display_data().pos_rot_interpolation_duration.get()
     }
 
-    /// Sets the display entity's *start interpolation delay* (the time to interpolate to a new position due to a teleport), in ticks, to `duration`.
+    /// Sets the time to interpolate to a new position/rotation after a teleport, in ticks.
     fn set_pos_rot_interpolation_duration(&mut self, duration: i32) {
         self.display_data_mut()
             .pos_rot_interpolation_duration
@@ -277,7 +273,7 @@ pub trait DisplayView<'a>: PrivateDisplayView<'a> {
             .set(constraints as i8);
     }
 
-    /// Gets the display entity's billboard constraints.
+    /// Gets the display entity's brightness override, if any.
     fn brightness_override(&self) -> Option<Brightness> {
         let synced = *self.display_data().brightness_override.get();
         (synced != -1).then(|| Brightness::unpack(synced))
@@ -311,7 +307,7 @@ pub trait DisplayView<'a>: PrivateDisplayView<'a> {
         self.display_data_mut().shadow_radius.set(size);
     }
 
-    /// Sets the display entity's shadow strength (which affects the opacity of the display entity's shadow depending on its distance to the block below).
+    /// Gets the shadow strength (opacity depending on distance to the block below).
     ///
     /// **Note:** This property is interpolated.
     fn shadow_strength(&self) -> f32 {
@@ -463,12 +459,12 @@ impl ToNbtTag for Brightness {
 impl FromNbtTag for Brightness {
     fn from_nbt_tag(tag: simdnbt::borrow::NbtTag) -> Option<Self> {
         let compound = tag.compound()?;
-        let block = compound.get("block")?.int()?;
+        let block = compound.get("block")?.codec_i32()?;
         let range = 0..=15;
         if !range.contains(&block) {
             return None;
         }
-        let sky = compound.get("sky")?.int()?;
+        let sky = compound.get("sky")?.codec_i32()?;
         if !range.contains(&sky) {
             return None;
         }
@@ -481,7 +477,29 @@ fn modify_display_entity_base(base: EntityBase) -> EntityBase {
     base
 }
 
+// ValueInput's primitive getters use NumericTag conversions, unlike Codec.INT
+// (which truncates Number.intValue()). Floating numeric tags floor first.
+fn read_int(tag: BorrowedNbtTag<'_, '_>) -> Option<i32> {
+    let value = tag.float().map(f64::from).or_else(|| tag.double());
+    if let Some(value) = value {
+        let truncated = value as i32;
+        return Some(if value < f64::from(truncated) {
+            truncated.wrapping_sub(1)
+        } else {
+            truncated
+        });
+    }
+    tag.codec_i32()
+}
+
+fn read_byte(tag: BorrowedNbtTag<'_, '_>) -> Option<i8> {
+    read_int(tag).map(|value| value as i8)
+}
+
 pub mod block_display;
 pub mod item_display;
 pub mod text_display;
 pub mod transformation;
+
+#[cfg(test)]
+mod tests;

@@ -31,20 +31,23 @@ pub(crate) fn load(encoded: BorrowedNbtCompound<'_, '_>) -> Option<BlockStateId>
     let identifier = Identifier::from_str(name.to_str().as_ref()).ok()?;
     let block = REGISTRY.blocks.by_key(&identifier)?;
 
-    let mut properties = Vec::new();
+    let mut state = block.default_state();
     if let Some(encoded_properties) = encoded.compound("properties") {
         for (name, value) in encoded_properties.iter() {
-            let value = value.string()?;
-            properties.push((name.to_str().into_owned(), value.to_str().into_owned()));
+            let Some(value) = value.string() else {
+                continue;
+            };
+            if let Some(updated) = REGISTRY.blocks.try_set_property_by_name(
+                state,
+                name.to_str().as_ref(),
+                value.to_str().as_ref(),
+            ) {
+                state = updated;
+            }
         }
     }
 
-    REGISTRY.blocks.state_id_from_block_defaulted_properties(
-        block,
-        properties
-            .iter()
-            .map(|(name, value)| (name.as_str(), value.as_str())),
-    )
+    Some(state)
 }
 
 #[cfg(test)]

@@ -112,10 +112,10 @@ impl Entity for TextDisplayEntity {
         self.with_view(|view| {
             <Self as Display>::save_display(&view, nbt);
 
-            nbt.insert("text", *view.text());
+            nbt.insert("text", view.text_ref().clone());
             nbt.insert("line_width", view.line_width());
             nbt.insert("background", view.background_color());
-            nbt.insert("text_opacity", view.text_opacity());
+            nbt.insert("text_opacity", view.text_opacity() as i8);
 
             nbt.insert("shadow", view.flags().contains(TextDisplayFlags::SHADOW));
             nbt.insert(
@@ -136,18 +136,28 @@ impl Entity for TextDisplayEntity {
         self.with_view(|mut view| {
             <Self as Display>::load_display(&mut view, nbt);
 
-            view.set_line_width(nbt.int("line_width").unwrap_or(DEFAULT_LINE_WIDTH));
-            view.set_text_opacity(nbt.byte("text_opacity").unwrap_or(DEFAULT_TEXT_OPACITY) as u8);
-            view.set_background_color(nbt.int("background").unwrap_or(DEFAULT_BACKGROUND_COLOR));
+            let int = |name| nbt.get(name).and_then(super::read_int);
+            let boolean = |name| {
+                nbt.get(name)
+                    .and_then(super::read_byte)
+                    .is_some_and(|value| value != 0)
+            };
+            view.set_line_width(int("line_width").unwrap_or(DEFAULT_LINE_WIDTH));
+            view.set_text_opacity(
+                nbt.get("text_opacity")
+                    .and_then(super::read_byte)
+                    .unwrap_or(DEFAULT_TEXT_OPACITY) as u8,
+            );
+            view.set_background_color(int("background").unwrap_or(DEFAULT_BACKGROUND_COLOR));
 
             let mut flags = TextDisplayFlags::empty();
-            if nbt.byte("shadow").is_some_and(|v| v != 0) {
+            if boolean("shadow") {
                 flags.insert(TextDisplayFlags::SHADOW);
             }
-            if nbt.byte("see_through").is_some_and(|v| v != 0) {
+            if boolean("see_through") {
                 flags.insert(TextDisplayFlags::SEE_THROUGH);
             }
-            if nbt.byte("default_background").is_some_and(|v| v != 0) {
+            if boolean("default_background") {
                 flags.insert(TextDisplayFlags::USE_DEFAULT_BACKGROUND);
             }
             view.set_flags(flags);

@@ -1,6 +1,7 @@
 use glam::{Mat4, Quat, Vec3};
 use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
 use simdnbt::{FromNbtTag, ToNbtTag};
+use std::f32::consts;
 
 use crate::nbt::NbtNumeric;
 use simdnbt::borrow::NbtTag as BorrowedNbtTag;
@@ -28,6 +29,10 @@ fn numeric_f32_list(tag: BorrowedNbtTag, len: usize) -> Option<Vec<f32>> {
                 .map(|v| v.into_iter().map(|v| v as f32).collect::<Vec<_>>())
         })
         .filter(|v| v.len() >= len)
+        .map(|mut values| {
+            values.truncate(len);
+            values
+        })
 }
 
 /// Converts a [`Vec3`] to its NBT representation (recreates `ExtraCodecs.VECTOR3F`).
@@ -65,7 +70,7 @@ impl FromNbtTag for AxisAngle4f {
     fn from_nbt_tag(tag: BorrowedNbtTag) -> Option<Self> {
         let compound = tag.compound()?;
         Some(Self {
-            angle: f32::from_nbt_tag(compound.get("angle")?)?,
+            angle: compound.get("angle")?.codec_f32()?,
             axis: vec3_from_nbt_tag(compound.get("axis")?)?,
         })
     }
@@ -73,9 +78,26 @@ impl FromNbtTag for AxisAngle4f {
 
 impl From<AxisAngle4f> for Quat {
     fn from(value: AxisAngle4f) -> Self {
-        let half_angle = value.angle / 2.0;
-        let sin = half_angle.sin();
-        let cos = half_angle.cos();
+        // AxisAngle4f wraps its angle before Quaternionf converts it. Its axis is
+        // deliberately not normalized, including when supplied through NBT.
+        let tau = consts::TAU;
+        let angle = if value.angle < 0.0 {
+            tau + value.angle % tau
+        } else {
+            value.angle
+        } % tau;
+        let half_angle = angle * 0.5;
+        let sin = f64::from(half_angle).sin() as f32;
+        // JOML's cosFromSin reconstructs the magnitude from the rounded sine.
+        let mut cos = f64::from(1.0 - sin * sin).sqrt() as f32;
+        let shifted = half_angle + consts::FRAC_PI_2;
+        let mut wrapped = shifted - (shifted / tau) as i32 as f32 * tau;
+        if wrapped < 0.0 {
+            wrapped += tau;
+        }
+        if wrapped >= consts::PI {
+            cos = -cos;
+        }
         Self::from_xyzw(
             value.axis.x * sin,
             value.axis.y * sin,
@@ -114,4 +136,58 @@ pub fn mat4_from_nbt_tag(tag: BorrowedNbtTag) -> Option<Mat4> {
     let list = numeric_f32_list(tag, 16)?;
     let floats = list.as_array()?;
     Some(Mat4::from_cols_array(floats).transpose())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn with_tag(tag: NbtTag, check: impl FnOnce(BorrowedNbtTag<'_, '_>)) {
+        let mut compound = NbtCompound::new();
+        compound.insert("value", tag);
+        let mut bytes = Vec::new();
+        compound.write(&mut bytes);
+        let owned = simdnbt::borrow::read_compound(&mut Cursor::new(bytes.as_slice())).unwrap();
+        let borrowed = simdnbt::borrow::NbtCompound::from(&owned);
+        check(borrowed.get("value").unwrap());
+    }
+
+    #[test]
+    fn glam_nbt_accepts_numeric_arrays_and_oversized_partial_values() {
+        with_tag(NbtTag::IntArray(vec![1, 2, 3, 4]), |tag| {
+            assert_eq!(vec3_from_nbt_tag(tag), Some(Vec3::new(1.0, 2.0, 3.0)));
+        });
+        let values: Vec<i32> = (0..17).collect();
+        with_tag(NbtTag::IntArray(values), |tag| {
+            let matrix = mat4_from_nbt_tag(tag).unwrap();
+            assert_eq!(matrix.row(0).to_array(), [0.0, 1.0, 2.0, 3.0]);
+            assert_eq!(matrix.row(3).to_array(), [12.0, 13.0, 14.0, 15.0]);
+        });
+        with_tag(NbtTag::IntArray(vec![1, 2]), |tag| {
+            assert!(vec3_from_nbt_tag(tag).is_none());
+        });
+    }
+
+    #[test]
+    fn glam_nbt_axis_angle_wraps_negative_angles_and_coerces_numbers() {
+        let mut axis_angle = NbtCompound::new();
+        axis_angle.insert("angle", -1_i32);
+        axis_angle.insert("axis", NbtTag::IntArray(vec![0, 0, 2]));
+        with_tag(axis_angle.into(), |tag| {
+            let rotation = quat_from_nbt_tag(tag).unwrap();
+            assert!(rotation.w < 0.0);
+            assert!(rotation.z > 0.9);
+            // The non-unit axis must not be normalized by the codec.
+            assert!(rotation.length() > 1.0);
+        });
+    }
+
+    #[test]
+    fn glam_nbt_matrix_round_trip_preserves_row_major_layout() {
+        let matrix = Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0));
+        with_tag(mat4_to_nbt_tag(matrix), |tag| {
+            assert_eq!(mat4_from_nbt_tag(tag), Some(matrix));
+        });
+    }
 }

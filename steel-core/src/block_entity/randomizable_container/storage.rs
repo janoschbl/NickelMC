@@ -42,6 +42,18 @@ unsafe impl DowncastType for RandomizableContainerInventory {
 }
 
 impl RandomizableContainerStorage {
+    pub(crate) fn collect_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) -> std::io::Result<()> {
+        let container = self.container.lock();
+        components.set(CONTAINER, Some(container.collect_contents()?));
+        if let Some(loot) = &container.loot_table {
+            components.set(CONTAINER_LOOT, Some(loot.clone()));
+        }
+        Ok(())
+    }
+
     /// Creates independent inventory storage owned by one concrete block entity.
     #[must_use]
     pub(crate) fn new(

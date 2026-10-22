@@ -39,7 +39,7 @@ use simdnbt::borrow::{
 use simdnbt::owned::NbtCompound;
 use smallvec::SmallVec;
 use std::{
-    io::Cursor,
+    io::{self, Cursor},
     ptr,
     sync::{
         Arc, Weak,
@@ -521,6 +521,11 @@ pub trait BlockEntity: ErasedType + Send + Sync {
         None
     }
 
+    /// Adds live components that are represented by concrete gameplay state.
+    fn collect_implicit_components(&self, _components: &mut DataComponentMap) -> io::Result<()> {
+        Ok(())
+    }
+
     /// Returns this entity's fixed game-event listener, if it provides one.
     ///
     /// Mirrors Vanilla `GameEventListener.Provider.getListener`. The owning block behavior keeps
@@ -543,6 +548,19 @@ pub trait BlockEntity: ErasedType + Send + Sync {
 /// Custom behavior belongs in the corresponding `BlockEntity::on_*` hook, which runs after the
 /// update without storage or section locks.
 pub trait BlockEntityLifecycleExt: BlockEntity {
+    /// Collects stored and live components for item picking and loot functions.
+    fn collect_components(&self) -> io::Result<DataComponentMap> {
+        let mut components = self.base().stored_components();
+        if let Some(nameable) = self.as_nameable() {
+            components.set(
+                steel_registry::data_components::vanilla_components::CUSTOM_NAME,
+                nameable.custom_name(),
+            );
+        }
+        self.collect_implicit_components(&mut components)?;
+        Ok(components)
+    }
+
     /// Returns whether this block entity has been marked for removal.
     fn is_removed(&self) -> bool {
         self.base().is_removed()

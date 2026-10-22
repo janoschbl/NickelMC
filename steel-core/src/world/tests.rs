@@ -258,11 +258,11 @@ fn entity_breaker_is_available_to_chorus_flower_loot() {
 }
 
 #[test]
-fn wall_torch_variants_use_their_standing_torch_loot_tables() {
+fn wall_variants_use_their_standing_block_loot_tables() {
     init_vanilla_registry();
     init_behaviors();
 
-    let world_fixture = fresh_test_world("wall_torch_variant_loot");
+    let world_fixture = fresh_test_world("wall_variant_loot");
     let world = &world_fixture.world;
     let context = BlockLootContext::new(world, BlockPos::new(0, 64, 0));
     let cases = [
@@ -274,6 +274,15 @@ fn wall_torch_variants_use_their_standing_torch_loot_tables() {
         (
             &vanilla_blocks::COPPER_WALL_TORCH,
             &*vanilla_items::COPPER_TORCH,
+        ),
+        (&vanilla_blocks::OAK_WALL_SIGN, &*vanilla_items::OAK_SIGN),
+        (
+            &vanilla_blocks::OAK_WALL_HANGING_SIGN,
+            &*vanilla_items::OAK_HANGING_SIGN,
+        ),
+        (
+            &vanilla_blocks::CRIMSON_WALL_HANGING_SIGN,
+            &*vanilla_items::CRIMSON_HANGING_SIGN,
         ),
     ];
 

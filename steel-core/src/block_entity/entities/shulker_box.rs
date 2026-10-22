@@ -452,9 +452,10 @@ mod tests {
     #[test]
     fn applying_item_components_fills_the_slots_and_collects_them_back() {
         init_vanilla_registry();
-        let world = fresh_test_world("shulker_box_apply_components");
+        let world_fixture = fresh_test_world("shulker_box_apply_components");
+        let world = &world_fixture.world;
         let shulker = ShulkerBoxBlockEntity::new(
-            Arc::downgrade(&world),
+            Arc::downgrade(world),
             BlockPos::new(8, 64, 8),
             vanilla_blocks::SHULKER_BOX.default_state(),
         );

@@ -15,7 +15,9 @@ use crate::inventory::click::{Click, MouseButton};
 use crate::inventory::container::Container as _;
 use crate::inventory::menu::Menu;
 use crate::player::Player;
-use crate::test_support::{TestPlayerBuilder, fresh_test_world, insert_ready_full_chunk};
+use crate::test_support::{
+    TestPlayerBuilder, TestWorld, fresh_test_world, insert_ready_full_chunk,
+};
 use crate::world::World;
 
 /// Two table slots and 27 main-inventory slots precede the hotbar in the menu.
@@ -30,22 +32,23 @@ const EXPECTED_ENCHANT_CLUE_DATA_START: usize = 4;
 const EXPECTED_LEVEL_CLUE_DATA_START: usize = 7;
 const EXPECTED_NO_CLUE: i32 = -1;
 
-fn test_table(key: &'static str, seed: i32) -> (Arc<World>, Arc<Player>, BlockPos, Menu) {
+fn test_table(key: &'static str, seed: i32) -> (TestWorld, Arc<Player>, BlockPos, Menu) {
     init_vanilla_registry();
     init_behaviors();
     init_block_entities();
-    let world = fresh_test_world(key);
+    let world_fixture = fresh_test_world(key);
+    let world = &world_fixture.world;
     let pos = BlockPos::new(8, 64, 8);
-    insert_ready_full_chunk(&world, ChunkPos::from_block_pos(pos));
+    insert_ready_full_chunk(world, ChunkPos::from_block_pos(pos));
     assert!(world.set_block(
         pos,
         vanilla_blocks::ENCHANTING_TABLE.default_state(),
         UpdateFlags::UPDATE_ALL,
     ));
-    let player = TestPlayerBuilder::new(Arc::clone(&world), "EnchantTester", 1).build();
+    let player = TestPlayerBuilder::new(Arc::clone(world), "EnchantTester", 1).build();
     player.base().set_position_local(DVec3::new(8.5, 64.0, 8.5));
-    let menu = enchantment(Arc::clone(&player.inventory), 1, pos, &world, seed);
-    (world, player, pos, menu)
+    let menu = enchantment(Arc::clone(&player.inventory), 1, pos, world, seed);
+    (world_fixture, player, pos, menu)
 }
 
 fn surround_with_bookshelves(world: &Arc<World>, pos: BlockPos) {
@@ -84,9 +87,136 @@ fn table_lapis(menu: &Menu) -> ItemStack {
 }
 
 #[test]
+fn fixed_seed_offers_match_vanilla_26_3() {
+    use steel_registry::enchantment::EnchantmentRef;
+    use steel_registry::items::ItemRef;
+    use steel_registry::{RegistryEntry as _, vanilla_enchantments as ench};
+    use steel_utils::random::Random as _;
+
+    type Offer<'a> = &'a [(EnchantmentRef, u32)];
+    type Case<'a> = (
+        i32,
+        ItemRef,
+        [i32; 3],
+        [Offer<'a>; 3],
+        [(EnchantmentRef, u32); 3],
+    );
+
+    // Oracle: 26.3 EnchantmentHelper/EnchantmentMenu algorithms in Java using
+    // java.util.Random and the existing vanilla datapack's ordered table tag.
+    // Include signed seed overflow and a book offer that discards a result.
+    let cases: &[Case] = &[
+        (
+            0,
+            &vanilla_items::DIAMOND_SWORD,
+            [8, 13, 30],
+            [
+                &[(&ench::SMITE, 1), (&ench::UNBREAKING, 1)],
+                &[
+                    (&ench::FIRE_ASPECT, 1),
+                    (&ench::SMITE, 2),
+                    (&ench::UNBREAKING, 2),
+                ],
+                &[(&ench::UNBREAKING, 3), (&ench::LOOTING, 2)],
+            ],
+            [
+                (&ench::UNBREAKING, 1),
+                (&ench::SMITE, 2),
+                (&ench::LOOTING, 2),
+            ],
+        ),
+        (
+            SEED,
+            &vanilla_items::DIAMOND_SWORD,
+            [7, 8, 30],
+            [
+                &[(&ench::SHARPNESS, 1)],
+                &[(&ench::KNOCKBACK, 1)],
+                &[(&ench::LOOTING, 2)],
+            ],
+            [
+                (&ench::SHARPNESS, 1),
+                (&ench::KNOCKBACK, 1),
+                (&ench::LOOTING, 2),
+            ],
+        ),
+        (
+            i32::MAX,
+            &vanilla_items::DIAMOND_SWORD,
+            [8, 19, 30],
+            [
+                &[
+                    (&ench::SMITE, 1),
+                    (&ench::KNOCKBACK, 1),
+                    (&ench::FIRE_ASPECT, 1),
+                ],
+                &[(&ench::KNOCKBACK, 1)],
+                &[(&ench::SMITE, 4), (&ench::SWEEPING_EDGE, 3)],
+            ],
+            [
+                (&ench::FIRE_ASPECT, 1),
+                (&ench::KNOCKBACK, 1),
+                (&ench::SMITE, 4),
+            ],
+        ),
+        (
+            i32::MIN,
+            &vanilla_items::DIAMOND_SWORD,
+            [5, 11, 30],
+            [
+                &[(&ench::UNBREAKING, 1)],
+                &[(&ench::BANE_OF_ARTHROPODS, 2)],
+                &[(&ench::KNOCKBACK, 2), (&ench::BANE_OF_ARTHROPODS, 4)],
+            ],
+            [
+                (&ench::UNBREAKING, 1),
+                (&ench::BANE_OF_ARTHROPODS, 2),
+                (&ench::KNOCKBACK, 2),
+            ],
+        ),
+        (
+            0,
+            &vanilla_items::BOOK,
+            [8, 13, 30],
+            [
+                &[(&ench::LUNGE, 1)],
+                &[(&ench::SMITE, 2), (&ench::SWEEPING_EDGE, 2)],
+                &[(&ench::SHARPNESS, 3)],
+            ],
+            [(&ench::LUNGE, 1), (&ench::SMITE, 2), (&ench::SHARPNESS, 3)],
+        ),
+    ];
+
+    let (world_fixture, player, pos, _menu) = test_table("enchant_menu_vanilla_oracle", 0);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
+    for &(seed, item, costs, options, clues) in cases {
+        let mut menu = enchantment(Arc::clone(&player.inventory), 1, pos, world, seed);
+        place_in_table(&mut menu, &player, ItemStack::new(item), 0);
+        let kind = kind(&menu);
+        assert_eq!(kind.costs, costs, "seed={seed}, item={}", item.key);
+        for offer in 0..OFFER_COUNT {
+            let mut random = EnchantmentKind::seeded_random(seed);
+            let list = kind.enchantment_list(&mut random, &table_item(&menu), offer, costs[offer]);
+            let actual: Vec<_> = list.iter().map(|e| (e.enchantment, e.level)).collect();
+            assert_eq!(
+                actual, options[offer],
+                "seed={seed}, offer={offer}, item={}",
+                item.key
+            );
+            let clue = list[random.next_i32_bounded(list.len() as i32) as usize];
+            assert_eq!((clue.enchantment, clue.level), clues[offer]);
+            assert_eq!(kind.enchant_clue[offer], Some(clues[offer].0.id() as i32));
+            assert_eq!(kind.level_clue[offer], Some(clues[offer].1 as i32));
+        }
+    }
+}
+
+#[test]
 fn full_bookshelf_ring_rolls_three_offers_with_clues() {
-    let (world, player, pos, mut menu) = test_table("enchant_menu_offers", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut menu) = test_table("enchant_menu_offers", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     place_in_table(
         &mut menu,
         &player,
@@ -146,15 +276,16 @@ fn full_bookshelf_ring_rolls_three_offers_with_clues() {
 
 #[test]
 fn offers_are_identical_for_the_same_seed_and_cleared_for_unenchantable_items() {
-    let (world, player, pos, mut first) = test_table("enchant_menu_same_seed", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut first) = test_table("enchant_menu_same_seed", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     place_in_table(
         &mut first,
         &player,
         ItemStack::new(&vanilla_items::DIAMOND_SWORD),
         0,
     );
-    let mut second = enchantment(Arc::clone(&player.inventory), 2, pos, &world, SEED);
+    let mut second = enchantment(Arc::clone(&player.inventory), 2, pos, world, SEED);
     place_in_table(
         &mut second,
         &player,
@@ -165,7 +296,7 @@ fn offers_are_identical_for_the_same_seed_and_cleared_for_unenchantable_items() 
     assert_eq!(kind(&first).enchant_clue, kind(&second).enchant_clue);
     assert_eq!(kind(&first).level_clue, kind(&second).level_clue);
 
-    let mut stone = enchantment(Arc::clone(&player.inventory), 3, pos, &world, SEED);
+    let mut stone = enchantment(Arc::clone(&player.inventory), 3, pos, world, SEED);
     place_in_table(
         &mut stone,
         &player,
@@ -194,8 +325,9 @@ fn offers_are_identical_for_the_same_seed_and_cleared_for_unenchantable_items() 
 
 #[test]
 fn button_is_rejected_without_lapis_or_levels() {
-    let (world, player, pos, mut menu) = test_table("enchant_menu_rejections", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut menu) = test_table("enchant_menu_rejections", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     place_in_table(
         &mut menu,
         &player,
@@ -225,8 +357,9 @@ fn button_is_rejected_without_lapis_or_levels() {
 
 #[test]
 fn offers_only_reroll_when_the_table_slots_change() {
-    let (world, player, pos, mut menu) = test_table("enchant_menu_unrelated_clicks", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut menu) = test_table("enchant_menu_unrelated_clicks", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     place_in_table(
         &mut menu,
         &player,
@@ -275,8 +408,9 @@ fn offers_only_reroll_when_the_table_slots_change() {
 
 #[test]
 fn enchanting_spends_levels_and_lapis_and_rerolls_the_seed() {
-    let (world, player, pos, mut menu) = test_table("enchant_menu_enchant", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut menu) = test_table("enchant_menu_enchant", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     place_in_table(
         &mut menu,
         &player,
@@ -318,8 +452,9 @@ fn enchanting_spends_levels_and_lapis_and_rerolls_the_seed() {
 
 #[test]
 fn creative_players_skip_lapis_but_still_spend_levels() {
-    let (world, player, pos, mut menu) = test_table("enchant_menu_creative", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut menu) = test_table("enchant_menu_creative", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     player.restore_game_modes(GameType::Creative, None);
     place_in_table(
         &mut menu,
@@ -336,8 +471,9 @@ fn creative_players_skip_lapis_but_still_spend_levels() {
 
 #[test]
 fn books_become_enchanted_books_with_stored_enchantments() {
-    let (world, player, pos, mut menu) = test_table("enchant_menu_book", SEED);
-    surround_with_bookshelves(&world, pos);
+    let (world_fixture, player, pos, mut menu) = test_table("enchant_menu_book", SEED);
+    let world = &world_fixture.world;
+    surround_with_bookshelves(world, pos);
     place_in_table(&mut menu, &player, ItemStack::new(&vanilla_items::BOOK), 0);
     place_in_table(
         &mut menu,
@@ -384,7 +520,8 @@ fn quick_move_places_a_single_item_into_the_table() {
 
 #[test]
 fn validity_requires_the_table_and_interaction_range() {
-    let (world, player, pos, menu) = test_table("enchant_menu_validity", SEED);
+    let (world_fixture, player, pos, menu) = test_table("enchant_menu_validity", SEED);
+    let world = &world_fixture.world;
     assert!(menu.still_valid(&player));
     player
         .base()

@@ -17,7 +17,7 @@ use crate::enchantment_helper::{EnchantmentInstance, get_enchantment_cost, selec
 use crate::inventory::container::DEFAULT_DISTANCE_BUFFER;
 use crate::inventory::prelude::*;
 use crate::inventory::slots::EnchantItemSlot;
-use crate::player::player_inventory::PlayerInventory;
+use crate::player::player_inventory::{PlayerInventory, Prediction};
 use crate::world::World;
 
 /// Number of selectable offers.
@@ -275,7 +275,7 @@ impl MenuKind for EnchantmentKind {
         else {
             log::debug!(
                 "{} pressed invalid button id: {button_id}",
-                player.gameprofile.name
+                player.gameprofile.name()
             );
             return false;
         };
@@ -315,8 +315,6 @@ impl MenuKind for EnchantmentKind {
             self.enchantment_seed = experience.enchantment_seed();
         }
 
-        // Unlike vanilla transmuteCopy, sanitizing only drops patches equal to the new
-        // prototype's defaults. Custom patches can therefore survive the conversion.
         let mut enchanted = if stack.is(&vanilla_items::BOOK) {
             ItemStack::with_count_and_patch(
                 &vanilla_items::ENCHANTED_BOOK,
@@ -339,7 +337,7 @@ impl MenuKind for EnchantmentKind {
         container.set_changed();
 
         player.award_custom_stat(&vanilla_custom_stats::ENCHANT_ITEM);
-        // TODO: Trigger CriteriaTriggers.ENCHANTED_ITEM once Steel has shared advancement foundations.
+        // TODO: Dispatch ENCHANTED_ITEM when shared criterion-trigger listeners are available.
 
         self.update_offers(behavior, &mut guard);
         drop(guard);
@@ -409,7 +407,7 @@ impl MenuKind for EnchantmentKind {
             return Some(ItemStack::empty());
         }
         if let Some(remainder) = behavior.slots()[slot_index].on_take(guard, &remaining, player) {
-            player.add_item_or_drop_with_guard(guard, remainder);
+            player.add_item_or_drop_with_guard(guard, remainder, Prediction::Predicted);
         }
         Some(clicked)
     }

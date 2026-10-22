@@ -141,6 +141,16 @@ impl BlockBehavior for EnchantingTableBlock {
 
 #[cfg(test)]
 mod tests {
+    use glam::DVec3;
+    use steel_registry::data_components::vanilla_components::CUSTOM_NAME;
+    use steel_registry::item_stack::ItemStack;
+    use steel_registry::vanilla_items;
+    use steel_utils::{Direction, types::InteractionHand};
+    use text_components::TextComponent;
+
+    use crate::behavior::context::BlockPlaceContext;
+    use crate::behavior::items::BlockItem;
+    use crate::behavior::{InventoryAccess, PlacementOrientation, PlacementSource};
     use steel_registry::{init_vanilla_registry, vanilla_blocks};
     use steel_utils::{ChunkPos, types::UpdateFlags};
 
@@ -148,21 +158,24 @@ mod tests {
     use crate::behavior::init_behaviors;
     use crate::block_entity::init_block_entities;
     use crate::entity::Entity as _;
-    use crate::test_support::{TestPlayerBuilder, fresh_test_world, insert_ready_full_chunk};
+    use crate::test_support::{
+        TestPlayerBuilder, TestWorld, fresh_test_world, insert_ready_full_chunk,
+    };
 
-    fn placed_table(key: &'static str) -> (Arc<World>, BlockPos) {
+    fn placed_table(key: &'static str) -> (TestWorld, BlockPos) {
         init_vanilla_registry();
         init_behaviors();
         init_block_entities();
-        let world = fresh_test_world(key);
+        let world_fixture = fresh_test_world(key);
+        let world = &world_fixture.world;
         let pos = BlockPos::new(8, 64, 8);
-        insert_ready_full_chunk(&world, ChunkPos::from_block_pos(pos));
+        insert_ready_full_chunk(world, ChunkPos::from_block_pos(pos));
         assert!(world.set_block(
             pos,
             vanilla_blocks::ENCHANTING_TABLE.default_state(),
             UpdateFlags::UPDATE_ALL,
         ));
-        (world, pos)
+        (world_fixture, pos)
     }
 
     #[test]
@@ -177,7 +190,8 @@ mod tests {
 
     #[test]
     fn placing_the_block_creates_its_block_entity() {
-        let (world, pos) = placed_table("enchanting_table_block_entity");
+        let (world_fixture, pos) = placed_table("enchanting_table_block_entity");
+        let world = &world_fixture.world;
         let block_entity = world
             .get_block_entity(pos)
             .expect("enchanting table should create a block entity");
@@ -190,10 +204,11 @@ mod tests {
 
     #[test]
     fn bookshelves_count_only_with_a_clear_transmitter_block() {
-        let (world, pos) = placed_table("enchanting_table_bookshelf_power");
+        let (world_fixture, pos) = placed_table("enchanting_table_bookshelf_power");
+        let world = &world_fixture.world;
         let offset = IVec3::new(2, 0, 0);
         assert!(!EnchantingTableBlock::is_valid_book_shelf(
-            &world, pos, offset
+            world, pos, offset
         ));
 
         assert!(world.set_block(
@@ -202,7 +217,7 @@ mod tests {
             UpdateFlags::UPDATE_ALL,
         ));
         assert!(EnchantingTableBlock::is_valid_book_shelf(
-            &world, pos, offset
+            world, pos, offset
         ));
 
         assert!(world.set_block(
@@ -211,14 +226,15 @@ mod tests {
             UpdateFlags::UPDATE_ALL,
         ));
         assert!(!EnchantingTableBlock::is_valid_book_shelf(
-            &world, pos, offset
+            world, pos, offset
         ));
     }
 
     #[test]
     fn using_the_table_opens_a_menu_titled_with_its_name() {
-        let (world, pos) = placed_table("enchanting_table_use");
-        let player = TestPlayerBuilder::new(Arc::clone(&world), "TableUser", 1).build();
+        let (world_fixture, pos) = placed_table("enchanting_table_use");
+        let world = &world_fixture.world;
+        let player = TestPlayerBuilder::new(Arc::clone(world), "TableUser", 1).build();
         player.base().set_position_local(DVec3::new(8.5, 64.0, 8.5));
         let table = world
             .get_block_entity(pos)
@@ -241,7 +257,7 @@ mod tests {
             InventoryAccess::new(Arc::clone(&player.inventory), InteractionHand::MainHand);
         let result = behavior.use_without_item(
             vanilla_blocks::ENCHANTING_TABLE.default_state(),
-            &world,
+            world,
             pos,
             &player,
             &hit,
@@ -256,10 +272,11 @@ mod tests {
         init_vanilla_registry();
         init_behaviors();
         init_block_entities();
-        let world = fresh_test_world("enchanting_table_place_named_item");
+        let world_fixture = fresh_test_world("enchanting_table_place_named_item");
+        let world = &world_fixture.world;
         let support = BlockPos::new(8, 63, 8);
         let pos = support.offset(0, 1, 0);
-        insert_ready_full_chunk(&world, ChunkPos::from_block_pos(pos));
+        insert_ready_full_chunk(world, ChunkPos::from_block_pos(pos));
         assert!(world.set_block(
             support,
             vanilla_blocks::STONE.default_state(),
@@ -279,7 +296,7 @@ mod tests {
             false,
         );
         let context = BlockPlaceContext::new(
-            &world,
+            world,
             source,
             &BlockHitResult {
                 location: DVec3::new(8.5, 64.0, 8.5),

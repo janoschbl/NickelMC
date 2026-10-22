@@ -1511,8 +1511,8 @@ fn only_a_zero_saved_enchantment_seed_is_rerolled() {
 #[test]
 fn saved_enchantment_seed_round_trips_through_player_data() {
     init_vanilla_registry();
-    let world = fresh_test_world("player_data_enchantment_seed_round_trip");
-    let player = TestPlayerBuilder::new(Arc::clone(&world), "SeedTester", 1).build();
+    let world_fixture = fresh_test_world("player_data_enchantment_seed_round_trip");
+    let player = TestPlayerBuilder::new(Arc::clone(&world_fixture.world), "SeedTester", 1).build();
 
     let mut stored = PersistentPlayerData::from_player(&player);
     stored.enchantment_seed = 4242;

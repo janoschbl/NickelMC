@@ -14,25 +14,28 @@ use steel_registry::{RegistryExt, block_entity_type::BlockEntityTypeRef};
 use steel_utils::{BlockPos, BlockStateId, DowncastType, DowncastTypeKey, locks::SyncMutex};
 
 use crate::block_entity::{BlockEntityBase, RandomizableContainer};
-use crate::entity::{LivingEntity, entity_loot_ref};
+use crate::entity::{LivingEntity, entity_loot_ref, living_loot_equipment};
 use crate::inventory::container::Container;
 use crate::inventory::lock::{ContainerRef, SharedContainer};
+use crate::loot::generation_guard::LootGenerationGuard;
 use crate::loot::{LOOT_TABLES, LootContext, LootError, LootResult};
 use crate::player::Player;
 use crate::world::World;
 
 /// Shared inventory, pending loot, and persistence for randomizable block containers.
+/// Generation serializes outside inventory locks. A table callback cannot unpack
+/// pending loot recursively on the same thread; it receives a recoverable error.
 pub(crate) struct RandomizableContainerStorage {
     pub(crate) base: Arc<BlockEntityBase>,
     pub(crate) container: Arc<SyncMutex<RandomizableContainerInventory>>,
     pub(crate) container_ref: ContainerRef,
+    generation_lock: Arc<SyncMutex<()>>,
 }
 
 pub(crate) struct RandomizableContainerInventory {
     items: Vec<ItemStack>,
     loot_table: Option<SeededContainerLoot>,
     generation: u64,
-    unpacking: bool,
 }
 
 // SAFETY: This key is owned by Steel and uniquely identifies the independently
@@ -68,19 +71,21 @@ impl RandomizableContainerStorage {
             items: vec![ItemStack::empty(); slots],
             loot_table: None,
             generation: 0,
-            unpacking: false,
         }));
         let shared_container: SharedContainer =
             Arc::<SyncMutex<RandomizableContainerInventory>>::clone(&container);
         let loot_base = Arc::clone(&base);
         let loot_container = Arc::clone(&container);
+        let generation_lock = Arc::new(SyncMutex::new(()));
+        let loot_generation_lock = Arc::clone(&generation_lock);
         Self {
             container_ref: ContainerRef::owned_by_block_entity(shared_container, Arc::clone(&base))
                 .with_access_callback(Arc::new(move || {
-                    Self::unpack(&loot_base, &loot_container, None)
+                    Self::unpack(&loot_base, &loot_container, &loot_generation_lock, None)
                 })),
             base,
             container,
+            generation_lock,
         }
     }
 }
@@ -110,7 +115,6 @@ impl RandomizableContainerStorage {
         let mut container = self.container.lock();
         container.items.fill(ItemStack::empty());
         container.generation = container.generation.wrapping_add(1);
-        container.unpacking = false;
         container.loot_table = nbt_view
             .string("LootTable")
             .and_then(|key| match key.to_string().parse() {
@@ -212,7 +216,6 @@ impl RandomizableContainerStorage {
         if let Some(loot) = item.get(CONTAINER_LOOT) {
             container.loot_table = Some(loot.clone());
             container.generation = container.generation.wrapping_add(1);
-            container.unpacking = false;
         }
     }
 }
@@ -226,11 +229,10 @@ impl RandomizableContainer for RandomizableContainerStorage {
         let mut container = self.container.lock();
         container.loot_table = loot;
         container.generation = container.generation.wrapping_add(1);
-        container.unpacking = false;
     }
 
     fn unpack_loot_table(&self, player: Option<&Player>) -> LootResult<()> {
-        Self::unpack(&self.base, &self.container, player)
+        Self::unpack(&self.base, &self.container, &self.generation_lock, player)
     }
 }
 
@@ -238,25 +240,30 @@ impl RandomizableContainerStorage {
     fn unpack(
         base: &BlockEntityBase,
         storage: &SyncMutex<RandomizableContainerInventory>,
+        generation_lock: &SyncMutex<()>,
         player: Option<&Player>,
     ) -> LootResult<()> {
         let Some(world) = base.level() else {
             return Ok(());
         };
+        if storage.lock().loot_table.is_none() {
+            return Ok(());
+        }
+        if LootGenerationGuard::is_active() {
+            return Err(LootError::RandomUnavailable(
+                "recursive container loot access",
+            ));
+        }
+        let _generation = generation_lock.lock();
         let (loot, generation) = {
             let mut container = storage.lock();
             let Some(loot) = container.loot_table.clone() else {
                 return Ok(());
             };
-            if container.unpacking {
-                // TODO: Coordinate concurrent access with vanilla-compatible
-                // ordering. This error currently reaches comparator zero fallbacks.
-                return Err(LootError::ContainerChanged);
-            }
-            container.unpacking = true;
             container.generation = container.generation.wrapping_add(1);
             (loot, container.generation)
         };
+        let equipment = player.map(|player| living_loot_equipment(player));
         let result = (|| {
             let table = LOOT_TABLES
                 .by_key(loot.loot_table())
@@ -272,7 +279,7 @@ impl RandomizableContainerStorage {
                     // TODO: Trigger GENERATE_LOOT once advancement criteria exist.
                     context = context
                         .with_luck(player.get_luck())
-                        .with_this_entity(entity_loot_ref(player));
+                        .with_this_entity(entity_loot_ref(player, equipment.as_ref()));
                 }
                 let generated = table.generate_for_container(&mut context)?;
                 let mut container = storage.lock();
@@ -284,12 +291,6 @@ impl RandomizableContainerStorage {
                 Ok(())
             })
         })();
-        {
-            let mut container = storage.lock();
-            if container.generation == generation {
-                container.unpacking = false;
-            }
-        }
         if result.is_ok() {
             base.set_changed();
         }

@@ -18,7 +18,8 @@ use steel_utils::{
     saved_data::names as saved_data_names,
 };
 
-use super::{LootError, LootResult};
+use super::LootResult;
+use super::generation_guard::LootGenerationGuard;
 use crate::server::worlds::WorldMap;
 
 #[derive(Deserialize, Serialize)]
@@ -28,7 +29,7 @@ struct PersistentSequence {
 
 #[derive(Deserialize, Serialize)]
 #[serde(default)]
-struct PersistentRandomSequences {
+pub(crate) struct PersistentRandomSequences {
     salt: i32,
     include_world_seed: bool,
     include_sequence_id: bool,
@@ -47,6 +48,8 @@ impl Default for PersistentRandomSequences {
 }
 
 /// Saved vanilla Xoroshiro streams for one domain, using its default world's seed.
+/// Draws serialize across workers. Same-thread generation recursion returns an
+/// error; handwritten nested tables must reuse the outer LootContext and RNG.
 pub(crate) struct RandomSequences {
     seed: i64,
     salt: i32,
@@ -58,7 +61,10 @@ pub(crate) struct RandomSequences {
 }
 
 impl RandomSequences {
-    fn from_persistent(seed: i64, persistent: PersistentRandomSequences) -> io::Result<Self> {
+    pub(crate) fn from_persistent(
+        seed: i64,
+        persistent: PersistentRandomSequences,
+    ) -> io::Result<Self> {
         let mut sequences = FxHashMap::default();
         for (key, sequence) in persistent.sequences {
             let key = key
@@ -108,6 +114,7 @@ impl RandomSequences {
         key: &Identifier,
         use_random: impl FnOnce(&mut RandomSource) -> LootResult<T>,
     ) -> LootResult<T> {
+        let _generation = LootGenerationGuard::enter()?;
         let existing = self.sequences.read().get(key).cloned();
         let source = existing.unwrap_or_else(|| {
             Arc::clone(
@@ -117,15 +124,7 @@ impl RandomSequences {
                     .or_insert_with(|| Arc::new(SyncMutex::new(self.create_sequence(key)))),
             )
         });
-        // Handwritten tables may re-enter loot generation. Never wait on a stream
-        // already borrowed by that call (or another domain world worker).
-        // TODO: Coordinate shared-sequence access across world workers without
-        // turning contention into failed gameplay operations or zero signals.
-        let Some(mut random) = source.try_lock() else {
-            return Err(LootError::RandomUnavailable(
-                "named sequence is already in use",
-            ));
-        };
+        let mut random = source.lock();
         let result = use_random(&mut random);
         self.revision.fetch_add(1, Ordering::Release);
         result

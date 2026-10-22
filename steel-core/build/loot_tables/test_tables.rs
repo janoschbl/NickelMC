@@ -80,6 +80,13 @@ fn inputs() -> impl IntoIterator<Item = (&'static str, serde_json::Value)> {
             "DYNAMIC_OWNER",
             json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:dynamic","name":"minecraft:sherds"}]}]}),
         ),
+    ]
+    .into_iter()
+    .chain(composite_inputs())
+}
+
+fn composite_inputs() -> impl IntoIterator<Item = (&'static str, serde_json::Value)> {
+    [
         (
             "OVERSIZED",
             json!({"pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","modifier":{"type":"minecraft:set_count","count":130}}]}]}),

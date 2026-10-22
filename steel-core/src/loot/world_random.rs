@@ -1,15 +1,15 @@
 use crate::loot::LootTable;
 use steel_utils::random::{RandomSource, legacy_random::LegacyRandom};
 
+use super::generation_guard::LootGenerationGuard;
 use super::{LootError, LootResult};
 use crate::world::World;
 
 impl World {
-    // TODO: Route other gameplay loot callers through this selection, preserving
-    // explicit seeds and sharing named sequences across repeated evaluations.
-    // Death-loot contexts also need the credited player's luck.
     /// Selects the saved seed, domain sequence, or live world stream in vanilla order.
     /// Generation and container placement must both complete inside the callback.
+    /// Concurrent draws serialize. Same-thread recursion is a recoverable error;
+    /// nested tables must reuse the callback's RNG through their LootContext.
     pub fn with_loot_random<T>(
         &self,
         table: &LootTable,
@@ -17,6 +17,7 @@ impl World {
         use_random: impl FnOnce(&mut RandomSource) -> LootResult<T>,
     ) -> LootResult<T> {
         if seed != 0 {
+            let _generation = LootGenerationGuard::enter()?;
             return use_random(&mut RandomSource::Legacy(LegacyRandom::from_seed(
                 seed as u64,
             )));
@@ -27,11 +28,8 @@ impl World {
             )?;
             return sequences.with_random(key, use_random);
         }
-        let Some(mut random) = self.loot_random.try_lock() else {
-            return Err(LootError::RandomUnavailable(
-                "world stream is already in use",
-            ));
-        };
+        let _generation = LootGenerationGuard::enter()?;
+        let mut random = self.loot_random.lock();
         use_random(&mut random)
     }
 }

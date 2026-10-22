@@ -13,7 +13,6 @@ use steel_registry::item_stack::ItemStack;
 use steel_registry::{
     RegistryExt as _, vanilla_block_entity_types, vanilla_blocks, vanilla_entities,
 };
-use steel_utils::random::{RandomSource, legacy_random::LegacyRandom};
 use steel_utils::types::UpdateFlags;
 use steel_utils::{
     BlockPos, BlockStateId, Direction, DowncastType, DowncastTypeKey, Identifier, locks::SyncMutex,
@@ -216,24 +215,20 @@ impl BrushableBlockEntity {
         let table = LOOT_TABLES
             .by_key(key)
             .ok_or_else(|| LootError::MissingTable(key.clone()))?;
-        let seed = if state.loot_table_seed == 0 {
-            rand::random()
-        } else {
-            state.loot_table_seed as u64
-        };
-        let mut rng = RandomSource::Legacy(LegacyRandom::from_seed(seed));
-        let equipment = living_loot_equipment(player);
-        let mut ctx = LootContext::new(&mut rng)
-            .with_world(world)
-            .with_luck(player.get_luck())
-            .with_tool(brush)
-            .with_origin(
-                f64::from(self.get_block_pos().x()) + 0.5,
-                f64::from(self.get_block_pos().y()) + 0.5,
-                f64::from(self.get_block_pos().z()) + 0.5,
-            )
-            .with_this_entity(entity_loot_ref(player, Some(&equipment)));
-        let items = table.get_random_items(&mut ctx)?;
+        let items = world.with_loot_random(table, state.loot_table_seed, |rng| {
+            let equipment = living_loot_equipment(player);
+            let mut ctx = LootContext::new(rng)
+                .with_world(world)
+                .with_luck(player.get_luck())
+                .with_tool(brush)
+                .with_origin(
+                    f64::from(self.get_block_pos().x()) + 0.5,
+                    f64::from(self.get_block_pos().y()) + 0.5,
+                    f64::from(self.get_block_pos().z()) + 0.5,
+                )
+                .with_this_entity(entity_loot_ref(player, Some(&equipment)));
+            table.get_random_items(&mut ctx)
+        })?;
         if items.len() > 1 {
             log::warn!(
                 "Expected max 1 loot from loot table {key}, but got {}",

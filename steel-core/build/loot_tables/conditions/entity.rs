@@ -114,7 +114,7 @@ impl CompileCondition for LocationCheck {
         quote! {{
             match (ctx.origin, ctx.world) {
                 (Some((x, y, z)), Some(world)) => {
-                    let pos = steel_utils::BlockPos::new((x + #dx as f64).floor() as i32, (y + #dy as f64).floor() as i32, (z + #dz as f64).floor() as i32);
+                    let pos = steel_utils::BlockPos::new((x + f64::from(#dx)).floor() as i32, (y + f64::from(#dy)).floor() as i32, (z + f64::from(#dz)).floor() as i32);
                     world.chunk_map.with_full_chunk(steel_utils::ChunkPos::from_block_pos(pos), |_| ()).is_some() && (#checks)
                 }
                 _ => false,

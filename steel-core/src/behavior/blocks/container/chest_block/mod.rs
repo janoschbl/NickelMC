@@ -89,6 +89,8 @@ impl ChestBlock {
             .then(|| state.get_value(&BlockStateProperties::HORIZONTAL_FACING))
     }
 
+    /// Sitting-cat obstruction requires the later tameable sitting capability;
+    /// block obstruction is evaluated without guessing entity types or poses.
     fn is_blocked(world: &dyn LevelReader, pos: BlockPos) -> bool {
         let above = pos.above();
         is_redstone_conductor(world, world.get_block_state(above), above)
@@ -248,6 +250,7 @@ impl BlockBehavior for ChestBlock {
             return InteractionResult::Success;
         };
         let title = Self::display_name(&chest);
+        // Piglin anger requires the later mob-AI phase's Piglin interaction capability.
         player.award_custom_stat(&vanilla_custom_stats::OPEN_CHEST);
         if !chest.owners.iter().all(|owner| {
             owner
@@ -328,11 +331,12 @@ impl BlockBehavior for ChestBlock {
         let Some(chest) = Self::get_container(state, world, pos, false) else {
             return 0;
         };
-        let Ok(guard) = ContainerLockGuard::lock_all(&chest.containers) else {
-            // TODO: Preserve vanilla access ordering so loot-generation contention
-            // cannot become a false zero comparator signal. Returning zero here
-            // also hides generation failures; distinguish them from empty contents.
-            return 0;
+        let guard = match ContainerLockGuard::lock_all(&chest.containers) {
+            Ok(guard) => guard,
+            Err(error) => {
+                log::error!("Cannot read chest comparator at {pos:?}: {error}");
+                return 0;
+            }
         };
         calculate_redstone_signal_from_containers(
             chest

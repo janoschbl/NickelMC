@@ -265,33 +265,29 @@ fn wall_variants_use_their_standing_block_loot_tables() {
     let world_fixture = fresh_test_world("wall_variant_loot");
     let world = &world_fixture.world;
     let context = BlockLootContext::new(world, BlockPos::new(0, 64, 0));
-    let cases = [
-        (&vanilla_blocks::WALL_TORCH, &*vanilla_items::TORCH),
-        (
-            &vanilla_blocks::SOUL_WALL_TORCH,
-            &*vanilla_items::SOUL_TORCH,
-        ),
-        (
-            &vanilla_blocks::COPPER_WALL_TORCH,
-            &*vanilla_items::COPPER_TORCH,
-        ),
-        (&vanilla_blocks::OAK_WALL_SIGN, &*vanilla_items::OAK_SIGN),
-        (
-            &vanilla_blocks::OAK_WALL_HANGING_SIGN,
-            &*vanilla_items::OAK_HANGING_SIGN,
-        ),
-        (
-            &vanilla_blocks::CRIMSON_WALL_HANGING_SIGN,
-            &*vanilla_items::CRIMSON_HANGING_SIGN,
-        ),
-    ];
-
-    for (block, expected_item) in cases {
+    let mut checked = 0;
+    for (_, block) in REGISTRY.blocks.iter() {
+        let name = block.key.path.as_ref();
+        let standing_name = if name == "wall_torch" {
+            "torch".to_owned()
+        } else if name.ends_with("_wall_torch")
+            || name.ends_with("_wall_sign")
+            || name.ends_with("_wall_hanging_sign")
+        {
+            name.replace("_wall_", "_")
+        } else {
+            continue;
+        };
+        let key = steel_utils::Identifier::vanilla(standing_name);
+        let expected_item = REGISTRY.items.by_key(&key).expect("standing variant item");
         let drops = context.get_drops(block.default_state());
         assert_eq!(drops.len(), 1, "{block:?}");
         assert_eq!(drops[0].item(), expected_item, "{block:?}");
         assert_eq!(drops[0].count(), 1, "{block:?}");
+        checked += 1;
     }
+    // Four torch types and both sign types for all thirteen 26.3 wood families.
+    assert_eq!(checked, 30);
 }
 
 fn assert_vec3_close(left: DVec3, right: DVec3) {

@@ -1,11 +1,15 @@
 <p align="center">
-  <img src=".github/assets/readme/steel-logo.png" alt="SteelMC logo" width="192">
+  <img src=".github/assets/readme/steel-logo.png" alt="SteelMC logo (upstream)" width="192">
 </p>
 
-<h1 align="center">SteelMC</h1>
+<h1 align="center">NickelMC</h1>
 
 <p align="center">
   A Minecraft Java Edition server written in Rust.
+</p>
+
+<p align="center">
+  <sub>NickelMC is a fork of <a href="https://github.com/Steel-Foundation/SteelMC">SteelMC</a> by the Steel Foundation. Documentation, website, and tracker links below point to the upstream project.</sub>
 </p>
 
 <p align="center">
@@ -22,16 +26,16 @@
   <a href="https://steelmc.dev/discord">Discord</a>
 </p>
 
-![A sunset over a SteelMC-generated world, with forests, rivers, mountains, and a lit village](.github/assets/readme/sunset.webp)
+![A sunset over a NickelMC-generated world, with forests, rivers, mountains, and a lit village](.github/assets/readme/sunset.webp)
 
 > [!IMPORTANT]
-> SteelMC is still pre-alpha. You can connect and explore generated worlds, but
+> NickelMC is still pre-alpha. You can connect and explore generated worlds, but
 > survival gameplay is incomplete and many vanilla systems are still missing. Do not
 > replace your production server with it yet.
 
-## What is SteelMC?
+## What is NickelMC?
 
-SteelMC is an independent implementation of the Minecraft Java Edition server. It
+NickelMC is an independent implementation of the Minecraft Java Edition server. It
 tracks the latest Java Edition release and currently targets **Minecraft 26.3**.
 
 The goal is to match vanilla behavior while making better use of modern multicore
@@ -40,16 +44,16 @@ packet processing, and chunk sending can run outside the main tick.
 
 ## World generation
 
-World generation is currently the most complete part of SteelMC. Its parity suite
+World generation is currently the most complete part of NickelMC. Its parity suite
 compares 7,500 randomly selected chunks with a reproducible vanilla reference: 2,500
 in each dimension. All tested chunks match block for block. Entity spawning is not
 included because most entity behavior has not been implemented yet.
 
-In a focused benchmark on a Ryzen 9 9950X, SteelMC generated a fresh
+In a focused benchmark on a Ryzen 9 9950X, NickelMC generated a fresh
 10,201-chunk Overworld area in a median of 3.98 seconds. Results vary with hardware,
 and this benchmark does not represent every server workload.
 
-Read [Introducing SteelMC](https://steelmc.dev/blog/announcement/) for the design
+Read [Introducing NickelMC](https://steelmc.dev/blog/announcement/) for the design
 story, parity methodology, benchmark context, and limitations. Full results and
 reproduction instructions are available on the
 [benchmark page](https://steelmc.dev/reference/benchmarks/).
@@ -57,7 +61,7 @@ reproduction instructions are available on the
 ## Current status
 
 Today, clients can join a persistent multiplayer world, move and interact, use
-inventories and commands, and return later to saved chunks. SteelMC currently
+inventories and commands, and return later to saved chunks. NickelMC currently
 provides:
 
 - Java Edition networking, authentication, encryption, and compression
@@ -66,7 +70,7 @@ provides:
 - Commands, permissions, chat, and server configuration
 - Early entity, block entity, and gameplay behavior implementations
 
-SteelMC is not ready to replace an established server:
+NickelMC is not ready to replace an established server:
 
 - Survival gameplay is incomplete.
 - Only a small number of entities have meaningful behavior.
@@ -82,7 +86,7 @@ view of what is available today.
 Pre-built releases, Docker images, and source-build instructions are available in
 the [installation guide](https://steelmc.dev/getting-started/installation/).
 
-Expect bugs and incomplete mechanics. If you try SteelMC, please share what you find
+Expect bugs and incomplete mechanics. If you try NickelMC, please share what you find
 on [Discord](https://steelmc.dev/discord) or open a
 [GitHub issue](https://github.com/Steel-Foundation/SteelMC/issues).
 
@@ -128,34 +132,34 @@ with prettyplease during compilation:
 cargo build --features steel-registry/fmt,steel-utils/fmt,steel-worldgen/fmt
 ```
 
-Generated documentation for SteelMC's Rust crates is available in the
+Generated documentation for NickelMC's Rust crates is available in the
 [Rust API reference](https://rustdoc.steelmc.dev/steel_core/index.html).
 
 AI may be used as a tool, but contributors must understand and be able to explain
 every line they submit. Fully autonomous pull requests are not accepted.
 
-For an easy entry into SteelMC as a new contributor, you can check out issues with the tag `good first issue`, or our [tracker](https://steelmc.dev/tracker/) of unimplemented content,
+For an easy entry into NickelMC as a new contributor, you can check out issues with the tag `good first issue`, or our [tracker](https://steelmc.dev/tracker/) of unimplemented content,
 which is always a good first start.
 
 ## Community
 
-The [SteelMC Discord](https://steelmc.dev/discord) is where we discuss designs,
+The [NickelMC Discord](https://steelmc.dev/discord) is where we discuss designs,
 coordinate work, share progress, and answer questions. Longer project updates are
-published on the [SteelMC website](https://steelmc.dev/).
+published on the [NickelMC website](https://steelmc.dev/).
 
-If you enjoy SteelMC, you can support its development by
+If you enjoy NickelMC, you can support its development by
 [sponsoring the project on GitHub](https://github.com/sponsors/Steel-Foundation). Any support is greatly appreciated!
 
 ## License
 
-SteelMC is free software licensed under the
+NickelMC, a fork of SteelMC by the Steel Foundation, is free software licensed under the
 [GNU Affero General Public License v3.0 or later](LICENSE).
 
-The SteelMC logo was designed by **colonthreeing**.
+The upstream SteelMC logo (kept unchanged for now) was designed by **colonthreeing**.
 
 ## Acknowledgements
 
-SteelMC's world generation, lighting, and other performance work has drawn ideas from
+NickelMC's world generation, lighting, and other performance work has drawn ideas from
 [C2ME](https://github.com/RelativityMC/C2ME-fabric),
 [ScalableLux](https://github.com/RelativityMC/ScalableLux),
 [FastNoise](https://codeberg.org/ZenXArch/FastNoise),
@@ -165,5 +169,5 @@ SteelMC's world generation, lighting, and other performance work has drawn ideas
 ## Top contributors
 
 <a href="https://github.com/Steel-Foundation/SteelMC/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Steel-Foundation/SteelMC" alt="SteelMC contributors">
+  <img src="https://contrib.rocks/image?repo=Steel-Foundation/SteelMC" alt="NickelMC contributors">
 </a>

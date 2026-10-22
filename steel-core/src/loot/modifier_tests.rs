@@ -53,7 +53,9 @@ fn level_enchanting_matches_java_single_option_vectors_and_discards_book_patch()
         assert_eq!(item.count(), 1);
         assert!(!item.has(CUSTOM_NAME));
         assert_eq!(
-            item.get_enchantment_level(&vanilla_enchantments::UNBREAKING.key),
+            item.get_enchantments_for_crafting()
+                .expect("stored enchantments")
+                .get_level(&vanilla_enchantments::UNBREAKING.key) as i32,
             level
         );
         assert_eq!(rng.next_i64(), next);
@@ -80,7 +82,9 @@ fn random_enchantment_consumes_choice_level_and_optional_trade_cost_only() {
             true,
         );
         assert_eq!(
-            item.get_enchantment_level(&vanilla_enchantments::UNBREAKING.key),
+            item.get_enchantments_for_crafting()
+                .expect("stored enchantments")
+                .get_level(&vanilla_enchantments::UNBREAKING.key) as i32,
             level
         );
         assert_eq!(
@@ -127,11 +131,11 @@ fn copy_state_requires_context_and_copies_the_requested_property() {
     let mut rng = random(0);
     let mut ctx = LootContext::new(&mut rng);
     ctx.tables = Some(&tables);
-    assert!(
-        !fixtures::COPY_STATE
+    assert_eq!(
+        fixtures::COPY_STATE
             .get_random_items(&mut ctx)
-            .expect("no state")[0]
-            .has(BLOCK_STATE)
+            .expect("no state")[0],
+        ItemStack::new(&vanilla_items::BEE_NEST)
     );
     ctx.block_state = Some(
         vanilla_blocks::BEE_NEST

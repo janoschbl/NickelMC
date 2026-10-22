@@ -37,6 +37,8 @@ pub enum ExplosionInteraction {
     Mob,
     /// A TNT explosion governed by `tnt_explosion_drop_decay`.
     Tnt,
+    /// Triggers blocks such as levers and doors instead of destroying them.
+    Trigger,
 }
 
 /// How an explosion interacts with blocks after its affected positions are calculated.
@@ -48,6 +50,8 @@ pub enum BlockInteraction {
     Destroy,
     /// Destroy affected blocks with the explosion radius in their loot context.
     DestroyWithDecay,
+    /// Trigger affected blocks without destroying them.
+    TriggerBlock,
 }
 
 impl BlockInteraction {
@@ -74,6 +78,8 @@ pub trait Explosion {
     fn radius(&self) -> f32;
     /// Returns the exact explosion center.
     fn center(&self) -> DVec3;
+    /// Returns whether this explosion may trigger blocks such as levers and doors.
+    fn can_trigger_blocks(&self) -> bool;
     /// Returns whether block-like entities may be affected.
     fn should_affect_blocklike_entities(&self) -> bool;
 }
@@ -430,6 +436,10 @@ impl World {
     /// Runs one explosion atomically on the game tick and sends its client effects.
     pub fn explode(self: &Arc<Self>, options: ExplosionOptions<'_>) -> ExplosionOutcome {
         let block_interaction = self.resolve_block_interaction(options.interaction);
+        let play_sound = options
+            .source
+            .as_ref()
+            .is_none_or(|source| !source.is_silent());
         let mut explosion = ServerExplosion::new(
             self,
             options.source,
@@ -459,6 +469,7 @@ impl World {
                     explosion_particle: explosion_particle.clone(),
                     explosion_sound: options.explosion_sound.clone(),
                     block_particles: options.block_particles.clone(),
+                    play_sound,
                 });
             }
             true
@@ -481,6 +492,7 @@ impl World {
                 }
             }
             ExplosionInteraction::Tnt => self.destroy_interaction(&TNT_EXPLOSION_DROP_DECAY),
+            ExplosionInteraction::Trigger => BlockInteraction::TriggerBlock,
         }
     }
 

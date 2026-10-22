@@ -18,5 +18,7 @@ Work in this fork builds on the SteelMC project and its contributors; see
 `git log` for the full author list. In addition, NickelMC carries commits
 from the following open upstream pull requests, with original authorship kept:
 
-(Filled in by the orchestrator as branches land; see the commit authors on each
-dev/feat-* branch.)
+JosepBove, SomeYellowGuy, NotGhoull, quaid-perkins (Quaddle), Purdze, Julien, coco875,
+teknostom, tangjuyo, AnthonyDuong1, kdcokenny (Kenny), NandoBF (nabattis), JunkyDeveloper,
+CuzImClicks, lazy-importer, brandnakash-code.
+(Taken from commit authors on the dev/feat-* branches; the git history is authoritative.)

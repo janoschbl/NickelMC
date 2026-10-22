@@ -183,6 +183,19 @@ pub trait LivingEntity: Entity {
         self.drain_dirty_living_equipment()
     }
 
+    /// Saves the shared living state used by mob persistence.
+    fn save_living(&self, nbt: &mut NbtCompound) {
+        nbt.insert("HurtTime", self.living_base().hurt_time() as i16);
+        self.save_equipment(nbt);
+    }
+
+    /// Loads shared living state, including spawn NBT.
+    fn load_living(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.living_base()
+            .set_hurt_time(nbt.short("HurtTime").unwrap_or(0));
+        self.load_equipment(nbt);
+    }
+
     /// Saves equipment slots to NBT.
     fn save_equipment(&self, nbt: &mut NbtCompound) {
         let mut equipment = NbtCompound::new();

@@ -65,6 +65,26 @@ use uuid::Uuid;
 const PLAYER_MAIN_HAND_METADATA_INDEX: u8 = 15;
 const PLAYER_MODEL_CUSTOMIZATION_METADATA_INDEX: u8 = 16;
 const BYTE_ENTITY_DATA_SERIALIZER_ID: i32 = 0;
+
+#[test]
+fn hurt_time_survives_player_restore_and_counts_down_in_shared_base_tick() {
+    let world_fixture = fresh_test_world("player_hurt_time_restore");
+    let world = &world_fixture.world;
+    let player = TestPlayerBuilder::new(Arc::clone(world), "Hurt", 1).build();
+    player.living_base().begin_hurt_animation();
+    let saved = PersistentPlayerData::from_player(&player);
+    let restored = TestPlayerBuilder::new(Arc::clone(world), "Restored", 2).build();
+    saved.apply_to_player(&restored);
+    assert_eq!(restored.hurt_time(), 10);
+    assert_eq!(restored.living_base().hurt_duration(), 0);
+
+    for remaining in (0..10).rev() {
+        restored.base_tick();
+        assert_eq!(restored.hurt_time(), remaining);
+    }
+    restored.base_tick();
+    assert_eq!(restored.hurt_time(), 0);
+}
 const HUMANOID_ARM_ENTITY_DATA_SERIALIZER_ID: i32 = 42;
 
 const MODEL_CUSTOMIZATION_WITH_HIGH_BIT_SET: u8 = 0xff;

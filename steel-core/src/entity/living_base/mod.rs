@@ -1542,6 +1542,11 @@ impl LivingEntityBase {
         self.state.lock().hurt_time
     }
 
+    /// Restores the saved hurt animation timer without restarting the animation.
+    pub fn set_hurt_time(&self, hurt_time: i16) {
+        self.state.lock().hurt_time = i32::from(hurt_time);
+    }
+
     /// Returns the current hurt duration.
     #[must_use]
     pub fn hurt_duration(&self) -> i32 {

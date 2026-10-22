@@ -159,31 +159,38 @@ fn nested_raw_output_is_modified_before_stack_normalization() {
     );
 }
 
+fn error_after_output(ctx: &mut LootContext<'_>, output: &mut LootOutput<'_>) -> LootResult<()> {
+    output(ctx, ItemStack::new(&vanilla_items::DIAMOND))?;
+    Err(LootError::MissingTable(Identifier::new_static(
+        "example", "missing",
+    )))
+}
+
 #[test]
-fn unsupported_operations_are_errors_only_when_executed() {
-    let tables = tables();
+fn failed_callables_release_table_visitation_and_do_not_publish_partial_output() {
+    let mut tables = tables();
+    tables.register(&fixtures::ERROR_AFTER_OUTPUT, error_after_output);
     let mut rng = random(12345);
     let mut ctx = LootContext::new(&mut rng);
     ctx.tables = Some(&tables);
-    let error = fixtures::UNSUPPORTED_AFTER_OUTPUT
+    let error = fixtures::ERROR_AFTER_OUTPUT
         .get_random_items(&mut ctx)
-        .expect_err("unsupported function");
-    assert!(
-        matches!(error,LootError::Unsupported{table:Some(key),operation:"minecraft:enchant_randomly"} if key == fixtures::UNSUPPORTED_AFTER_OUTPUT.key)
-    );
+        .expect_err("failing callable");
+    assert!(matches!(error, LootError::MissingTable(_)));
     assert_eq!(ctx.visited, []);
-    assert_eq!(generate(&fixtures::CONDITIONAL_UNSUPPORTED, 12345).len(), 1);
+    assert_eq!(generate(&fixtures::CONDITIONAL_MAP, 12345).len(), 1);
 }
 
 #[test]
 fn failed_generation_does_not_change_container_contents() {
-    let tables = tables();
+    let mut tables = tables();
+    tables.register(&fixtures::ERROR_AFTER_OUTPUT, error_after_output);
     let mut rng = random(12345);
     let mut ctx = LootContext::new(&mut rng);
     ctx.tables = Some(&tables);
     let mut container = SimpleContainer::new(3);
     container.set_item(1, ItemStack::new(&vanilla_items::STONE));
-    let result = fixtures::UNSUPPORTED_AFTER_OUTPUT.generate_for_container(&mut ctx);
+    let result = fixtures::ERROR_AFTER_OUTPUT.generate_for_container(&mut ctx);
     assert!(result.is_err());
     if let Ok(loot) = result {
         loot.fill(&mut container);
@@ -378,7 +385,9 @@ fn sheep_shearing_uses_color_and_sheared_predicates() {
 
 #[test]
 fn looting_uses_attacker_equipment_and_limits_the_final_count() {
-    use crate::entity::{LivingEntity, entities::PigEntity, entity_loot_ref};
+    use crate::entity::{
+        LivingEntity, entities::PigEntity, entity_loot_ref, living_loot_equipment,
+    };
     use glam::DVec3;
     use std::sync::Weak;
     use steel_registry::{equipment::EquipmentSlot, vanilla_entities};
@@ -400,12 +409,13 @@ fn looting_uses_attacker_equipment_and_limits_the_final_count() {
         .set(EquipmentSlot::Head, helmet);
     let mut tool = ItemStack::new(&vanilla_items::DIAMOND_SWORD);
     tool.set_enchantments(&[(vanilla_enchantments::LOOTING.key.clone(), 1)], false);
+    let equipment = living_loot_equipment(&attacker);
     for with_attacker in [false, true] {
         let mut rng = random(12345);
         let mut ctx = LootContext::new(&mut rng).with_tool(&tool);
         ctx.tables = Some(&tables);
         if with_attacker {
-            ctx = ctx.with_killer_entity(entity_loot_ref(&attacker));
+            ctx = ctx.with_killer_entity(entity_loot_ref(&attacker, Some(&equipment)));
         }
         assert_eq!(
             ctx.attacker_enchantment_level(&vanilla_enchantments::LOOTING.key),

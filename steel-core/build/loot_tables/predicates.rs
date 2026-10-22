@@ -35,20 +35,24 @@ impl Compiler {
         if let Some(predicates) = &predicate.predicates {
             let mut components = BTreeMap::new();
             if let Some(enchantments) = &predicates.enchantments {
-                // TODO: Require the enchantments component even for an empty list.
-                let checks = enchantments.iter().map(|enchantment| {
+                let mut checks = vec![
+                    quote! { item.has(steel_registry::data_components::vanilla_components::ENCHANTMENTS) },
+                ];
+                checks.extend(enchantments.iter().map(|enchantment| {
                     let key = &enchantment.enchantments;
                     let tag = key.starts_with('#');
                     let key = identifier(key.trim_start_matches('#'));
                     let min = enchantment.levels.as_ref().and_then(|levels| levels.min).unwrap_or(0);
                     let max = enchantment.levels.as_ref().and_then(|levels| levels.max).unwrap_or(i32::MAX);
                     quote! { crate::loot::predicates::item_enchantment_matches(item, &#key, #tag, #min, #max) }
-                }).collect::<Vec<_>>();
+                }));
                 components.insert("minecraft:enchantments", checks);
             }
             for key in predicates.presence.keys() {
-                // TODO: Distinguish registered typed component predicates from
-                // component-presence predicates and validate their component keys.
+                assert_eq!(
+                    key, "minecraft:map_id",
+                    "uncompiled extracted component predicate {key}"
+                );
                 let id = identifier(key);
                 components.insert(key.as_str(), vec![quote! { item.has_component(&#id) }]);
             }
@@ -82,12 +86,11 @@ impl Compiler {
                 );
             }
             for name in components.unsupported.keys() {
-                // TODO: Match other typed entity components through their entity
-                // capabilities, including frog variants used by extracted tables.
+                // Frog variants require the later mob-AI phase's entity capability.
                 let operation = format!("entity component {name}");
                 component_checks.insert(
                     name.as_str(),
-                    quote! { ctx.unsupported::<bool>(#operation)? },
+                    quote! { ctx.missing_entity_capability(#operation) },
                 );
             }
             checks.extend(component_checks.into_values());
@@ -129,17 +132,12 @@ impl Compiler {
                 "minecraft:type_specific/cube_mob",
                 predicate.cube_mob.is_some(),
             ),
-            (
-                "minecraft:type_specific/fishing_hook",
-                predicate.fishing_hook.is_some(),
-            ),
             ("minecraft:type_specific/raider", predicate.raider.is_some()),
         ] {
             if present {
-                // TODO: Decode and match cube-mob size, fishing-hook open-water,
-                // and raider raid/captain predicates through entity capabilities.
+                // CubeMob size and Raider captain capabilities belong to the later mob-AI phase.
                 let operation = format!("entity predicate {key}");
-                checks.push(quote! { ctx.unsupported::<bool>(#operation)? });
+                checks.push(quote! { ctx.missing_entity_capability(#operation) });
             }
         }
         if let Some(sheep) = &predicate.sheep {
@@ -148,16 +146,25 @@ impl Compiler {
                 |sheared| quote! { entity.sheep_sheared == Some(#sheared) },
             ));
         }
-        if predicate.vehicle.is_some() {
-            // TODO: Resolve the entity's actual vehicle and evaluate its predicate.
-            checks.push(quote! { ctx.unsupported::<bool>("entity predicate minecraft:vehicle")? });
+        if let Some(hook) = &predicate.fishing_hook
+            && let Some(expected) = hook.in_open_water
+        {
+            checks.push(quote! { entity.entity.and_then(|entity| entity.fishing_hook_open_water()) == Some(#expected) });
+        }
+        if let Some(vehicle) = &predicate.vehicle {
+            let predicate = Self::entity_predicate(vehicle);
+            checks.push(quote! {
+                entity.entity.and_then(|entity| entity.vehicle()).is_some_and(|vehicle| {
+                    let equipment = crate::entity::loot_equipment(vehicle.as_ref());
+                    let entity = crate::entity::entity_loot_ref(vehicle.as_ref(), equipment.as_ref());
+                    #predicate
+                })
+            });
         }
         Self::all(&checks)
     }
 
     pub(super) fn damage_source_predicate(predicate: &DamageSourcePredicate) -> TokenStream {
-        // TODO: Match vanilla's evaluation order: tags, direct entity, source
-        // entity, then is_direct.
         let mut checks = Vec::new();
         for tag in &predicate.tags {
             let key = identifier(tag.id.strip_prefix('#').unwrap_or(&tag.id));
@@ -167,24 +174,24 @@ impl Compiler {
                 quote! { !crate::loot::predicates::damage_has_tag(source, &#key) }
             });
         }
+        for (predicate, entity) in [
+            (
+                predicate.direct_entity.as_ref(),
+                quote! {ctx.direct_killer_entity},
+            ),
+            (predicate.source_entity.as_ref(), quote! {ctx.killer_entity}),
+        ] {
+            if let Some(predicate) = predicate {
+                let check = Self::entity_predicate(predicate);
+                checks.push(quote! { match #entity { Some(entity) => { let _ = &entity; #check }, None => false } });
+            }
+        }
         if let Some(value) = predicate.is_direct {
             checks.push(if value {
                 quote! { source.is_direct }
             } else {
                 quote! { !source.is_direct }
             });
-        }
-        for (predicate, entity) in [
-            (predicate.source_entity.as_ref(), quote! {ctx.killer_entity}),
-            (
-                predicate.direct_entity.as_ref(),
-                quote! {ctx.direct_killer_entity},
-            ),
-        ] {
-            if let Some(predicate) = predicate {
-                let check = Self::entity_predicate(predicate);
-                checks.push(quote! { match #entity { Some(entity) => { let _ = &entity; #check }, None => false } });
-            }
         }
         let checks = Self::all(&checks);
         quote! { match ctx.damage_source { Some(source) => { let _ = &source; #checks }, None => false } }

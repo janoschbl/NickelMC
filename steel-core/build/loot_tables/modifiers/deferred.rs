@@ -1,18 +1,21 @@
 use super::super::{
-    Compiler, TokenStream,
+    Compiler, TokenStream, ident,
     model::{
         CompileModifier, Condition, ContextFloatProvider, ContextIntProvider, Holder, HolderSet,
         StewEffect,
     },
+    quote,
 };
 use serde::Deserialize;
-use serde::de::IgnoredAny;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnchantRandomly {
-    #[serde(rename = "options")]
-    pub _options: Option<HolderSet>,
+    pub options: Option<HolderSet>,
+    #[serde(default = "super::super::model::yes")]
+    pub only_compatible: bool,
+    #[serde(default)]
+    pub include_additional_cost_component: bool,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -21,19 +24,20 @@ impl CompileModifier for EnchantRandomly {
         self.condition.as_ref()
     }
     fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Decode compatibility/additional-cost options and implement seeded
-        // enchantment selection, level rolls, and book conversion.
-        Compiler::unsupported_modifier("minecraft:enchant_randomly")
+        let options = enchantment_options(self.options.as_ref());
+        let compatible = self.only_compatible;
+        let additional = self.include_additional_cost_component;
+        quote! { crate::loot::modifiers::enchanting::enchant_randomly(ctx, item, #options, #compatible, #additional); }
     }
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnchantWithLevels {
-    #[serde(rename = "levels")]
-    pub _levels: Option<ContextIntProvider>,
-    #[serde(rename = "options")]
-    pub _options: Option<HolderSet>,
+    pub levels: ContextIntProvider,
+    pub options: Option<HolderSet>,
+    #[serde(default)]
+    pub include_additional_cost_component: bool,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -41,20 +45,42 @@ impl CompileModifier for EnchantWithLevels {
     fn condition(&self) -> Option<&Holder<Condition>> {
         self.condition.as_ref()
     }
-    fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Evaluate the level provider and implement vanilla enchanting with
-        // configured options, book conversion, and additional-cost handling.
-        Compiler::unsupported_modifier("minecraft:enchant_with_levels")
+    fn compile(&self, compiler: &mut Compiler) -> TokenStream {
+        let options = enchantment_options(self.options.as_ref());
+        let levels = compiler.int_provider(&self.levels);
+        let additional = self.include_additional_cost_component;
+        quote! {
+            let levels = #levels;
+            crate::loot::modifiers::enchanting::enchant_with_levels(ctx, item, levels, #options, #additional);
+        }
+    }
+}
+
+fn enchantment_options(options: Option<&HolderSet>) -> TokenStream {
+    match options {
+        None => {
+            quote! { (0..REGISTRY.enchantments.len()).filter_map(|id| REGISTRY.enchantments.by_id(id)).collect() }
+        }
+        Some(HolderSet::Single(key)) if key.starts_with('#') => {
+            let tag = super::super::identifier(&key[1..]);
+            quote! { REGISTRY.enchantments.get_tag(&#tag).unwrap_or_else(|| panic!("Missing extracted enchantment tag {}", #tag)) }
+        }
+        Some(HolderSet::Single(key)) => {
+            let key = ident(key);
+            quote! { vec![&steel_registry::vanilla_enchantments::#key] }
+        }
+        Some(HolderSet::List(keys)) => {
+            let keys = keys.iter().map(|key| ident(key));
+            quote! { vec![#(&steel_registry::vanilla_enchantments::#keys),*] }
+        }
     }
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CopyState {
-    #[serde(rename = "block")]
-    pub _block: Option<String>,
-    #[serde(rename = "properties")]
-    pub _properties: Option<Vec<String>>,
+    pub block: String,
+    pub properties: Vec<String>,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -63,17 +89,30 @@ impl CompileModifier for CopyState {
         self.condition.as_ref()
     }
     fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Copy the selected context block-state properties into the item's
-        // block_state component using the configured block's property definitions.
-        Compiler::unsupported_modifier("minecraft:copy_state")
+        let block = ident(&self.block);
+        let properties = &self.properties;
+        quote! {
+            if let Some(state) = ctx.block_state {
+                use steel_registry::data_components::vanilla_components::{BlockItemStateProperties, BLOCK_STATE};
+                let mut properties = item.get(BLOCK_STATE)
+                    .map(|value| value.properties().clone()).unwrap_or_default();
+                #(
+                    if steel_registry::vanilla_blocks::#block.default_state().get_property_str(#properties).is_some()
+                        && let Some(value) = state.get_property_str(#properties)
+                    {
+                        properties.insert(#properties.to_owned(), value.to_owned());
+                    }
+                )*
+                item.set(BLOCK_STATE, BlockItemStateProperties::new(properties));
+            }
+        }
     }
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetComponents {
-    #[serde(rename = "components")]
-    pub _components: Option<IgnoredAny>,
+    pub components: ComponentPatch,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -82,18 +121,43 @@ impl CompileModifier for SetComponents {
         self.condition.as_ref()
     }
     fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Decode typed component patches and apply them with item validation.
-        Compiler::unsupported_modifier("minecraft:set_components")
+        let Some(trim) = &self.components.trim else {
+            return quote! {};
+        };
+        let material = ident(&trim.material);
+        let pattern = ident(&trim.pattern);
+        quote! {
+            item.set(steel_registry::data_components::vanilla_components::TRIM,
+                steel_registry::data_components::vanilla_components::ArmorTrim::new(
+                    steel_registry::RegistryHolder::reference(&steel_registry::vanilla_trim_materials::#material),
+                    steel_registry::RegistryHolder::reference(&steel_registry::vanilla_trim_patterns::#pattern),
+                ));
+        }
     }
+}
+
+/// Typed component payloads present in extracted vanilla loot. New payloads must
+/// gain a typed compiler instead of being discarded or parsed during gameplay.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentPatch {
+    #[serde(rename = "minecraft:trim")]
+    pub trim: Option<Trim>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Trim {
+    pub material: String,
+    pub pattern: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetDamage {
-    #[serde(rename = "damage")]
-    pub _damage: Option<ContextFloatProvider>,
-    #[serde(default, rename = "add")]
-    pub _add: bool,
+    pub damage: ContextFloatProvider,
+    #[serde(default)]
+    pub add: bool,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -101,16 +165,28 @@ impl CompileModifier for SetDamage {
     fn condition(&self) -> Option<&Holder<Condition>> {
         self.condition.as_ref()
     }
-    fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Apply remaining-durability fractions with vanilla additive mode,
-        // clamping, rounding, and damageable-item checks.
-        Compiler::unsupported_modifier("minecraft:set_damage")
+    fn compile(&self, compiler: &mut Compiler) -> TokenStream {
+        let damage = compiler.float_provider(&self.damage);
+        let add = self.add;
+        quote! {
+            if item.is_damageable_item() {
+                let max_damage = item.get_max_damage();
+                let base = if #add { 1.0 - item.get_damage_value() as f32 / max_damage as f32 } else { 0.0 };
+                let fraction = 1.0 - (#damage + base).clamp(0.0, 1.0);
+                item.set_damage_value((fraction * max_damage as f32).floor() as i32);
+            } else {
+                log::warn!("Could not set damage of loot item {}", item.item.key);
+            }
+        }
     }
 }
 
+/// Exploration maps remain unsupported until loot generation can allocate saved
+/// map data, render its biome preview, and synchronously search for the nearest
+/// eligible structure.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ExplorationMap {
+pub struct ExplorationMapFunction {
     #[serde(rename = "destination")]
     pub _destination: Option<String>,
     #[serde(rename = "decoration")]
@@ -122,25 +198,23 @@ pub struct ExplorationMap {
     pub condition: Option<Holder<Condition>>,
 }
 
-impl CompileModifier for ExplorationMap {
+impl CompileModifier for ExplorationMapFunction {
     fn condition(&self) -> Option<&Holder<Condition>> {
         self.condition.as_ref()
     }
     fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Decode destination holder sets and search_radius; locate and claim
-        // structures from the loot origin, create saved map data, render its biome
-        // preview, and add the configured target decoration and zoom.
-        Compiler::unsupported_modifier("minecraft:exploration_map")
+        quote! {
+            log::error!("Cannot apply exploration_map: saved-map allocation, biome preview, and synchronous nearest-structure search are unavailable; leaving the stack unchanged");
+        }
     }
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetName {
-    #[serde(rename = "name")]
-    pub _name: Option<IgnoredAny>,
-    #[serde(rename = "target")]
-    pub _target: Option<String>,
+    pub name: Option<LootName>,
+    #[serde(default)]
+    pub target: NameTarget,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -149,17 +223,44 @@ impl CompileModifier for SetName {
         self.condition.as_ref()
     }
     fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Decode and resolve text against the selected context entity, then
-        // apply it to the configured item-name or custom-name component.
-        Compiler::unsupported_modifier("minecraft:set_name")
+        let Some(name) = &self.name else {
+            return quote! {};
+        };
+        let name = match name {
+            LootName::Plain(text) => {
+                quote! { text_components::TextComponent::plain(#text.to_owned()) }
+            }
+            LootName::Translated { translate } => quote! {
+                text_components::TextComponent::translated(text_components::translation::TranslatedMessage::new(#translate, None))
+            },
+        };
+        let target = match self.target {
+            NameTarget::ItemName => quote! { ITEM_NAME },
+            NameTarget::CustomName => quote! { CUSTOM_NAME },
+        };
+        quote! { item.set(steel_registry::data_components::vanilla_components::#target, #name); }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum LootName {
+    Plain(String),
+    Translated { translate: String },
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NameTarget {
+    #[default]
+    CustomName,
+    ItemName,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetPotion {
-    #[serde(rename = "id")]
-    pub _id: Option<String>,
+    pub id: String,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -168,17 +269,23 @@ impl CompileModifier for SetPotion {
         self.condition.as_ref()
     }
     fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Resolve the typed potion and update potion_contents while
-        // preserving its other fields.
-        Compiler::unsupported_modifier("minecraft:set_potion")
+        let potion = ident(&self.id);
+        quote! {
+            use steel_registry::data_components::{PotionContents, vanilla_components::POTION_CONTENTS};
+            let previous = item.get(POTION_CONTENTS).cloned().unwrap_or_default();
+            item.set(POTION_CONTENTS, PotionContents::new(
+                Some(steel_registry::RegistryReference::new(&steel_registry::vanilla_potions::#potion)),
+                previous.custom_color(), previous.custom_effects().to_vec(), previous.custom_name().map(str::to_owned),
+            ));
+        }
     }
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetStewEffect {
-    #[serde(rename = "effects")]
-    pub _effects: Option<Vec<StewEffect>>,
+    #[serde(default)]
+    pub effects: Vec<StewEffect>,
     pub condition: Option<Holder<Condition>>,
 }
 
@@ -186,9 +293,39 @@ impl CompileModifier for SetStewEffect {
     fn condition(&self) -> Option<&Holder<Condition>> {
         self.condition.as_ref()
     }
-    fn compile(&self, _compiler: &mut Compiler) -> TokenStream {
-        // TODO: Select a stew effect with the loot RNG, evaluate its duration with
-        // vanilla instant-effect units, and append it to suspicious-stew effects.
-        Compiler::unsupported_modifier("minecraft:set_stew_effect")
+    fn compile(&self, compiler: &mut Compiler) -> TokenStream {
+        let mut seen = std::collections::BTreeSet::new();
+        let arms = self
+            .effects
+            .iter()
+            .enumerate()
+            .map(|(index, effect)| {
+                assert!(
+                    seen.insert(&effect.effect),
+                    "Duplicate stew effect {}",
+                    effect.effect
+                );
+                let effect_name = ident(&effect.effect);
+                let duration = compiler.int_provider(&effect.duration);
+                quote! { #index => (&steel_registry::vanilla_mob_effects::#effect_name, #duration) }
+            })
+            .collect::<Vec<_>>();
+        let count = self.effects.len();
+        if count == 0 {
+            return quote! {};
+        }
+        quote! {
+            if item.is(&vanilla_items::SUSPICIOUS_STEW) {
+                use steel_registry::data_components::vanilla_components::{SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects, SuspiciousStewEffect};
+                let index = ctx.rng.next_i32_bounded(#count as i32) as usize;
+                let (effect, mut duration) = match index { #(#arms,)* _ => unreachable!("bounded stew effect index") };
+                if crate::behavior::MOB_EFFECT_BEHAVIORS.get_behavior(effect).as_instantaneous().is_none() {
+                    duration = duration.wrapping_mul(20);
+                }
+                let mut effects = item.get(SUSPICIOUS_STEW_EFFECTS).map(|value| value.effects().to_vec()).unwrap_or_default();
+                effects.push(SuspiciousStewEffect::new(effect, duration));
+                item.set(SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects::new(effects));
+            }
+        }
     }
 }

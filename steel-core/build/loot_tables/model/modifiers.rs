@@ -1,6 +1,6 @@
 pub use super::super::modifiers::{
     ApplyBonus, BinomialWithBonusCount, CopyComponents, CopyState, Discard, EnchantRandomly,
-    EnchantWithLevels, EnchantedCountIncrease, ExplorationMap, ExplosionDecay, Filtered,
+    EnchantWithLevels, EnchantedCountIncrease, ExplorationMapFunction, ExplosionDecay, Filtered,
     FurnaceSmelt, LimitCount, OreDrops, Sequence, SetComponents, SetCount, SetDamage,
     SetEnchantments, SetInstrument, SetName, SetOminousBottleAmplifier, SetPotion, SetStewEffect,
     UniformBonusCount,
@@ -98,7 +98,7 @@ pub enum ModifierFunction {
     #[serde(rename = "minecraft:set_damage")]
     SetDamage(SetDamage),
     #[serde(rename = "minecraft:exploration_map")]
-    ExplorationMap(ExplorationMap),
+    ExplorationMapFunction(ExplorationMapFunction),
     #[serde(rename = "minecraft:set_name")]
     SetName(SetName),
     #[serde(rename = "minecraft:set_potion")]
@@ -111,9 +111,8 @@ pub enum ModifierFunction {
 #[serde(deny_unknown_fields)]
 pub struct StewEffect {
     #[serde(rename = "type")]
-    _effect: String,
-    #[serde(rename = "duration")]
-    _duration: ContextIntProvider,
+    pub effect: String,
+    pub duration: ContextIntProvider,
 }
 
 #[enum_dispatch]

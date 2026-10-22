@@ -44,8 +44,6 @@ pub enum Condition {
     EntityProperties(EntityProperties),
     #[serde(rename = "minecraft:damage_source_properties")]
     DamageSourceProperties(DamageSourceProperties),
-    // Location evaluation is explicitly unsupported; its predicate payload is
-    // consumed without claiming to validate or implement that separate codec.
     #[serde(rename = "minecraft:location_check")]
     LocationCheck(LocationCheck),
 }

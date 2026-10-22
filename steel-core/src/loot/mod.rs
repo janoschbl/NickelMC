@@ -8,6 +8,7 @@ mod behavior_registry;
 mod container;
 mod context;
 mod entries;
+pub(crate) mod generation_guard;
 mod modifiers;
 mod output;
 mod predicates;
@@ -30,6 +31,9 @@ use steel_utils::Identifier;
 /// A recoverable failure evaluating a compiled loot operation.
 #[derive(Debug, thiserror::Error)]
 pub enum LootError {
+    /// Invalid component state supplied by a gameplay owner.
+    #[error("could not collect loot components: {0}")]
+    Components(#[from] std::io::Error),
     /// Container data changed during generation or another access is generating it.
     #[error("container loot generation conflicted with another access")]
     ContainerChanged,
@@ -62,5 +66,7 @@ pub type LootResult<T> = Result<T, LootError>;
 #[path = "generated/tables.rs"]
 mod vanilla;
 
+#[cfg(test)]
+mod modifier_tests;
 #[cfg(test)]
 mod tests;

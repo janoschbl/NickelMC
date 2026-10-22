@@ -9,6 +9,8 @@ use super::{LootContext, LootOutput, LootResult, LootTableRef, vanilla};
 pub type LootTableFunction = fn(&mut LootContext<'_>, &mut LootOutput<'_>) -> LootResult<()>;
 
 /// Maps table identities to compiled implementations. Build before sharing with contexts.
+/// Nested callbacks must reuse their LootContext/RNG. World-aware generation
+/// serializes across workers and rejects same-thread recursive generation with an error.
 pub struct LootTableBehaviorRegistry {
     pub(super) functions: FxHashMap<Identifier, LootTableFunction>,
 }

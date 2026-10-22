@@ -24,6 +24,11 @@ pub enum LootContextEntity {
 ///
 /// This mirrors vanilla's `LootContext` / `LootParams` system.
 pub struct LootContext<'a> {
+    /// Owner-provided dynamic drops, such as a decorated pot's stored sherds.
+    /// DecoratedPotBlockEntity is not implemented; callers must not invent its data.
+    pub dynamic_drops: Option<&'a dyn Fn(&Identifier) -> LootResult<Vec<ItemStack>>>,
+    /// Presence of vanilla ADDITIONAL_COST_COMPONENT_ALLOWED, used by trade loot.
+    pub additional_cost_component_allowed: bool,
     /// World access for compiled gameplay operations.
     pub world: Option<&'a World>,
     /// Random number generator.
@@ -121,6 +126,7 @@ pub type EntityEquipmentSlots = [ItemStack; EquipmentSlot::ALL.len()];
 pub struct EntityEquipmentRef<'a>(&'a EntityEquipmentSlots);
 
 impl<'a> EntityEquipmentRef<'a> {
+    /// Borrows a complete equipment snapshot without acquiring live inventory locks.
     #[must_use]
     pub const fn new(slots: &'a EntityEquipmentSlots) -> Self {
         Self(slots)
@@ -165,6 +171,8 @@ impl<'a> LootContext<'a> {
     /// Create a new loot context with just an RNG.
     pub const fn new(rng: &'a mut RandomSource) -> Self {
         Self {
+            dynamic_drops: None,
+            additional_cost_component_allowed: false,
             world: None,
             rng,
             visited: Vec::new(),
@@ -330,6 +338,36 @@ impl<'a> LootContext<'a> {
 }
 
 impl LootContext<'_> {
+    /// Emits only drops supplied by the owning block/entity capability.
+    pub fn emit_dynamic(
+        &mut self,
+        key: &Identifier,
+        output: &mut super::LootOutput<'_>,
+    ) -> LootResult<()> {
+        let Some(provider) = self.dynamic_drops else {
+            log::error!(
+                "Loot table {:?} cannot emit dynamic drop {key}: owner capability is unavailable",
+                self.visited.last()
+            );
+            return self.unsupported("missing dynamic drop capability");
+        };
+        for item in provider(key)? {
+            output(self, item)?;
+        }
+        Ok(())
+    }
+
+    /// Rejects predicates needing the later mob-AI phase's CubeMob size, Raider
+    /// captain, or Frog variant capabilities. Never substitutes registry type IDs
+    /// or fabricated state for those missing class capabilities.
+    pub fn missing_entity_capability(&self, operation: &'static str) -> bool {
+        log::error!(
+            "Loot table {:?} cannot match {operation}: required entity capability is unavailable",
+            self.visited.last()
+        );
+        false
+    }
+
     /// Fails an unsupported operation with the currently evaluating table.
     pub fn unsupported<T>(&self, operation: &'static str) -> LootResult<T> {
         Err(LootError::Unsupported {
@@ -341,6 +379,9 @@ impl LootContext<'_> {
     /// Enchantment level over the attacking living entity's applicable equipment slots.
     #[must_use]
     pub fn attacker_enchantment_level(&self, key: &Identifier) -> i32 {
+        if let Some(equipment) = self.killer_entity.and_then(|entity| entity.equipment) {
+            return equipment.get_enchantment_level(key);
+        }
         let Some(entity) = self
             .killer_entity
             .and_then(|entity| entity.entity)

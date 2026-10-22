@@ -1450,6 +1450,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         try_as_dyn::<Self, dyn Projectile>(self)
     }
 
+    /// Returns the open-water fishing state when this entity has hook behavior.
+    fn fishing_hook_open_water(&self) -> Option<bool> {
+        None
+    }
+
     /// Returns this entity's container-user capability.
     fn as_container_user(&self) -> Option<&dyn super::ContainerUser> {
         try_as_dyn::<Self, dyn super::ContainerUser>(self)

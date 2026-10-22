@@ -15,8 +15,8 @@ pub use components::{CopyComponents, SetEnchantments, SetInstrument};
 pub use control::{Discard, ExplosionDecay, Filtered, FurnaceSmelt, Sequence};
 pub use count::{EnchantedCountIncrease, LimitCount, SetCount, SetOminousBottleAmplifier};
 pub use deferred::{
-    CopyState, EnchantRandomly, EnchantWithLevels, ExplorationMap, SetComponents, SetDamage,
-    SetName, SetPotion, SetStewEffect,
+    CopyState, EnchantRandomly, EnchantWithLevels, ExplorationMapFunction, SetComponents,
+    SetDamage, SetName, SetPotion, SetStewEffect,
 };
 
 impl Compiler {
@@ -60,9 +60,5 @@ impl Compiler {
         } else {
             body
         }
-    }
-
-    fn unsupported_modifier(operation: &str) -> TokenStream {
-        quote! { ctx.unsupported::<()>(#operation)?; }
     }
 }

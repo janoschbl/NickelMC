@@ -46,11 +46,13 @@ pub(super) fn equipment_matches(
     slot: EquipmentSlot,
     predicate: impl Fn(&ItemStack) -> bool,
 ) -> bool {
+    if let Some(equipment) = entity.equipment {
+        return predicate(equipment.get(slot));
+    }
     if let Some(living) = entity.entity.and_then(Entity::as_living_entity) {
         let mut matches = false;
         living.with_equipment_slot(slot, &mut |item| matches = predicate(item));
         return matches;
     }
-    let item = entity.equipment.map(|equipment| equipment.get(slot));
-    item.is_some_and(predicate)
+    false
 }

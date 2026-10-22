@@ -54,24 +54,16 @@ pub struct EntityPredicate {
     pub components: Option<EntityComponents>,
     #[serde(rename = "minecraft:type_specific/sheep")]
     pub sheep: Option<SheepPredicate>,
-    #[serde(
-        default,
-        rename = "minecraft:vehicle",
-        deserialize_with = "deferred_predicate"
-    )]
-    pub vehicle: Option<IgnoredAny>,
+    #[serde(rename = "minecraft:vehicle")]
+    pub vehicle: Option<Box<EntityPredicate>>,
     #[serde(
         default,
         rename = "minecraft:type_specific/cube_mob",
         deserialize_with = "deferred_predicate"
     )]
     pub cube_mob: Option<IgnoredAny>,
-    #[serde(
-        default,
-        rename = "minecraft:type_specific/fishing_hook",
-        deserialize_with = "deferred_predicate"
-    )]
-    pub fishing_hook: Option<IgnoredAny>,
+    #[serde(rename = "minecraft:type_specific/fishing_hook")]
+    pub fishing_hook: Option<FishingHookPredicate>,
     #[serde(
         default,
         rename = "minecraft:type_specific/raider",
@@ -122,8 +114,8 @@ pub struct EntityComponents {
     pub sheep_color: Option<String>,
     #[serde(rename = "minecraft:chicken/variant")]
     pub chicken_variant: Option<String>,
-    // Component payloads without a supported entity capability remain explicit
-    // runtime errors, including dynamically named component types.
+    // Missing entity capabilities are logged and never match, including
+    // dynamically named component types.
     #[expect(
         clippy::zero_sized_map_values,
         reason = "deferred component payloads are discarded but their object keys must be retained for errors"
@@ -136,6 +128,12 @@ pub struct EntityComponents {
 #[serde(deny_unknown_fields)]
 pub struct SheepPredicate {
     pub sheared: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FishingHookPredicate {
+    pub in_open_water: Option<bool>,
 }
 
 #[derive(Deserialize)]

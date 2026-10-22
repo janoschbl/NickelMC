@@ -1,31 +1,11 @@
 //! Shared operations used by compiled item modifier functions.
+pub(crate) mod enchanting;
 use steel_registry::recipe::{SingleItemRecipeInput, vanilla_recipe_types};
-use steel_registry::{
-    REGISTRY, data_components::vanilla_components::CUSTOM_NAME, item_stack::ItemStack,
-};
+use steel_registry::{REGISTRY, item_stack::ItemStack};
 use steel_utils::{
     Identifier,
     random::{Random, RandomSource},
 };
-
-/// The supported custom-name projection of a block entity's collected components.
-pub(super) fn copy_block_entity_name(
-    ctx: &super::LootContext<'_>,
-    item: &mut ItemStack,
-) -> super::LootResult<()> {
-    let Some(block_entity) = ctx.block_entity else {
-        return Ok(());
-    };
-    // TODO: Use collected block-entity components for custom-name copying,
-    // including entities without Nameable and absent-name no-op behavior.
-    let Some(nameable) = block_entity.as_nameable() else {
-        return ctx.unsupported("copy_components/block_entity custom name");
-    };
-    if let Some(name) = nameable.custom_name() {
-        item.set(CUSTOM_NAME, name);
-    }
-    Ok(())
-}
 
 pub(super) fn set_enchantment(item: &mut ItemStack, key: Identifier, level: i32, add: bool) {
     let Some(enchantments) = item.get_enchantments_for_crafting() else {

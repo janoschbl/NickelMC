@@ -53,7 +53,7 @@ impl CompileModifier for SetInstrument {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetEnchantments {
-    // TODO: Default an omitted enchantments map to an empty map, as vanilla does.
+    #[serde(default)]
     pub enchantments: BTreeMap<String, ContextIntProvider>,
     #[serde(default)]
     pub add: bool,
@@ -82,6 +82,8 @@ impl CompileModifier for SetEnchantments {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+/// Banner patterns and pot decorations require their absent block-entity owners.
+/// Missing owners are logged; no pattern, decoration or type-ID guesses are used.
 pub struct CopyComponents {
     pub source: String,
     pub include: Option<Vec<String>>,
@@ -100,21 +102,42 @@ impl CompileModifier for CopyComponents {
             exclude,
             ..
         } = self;
-        let only_name = include
-            .as_ref()
-            .is_some_and(|values| values.iter().all(|value| value == "minecraft:custom_name"));
-        if source != "block_entity" || !only_name {
-            // TODO: Collect and copy all supported source components with vanilla
-            // include/exclude filtering, including decorated-pot decorations.
-            Compiler::unsupported_modifier("minecraft:copy_components")
-        } else if include.as_ref().is_some_and(Vec::is_empty)
-            || exclude
-                .as_ref()
-                .is_some_and(|values| values.iter().any(|value| value == "minecraft:custom_name"))
-        {
-            quote! {}
+        assert_eq!(
+            source, "block_entity",
+            "unhandled extracted component source"
+        );
+        let included = if let Some(include) = include {
+            let keys = include.iter().map(|key| identifier(key));
+            quote! { false #(|| key == &#keys)* }
         } else {
-            quote! { crate::loot::modifiers::copy_block_entity_name(ctx, item)?; }
+            quote! { true }
+        };
+        let mut checks = vec![included];
+        checks.extend(exclude.iter().flatten().map(|key| {
+            let key = identifier(key);
+            quote! { key != &#key }
+        }));
+        let included = Compiler::all(&checks);
+        let needs_deferred_owner = include.as_ref().is_some_and(|keys| {
+            keys.iter()
+                .any(|key| key == "minecraft:banner_patterns" || key == "minecraft:pot_decorations")
+        });
+        quote! {
+            if #needs_deferred_owner && ctx.block_entity.is_none() {
+                log::error!("Cannot copy banner/pot loot components: the required block-entity foundation is unavailable");
+            }
+            if let Some(block_entity) = ctx.block_entity {
+                use crate::block_entity::BlockEntityLifecycleExt as _;
+                let components = block_entity.collect_components()?;
+                let mut patch = item.patch().clone();
+                for (key, value) in components.iter() {
+                    let included = #included;
+                    if included {
+                        assert!(patch.set_raw(key.clone(), value.clone()), "collected component must retain its registered type");
+                    }
+                }
+                *item = ItemStack::with_count_and_patch(item.item(), item.count(), patch);
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 use steel_registry::{blocks::block_state_ext::BlockStateExt, fluid::FluidStateExt};
-use steel_utils::{BlockPos, Downcast};
+use steel_utils::{BlockPos, Downcast, TICKS_PER_SECOND};
 
 use crate::{
     entity::{
@@ -90,7 +90,7 @@ impl Goal for SquidFleeGoal {
                 flee_to.y = 0.0;
             }
 
-            squid.set_movement_vector(flee_to / 20.0);
+            squid.set_movement_vector(flee_to / f64::from(TICKS_PER_SECOND));
         }
     }
 }

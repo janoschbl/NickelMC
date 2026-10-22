@@ -6,7 +6,7 @@ use std::{
 use glam::DVec3;
 use simdnbt::{borrow, owned};
 use steel_macros::entity_behavior;
-use steel_math::vector;
+use steel_math::{angle::DEGREE_90, vector};
 use steel_registry::{
     entity_data::{EntityPose, ParticleData},
     entity_type::{EntityAttachments, EntityDimensions, EntityTypeRef},
@@ -54,6 +54,8 @@ const SQUID_AIR_DRAG: f32 = 0.98;
 const SQUID_GRAVITY: f64 = 0.08;
 const SQUID_SOUND_VOLUME: f32 = 0.4;
 const INK_PARTICLE_COUNT: u32 = 30;
+const ADULT_POSITION_SCALE: f32 = 0.3;
+const BABY_POSITION_SCALE: f32 = 0.1;
 /// Const version of Vanilla `AgeableWaterCreature.getAmbientSoundInterval` function.
 const SQUID_AMBIENT_SOUND_INTERVAL: i32 = 120;
 
@@ -145,9 +147,9 @@ impl SquidEntity {
         let particle_position = position + DVec3::new(0.0, 0.5, 0.0);
         let particle = ParticleData::simple(&vanilla_particle_types::SQUID_INK);
         let position_scale = if AgeableMob::is_baby(self) {
-            0.1_f32
+            BABY_POSITION_SCALE
         } else {
-            0.3_f32
+            ADULT_POSITION_SCALE
         };
 
         for _ in 0..INK_PARTICLE_COUNT {
@@ -247,7 +249,7 @@ impl SquidEntity {
             state.x_body_rot +=
                 (-(horizontal.atan2(movement.y) as f32).to_degrees() - state.x_body_rot) * 0.1;
         } else {
-            state.x_body_rot += (-90.0 - state.x_body_rot) * 0.02;
+            state.x_body_rot += (-DEGREE_90 - state.x_body_rot) * 0.02;
         }
     }
 

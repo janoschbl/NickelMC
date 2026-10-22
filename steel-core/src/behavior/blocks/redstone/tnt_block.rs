@@ -8,12 +8,13 @@ use steel_protocol::packets::game::SoundSource;
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::blocks::properties::BlockStateProperties;
+use steel_registry::item_stack::ItemStack;
 use steel_registry::stat::vanilla_stat_types;
 use steel_registry::vanilla_game_rules::TNT_EXPLODES;
 use steel_registry::{
     sound_events, vanilla_blocks, vanilla_entities, vanilla_game_events, vanilla_items,
 };
-use steel_utils::types::{InteractionHand, UpdateFlags};
+use steel_utils::types::{GameType, InteractionHand, UpdateFlags};
 use steel_utils::{BlockPos, BlockStateId, translations};
 use text_components::TextComponent;
 
@@ -23,6 +24,7 @@ use crate::behavior::{
 use crate::entity::projectile::Projectile;
 use crate::entity::{Entity, entities::PrimedTntEntity, next_entity_id};
 use crate::player::Player;
+use crate::player::game_mode::adventure_mode;
 use crate::world::game_event::GameEventContext;
 use crate::world::{ClipHitResult, Explosion, SignalGetter as _, World};
 
@@ -59,7 +61,31 @@ impl TntBlock {
     /// This is crate-visible so shared fire burn ticking can call the same entry point when that
     /// foundation is implemented.
     pub(crate) fn prime(world: &Arc<World>, pos: BlockPos, owner: Option<&dyn Entity>) -> bool {
-        if !world.get_game_rule(&TNT_EXPLODES) {
+        Self::prime_unless_denied(world, pos, owner, false)
+    }
+
+    /// Whether an adventure-mode player's `tool` lacks the `can_break` permission for `pos`.
+    ///
+    /// Vanilla's `TntBlock.prime` applies this gate to the item that ignites or launches the fire.
+    fn adventure_mode_denies_priming(
+        world: &World,
+        pos: BlockPos,
+        source: Option<&dyn Entity>,
+        tool: &ItemStack,
+    ) -> bool {
+        source.and_then(Entity::as_player).is_some_and(|player| {
+            player.game_mode() == GameType::Adventure
+                && !adventure_mode::can_break(tool, world, pos)
+        })
+    }
+
+    fn prime_unless_denied(
+        world: &Arc<World>,
+        pos: BlockPos,
+        owner: Option<&dyn Entity>,
+        denied_in_adventure_mode: bool,
+    ) -> bool {
+        if !world.get_game_rule(&TNT_EXPLODES) || denied_in_adventure_mode {
             return false;
         }
 
@@ -167,17 +193,19 @@ impl BlockBehavior for TntBlock {
         _hit_result: &BlockHitResult,
         inv: &mut InventoryAccess,
     ) -> InteractionResult {
-        let (is_flint_and_steel, is_fire_charge) = inv.with_item(|item| {
-            (
-                item.is(&vanilla_items::FLINT_AND_STEEL),
-                item.is(&vanilla_items::FIRE_CHARGE),
-            )
-        });
+        let (is_flint_and_steel, is_fire_charge, denied_in_adventure_mode) =
+            inv.with_item(|item| {
+                (
+                    item.is(&vanilla_items::FLINT_AND_STEEL),
+                    item.is(&vanilla_items::FIRE_CHARGE),
+                    Self::adventure_mode_denies_priming(world, pos, Some(player), item),
+                )
+            });
         if !is_flint_and_steel && !is_fire_charge {
             return InteractionResult::TryEmptyHandInteraction;
         }
 
-        if !Self::prime(world, pos, Some(player)) {
+        if !Self::prime_unless_denied(world, pos, Some(player), denied_in_adventure_mode) {
             if !world.get_game_rule(&TNT_EXPLODES) {
                 Self::send_disabled_message(player);
                 return InteractionResult::Pass;
@@ -217,7 +245,14 @@ impl BlockBehavior for TntBlock {
 
         let owner = projectile.get_owner();
         let living_owner = owner.as_deref().filter(|owner| owner.is_living_entity());
-        if Self::prime(world, hit.block_pos, living_owner) {
+        // TODO: Pass `AbstractArrow.getPickupItemStackOrigin` once arrows exist.
+        let denied_in_adventure_mode = Self::adventure_mode_denies_priming(
+            world,
+            hit.block_pos,
+            living_owner,
+            &ItemStack::empty(),
+        );
+        if Self::prime_unless_denied(world, hit.block_pos, living_owner, denied_in_adventure_mode) {
             world.remove_block(hit.block_pos, false);
         }
     }

@@ -40,6 +40,16 @@ pub(crate) struct ContainerProperties {
 }
 
 impl ContainerProperties {
+    pub(crate) fn collect_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) {
+        let properties = self.properties.read();
+        components.set(CUSTOM_NAME, properties.name.clone());
+        if properties.lock != LockCode::NO_LOCK {
+            components.set(LOCK, Some(properties.lock.clone()));
+        }
+    }
     pub(crate) fn load(&self, nbt: &BaseNbtCompound<'_>) {
         let nbt: BorrowedNbtCompound<'_, '_> = nbt.into();
         let name = nbt.get("CustomName").and_then(|tag| {

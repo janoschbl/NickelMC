@@ -94,6 +94,20 @@ impl SkullBlockEntity {
 }
 
 impl BlockEntity for SkullBlockEntity {
+    fn collect_implicit_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) -> std::io::Result<()> {
+        use steel_registry::data_components::vanilla_components::{
+            CUSTOM_NAME, NOTE_BLOCK_SOUND, PROFILE,
+        };
+        let state = self.state.lock();
+        components.set(CUSTOM_NAME, state.custom_name.clone());
+        components.set(NOTE_BLOCK_SOUND, state.note_block_sound.clone());
+        components.set(PROFILE, state.owner.clone());
+        Ok(())
+    }
+
     fn base(&self) -> &BlockEntityBase {
         &self.base
     }

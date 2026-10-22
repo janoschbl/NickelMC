@@ -339,6 +339,7 @@ impl EntityEquipment for PlayerInventory {
     fn set(&mut self, slot: EquipmentSlot, stack: ItemStack) -> ItemStack {
         let inventory_index = self.equipment_slot_index(slot);
         let old = mem::replace(&mut self.items[inventory_index], stack);
+        self.bump_hand_write_generation(slot);
         Container::set_changed(self);
         old
     }
@@ -347,6 +348,7 @@ impl EntityEquipment for PlayerInventory {
         let inventory_index = self.equipment_slot_index(slot);
         let old = mem::take(&mut self.items[inventory_index]);
         if !old.is_empty() {
+            self.bump_hand_write_generation(slot);
             Container::set_changed(self);
         }
         old

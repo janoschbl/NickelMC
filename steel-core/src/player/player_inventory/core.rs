@@ -2,7 +2,7 @@ use std::{array, ops::Range};
 
 use simdnbt::owned::{NbtList, NbtTag};
 use steel_registry::{enchantment_effect::EnchantmentEffectComponent, item_stack::ItemStack};
-use steel_utils::{DowncastType, DowncastTypeKey};
+use steel_utils::{DowncastType, DowncastTypeKey, types::InteractionHand};
 
 use crate::inventory::{
     container::Container,
@@ -22,6 +22,8 @@ pub struct PlayerInventory {
     pub(super) selected: u8,
     /// Counter incremented on every change.
     pub(super) times_changed: u32,
+    /// Per-hand generation used to detect hand-slot writes
+    pub(super) hand_write_generation: [u32; 2],
 }
 
 impl Default for PlayerInventory {
@@ -72,6 +74,7 @@ impl PlayerInventory {
             items: array::from_fn(|_| ItemStack::empty()),
             selected: 0,
             times_changed: 0,
+            hand_write_generation: [0; 2],
         }
     }
 
@@ -85,6 +88,7 @@ impl PlayerInventory {
             }),
             selected: self.selected,
             times_changed: 0,
+            hand_write_generation: [0; 2],
         }
     }
 
@@ -191,6 +195,22 @@ impl PlayerInventory {
         let _ = EntityEquipment::set(self, EquipmentSlot::OffHand, item);
     }
 
+    /// Returns a counter that changes whenever the stack in `hand` is written or replaced.
+    #[must_use]
+    pub(in crate::player) const fn hand_write_generation(&self, hand: InteractionHand) -> u32 {
+        self.hand_write_generation[hand as usize]
+    }
+
+    pub(super) const fn bump_hand_write_generation(&mut self, slot: EquipmentSlot) {
+        let hand = match slot {
+            EquipmentSlot::MainHand => InteractionHand::MainHand,
+            EquipmentSlot::OffHand => InteractionHand::OffHand,
+            _ => return,
+        };
+        self.hand_write_generation[hand as usize] =
+            self.hand_write_generation[hand as usize].wrapping_add(1);
+    }
+
     /// Executes a function with a mutable reference to the currently selected item.
     pub fn with_selected_item_mut<R>(&mut self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
         self.with_equipment_item_mut(EquipmentSlot::MainHand, f)
@@ -201,7 +221,12 @@ impl PlayerInventory {
         slot: EquipmentSlot,
         f: impl FnOnce(&mut ItemStack) -> R,
     ) -> R {
-        self.with_item_mut(self.equipment_slot_index(slot), f)
+        let hand_changes_before = self.times_changed;
+        let result = self.with_item_mut(self.equipment_slot_index(slot), f);
+        if self.times_changed != hand_changes_before {
+            self.bump_hand_write_generation(slot);
+        }
+        result
     }
 
     pub(crate) fn with_item_mut<R>(

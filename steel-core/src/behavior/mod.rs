@@ -78,7 +78,9 @@ pub use context::{
 };
 pub use fluid::{FLUID_BEHAVIORS, FluidBehaviorRegistry};
 pub(crate) use item::apply_use_remainder;
-pub use item::{ItemBehavior, ItemBehaviorRegistry, ItemUseAnimation, SignApplicator};
+pub use item::{
+    FinishUseResult, ItemBehavior, ItemBehaviorRegistry, ItemUseAnimation, SignApplicator,
+};
 use item_behaviors::register_item_behaviors;
 pub use items::{
     BlockItem, BucketItem, DefaultItemBehavior, DoubleHighBlockItem, EnderEyeItem, HangingSignItem,

@@ -671,3 +671,5 @@ fn destructive_explosion_removes_stone_and_spawns_its_loot() {
             .is_some_and(|item| item.get_item().is(&vanilla_items::COBBLESTONE))
     }));
 }
+
+mod parity;

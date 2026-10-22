@@ -19,6 +19,7 @@ use crate::test_support::{fresh_test_world, insert_ready_full_chunk};
 use crate::world::explosion::default_block_explosion_resistance;
 use crate::world::{BlockInteraction, DefaultExplosionDamageCalculator};
 
+mod creeper;
 mod gameplay;
 
 const FIXED_RANDOM_SAMPLE: f32 = 0.5;

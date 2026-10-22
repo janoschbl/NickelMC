@@ -9,6 +9,7 @@ use steel_registry::blocks::{
     block_state_ext::BlockStateExt,
     properties::{BlockStateProperties, Direction},
 };
+use steel_registry::fluid::{FluidState, FluidStateExt as _};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::item::BlockHitResult;
 use steel_registry::{sound_events, vanilla_blocks, vanilla_game_events, vanilla_items};
@@ -21,22 +22,52 @@ use crate::entity::dismount_helper;
 use crate::{
     behavior::blocks::redstone::MAX_REDSTONE_SIGNAL,
     behavior::{BlockBehavior, BlockPlaceContext, InteractionResult, InventoryAccess},
-    entity::Entity,
+    entity::{Entity, damage::DamageSource},
     level_data::RespawnData,
     player::{Player, PlayerRespawnConfig},
-    world::{LevelReader, World, game_event::GameEventContext},
+    world::{
+        LevelReader, World,
+        explosion::{
+            DefaultExplosionDamageCalculator, Explosion, ExplosionDamageCalculator,
+            ExplosionInteraction, ExplosionOptions,
+        },
+        game_event::GameEventContext,
+    },
 };
 
 /// Vanilla respawn anchor
 ///
-/// TODO: Implement vanilla invalid-dimension explosion once Steel has a strict
-/// `World::explode` foundation, including block removal, water-sensitive
-/// explosion resistance, and bad-respawn-point explosion damage source.
 #[block_behavior]
 pub struct RespawnAnchorBlock {
     block: BlockRef,
 }
 const CHARGES: &IntProperty = &BlockStateProperties::RESPAWN_ANCHOR_CHARGES;
+const EXPLOSION_RADIUS: f32 = 5.0;
+const MINIMUM_FLOWING_WATER_AMOUNT: u8 = 2;
+
+/// Gives a flooded anchor water's explosion resistance at its own position.
+struct FloodedAnchorDamageCalculator {
+    pos: BlockPos,
+    in_water: bool,
+}
+
+impl ExplosionDamageCalculator for FloodedAnchorDamageCalculator {
+    fn block_explosion_resistance(
+        &self,
+        explosion: &dyn Explosion,
+        world: &World,
+        pos: BlockPos,
+        state: BlockStateId,
+        fluid: FluidState,
+    ) -> Option<f32> {
+        if pos == self.pos && self.in_water {
+            return Some(vanilla_blocks::WATER.config.explosion_resistance);
+        }
+        DefaultExplosionDamageCalculator
+            .block_explosion_resistance(explosion, world, pos, state, fluid)
+    }
+}
+
 impl RespawnAnchorBlock {
     const MAX_CHARGES: u8 = 4;
 
@@ -61,6 +92,45 @@ impl RespawnAnchorBlock {
     #[must_use]
     pub(crate) const fn can_set_spawn(world: &World, _pos: BlockPos) -> bool {
         world.dimension_type.respawn_anchor_works
+    }
+
+    fn is_water_that_would_flow(world: &World, pos: BlockPos) -> bool {
+        let fluid = world.get_block_state(pos).get_fluid_state();
+        if !fluid.is_water() {
+            return false;
+        }
+        if fluid.is_source() {
+            return true;
+        }
+        if fluid.amount < MINIMUM_FLOWING_WATER_AMOUNT {
+            return false;
+        }
+        !world
+            .get_block_state(pos.below())
+            .get_fluid_state()
+            .is_water()
+    }
+
+    /// Vanilla `RespawnAnchorBlock.explode`: removes the anchor and explodes.
+    fn explode(world: &Arc<World>, pos: BlockPos) {
+        world.remove_block(pos, false);
+        let in_water = Direction::HORIZONTAL
+            .iter()
+            .any(|direction| Self::is_water_that_would_flow(world, direction.relative(pos)))
+            || world
+                .get_block_state(pos.above())
+                .get_fluid_state()
+                .is_water();
+        let calculator = FloodedAnchorDamageCalculator { pos, in_water };
+
+        let (x, y, z) = pos.get_center();
+        let center = DVec3::new(x, y, z);
+        let mut options =
+            ExplosionOptions::new(center, EXPLOSION_RADIUS, ExplosionInteraction::Block);
+        options.damage_source = Some(DamageSource::bad_respawn_point_explosion(center));
+        options.damage_calculator = Some(&calculator);
+        options.fire = true;
+        world.explode(options);
     }
 
     pub(crate) fn find_standup_position(
@@ -229,8 +299,7 @@ impl BlockBehavior for RespawnAnchorBlock {
         }
 
         if !Self::can_set_spawn(world, pos) {
-            // TODO: Once `World::explode` exist remove the anchor and use the
-            // watersensitive bad respawn point explosion behavior
+            Self::explode(world, pos);
             return InteractionResult::SuccessServer;
         }
 

@@ -60,6 +60,10 @@ pub trait LivingEntity: Entity {
         self.living_base().tick_swing_state();
         self.entity_base_tick();
         self.tick_living_environmental_damage();
+        self.living_base().decrement_hurt_time();
+        self.living_base().tick_last_hurt_by_player_memory();
+        self.living_base()
+            .tick_living_combat_memory(self.tick_count());
     }
 
     /// Returns vanilla arm-swing animation state.
@@ -674,11 +678,7 @@ pub trait LivingEntity: Entity {
         self.default_hurt_server(world, source, amount)
     }
 
-    /// Runs the base `LivingEntity.hurtServer` body.
-    ///
-    /// Overrides of [`Self::hurt_server`] call this where vanilla calls
-    /// `super.hurtServer`; the Ender Dragon routes its per-part damage scaling
-    /// through here.
+    /// Runs the base `LivingEntity.hurtServer` body, for overrides that call `super.hurtServer`.
     fn default_hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
         if self.is_invulnerable_to(world, source) {
             return false;
@@ -1992,13 +1992,8 @@ pub trait LivingEntity: Entity {
     /// The default `Entity::tick` dispatches living entities here.
     fn tick_living_entity(&self, entity: &SharedEntity) {
         self.default_tick();
-        self.living_base().decrement_hurt_time();
         self.living_base().decrement_invulnerable_time();
 
-        // Vanilla runs `tickDeath` from `baseTick`, before `tickEffects`, and keeps
-        // running `aiStep` from `tick` gated only on `isRemoved`. What stops while
-        // dying is the AI: `isImmobile` returns `isDeadOrDying`, so `aiStep` skips
-        // `serverAiStep`. Death animations depend on still being moved.
         if self.is_dead_or_dying() {
             self.tick_death();
         }
@@ -2022,9 +2017,6 @@ pub trait LivingEntity: Entity {
             .tick_fall_flying_state(self.is_fall_flying());
         self.refresh_dirty_attributes();
         self.living_base().tick_post_impulse_grace_time();
-        self.living_base().tick_last_hurt_by_player_memory();
-        self.living_base()
-            .tick_living_combat_memory(self.tick_count());
     }
 
     /// Returns whether the given item in the given slot allows elytra-style gliding.

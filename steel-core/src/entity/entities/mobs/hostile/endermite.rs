@@ -20,7 +20,8 @@ use crate::entity::ai::goal::{
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     Entity, EntityBase, EntityBaseLoad, EntityPose, EntitySyncedData, LivingEntity,
-    LivingEntityBase, Mob, MobBase, Monster, PathfinderMob, RemovalReason, SharedEntity, sync_dirty_mob_effects,
+    LivingEntityBase, Mob, MobBase, Monster, PathfinderMob, RemovalReason, SharedEntity,
+    sync_dirty_mob_effects,
 };
 use crate::physics::MoveResult;
 use crate::world::World;

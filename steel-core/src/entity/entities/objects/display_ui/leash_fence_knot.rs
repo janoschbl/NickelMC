@@ -182,6 +182,13 @@ impl Entity for LeashFenceKnotEntity {
         )
     }
 
+    fn ignore_explosion(&self, explosion: &dyn Explosion) -> bool {
+        explosion
+            .direct_source_entity()
+            .is_some_and(Entity::is_in_water)
+            || !explosion.should_affect_blocklike_entities()
+    }
+
     fn notify_leashee_removed(&self, _leashable: &dyn Entity) {
         if self.level().is_some() && self.leashables_leashed_to().is_empty() {
             self.set_removed(RemovalReason::Discarded);
@@ -313,13 +320,6 @@ impl BlockAttachedEntity for LeashFenceKnotEntity {
         self.base()
             .set_bounding_box(Self::knot_bounding_box(self.entity_type, pos));
         Ok(())
-    }
-
-    fn ignore_explosion(&self, explosion: &dyn Explosion) -> bool {
-        explosion
-            .direct_source_entity()
-            .is_some_and(Entity::is_in_water)
-            || !explosion.should_affect_blocklike_entities()
     }
 }
 

@@ -6,19 +6,36 @@ use std::ops::Deref;
 use std::sync::OnceLock;
 
 use rustc_hash::FxHashMap;
-use steel_utils::{DowncastType, DowncastTypeKey, Identifier};
+use simdnbt::owned::NbtTag;
+use steel_utils::{Downcast as _, DowncastType, DowncastTypeKey, Identifier};
 
-use super::MemoryValue;
+use super::{MemoryValue, PersistentMemoryValue};
 
 /// A registered memory module type, erased of its value type.
 pub type MemoryModuleTypeRef = &'static MemoryModuleTypeEntry;
 
+/// Encodes and decodes one memory's value without knowing its Rust type.
+#[derive(Clone, Copy)]
+struct ErasedCodec {
+    encode: fn(&dyn MemoryValue) -> Option<NbtTag>,
+    decode: fn(&NbtTag) -> Option<Box<dyn MemoryValue>>,
+}
+
+impl ErasedCodec {
+    const fn of<V: PersistentMemoryValue + DowncastType>() -> Self {
+        Self {
+            encode: |value| value.downcast_ref::<V>().map(V::to_nbt),
+            decode: |tag| V::from_nbt(tag).map(|value| Box::new(value) as Box<dyn MemoryValue>),
+        }
+    }
+}
+
 /// The registry identity of one brain memory, without its value type.
-#[derive(Debug, PartialEq, Eq)]
 pub struct MemoryModuleTypeEntry {
     /// Registry key identifying this memory.
     pub key: Identifier,
     value_type_key: DowncastTypeKey,
+    codec: Option<ErasedCodec>,
 }
 
 impl MemoryModuleTypeEntry {
@@ -26,6 +43,31 @@ impl MemoryModuleTypeEntry {
     #[must_use]
     pub const fn value_type_key(&self) -> DowncastTypeKey {
         self.value_type_key
+    }
+
+    /// Returns whether this memory is saved with the mob.
+    #[must_use]
+    pub const fn can_serialize(&self) -> bool {
+        self.codec.is_some()
+    }
+
+    pub(super) fn encode(&self, value: &dyn MemoryValue) -> Option<NbtTag> {
+        (self.codec?.encode)(value)
+    }
+
+    pub(super) fn decode(&self, tag: &NbtTag) -> Option<Box<dyn MemoryValue>> {
+        (self.codec?.decode)(tag)
+    }
+}
+
+impl Debug for MemoryModuleTypeEntry {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MemoryModuleTypeEntry")
+            .field("key", &self.key)
+            .field("value_type_key", &self.value_type_key)
+            .field("can_serialize", &self.can_serialize())
+            .finish_non_exhaustive()
     }
 }
 
@@ -36,13 +78,31 @@ pub struct MemoryModuleType<V: MemoryValue + DowncastType> {
 }
 
 impl<V: MemoryValue + DowncastType> MemoryModuleType<V> {
-    /// Creates a memory module type that stores `V` under `key`.
+    /// Creates a memory module type that stores `V` under `key` and is not saved.
     #[must_use]
     pub const fn new(key: Identifier) -> Self {
         Self {
             entry: MemoryModuleTypeEntry {
                 key,
                 value_type_key: V::TYPE_KEY,
+                codec: None,
+            },
+            _marker: PhantomData,
+        }
+    }
+
+    /// Creates a memory module type that stores `V` under `key` and is saved
+    /// with the mob.
+    #[must_use]
+    pub const fn new_persistent(key: Identifier) -> Self
+    where
+        V: PersistentMemoryValue,
+    {
+        Self {
+            entry: MemoryModuleTypeEntry {
+                key,
+                value_type_key: V::TYPE_KEY,
+                codec: Some(ErasedCodec::of::<V>()),
             },
             _marker: PhantomData,
         }
@@ -194,7 +254,13 @@ pub static MEMORY_MODULE_TYPES: MemoryModuleTypeRegistryLock =
 pub(in crate::entity::ai::brain) fn init_memory_module_types() {
     MEMORY_MODULE_TYPES.get_or_init(|| {
         let mut registry = MemoryModuleTypeRegistry::new();
+        register_memory_module_types(&mut registry);
         registry.freeze();
         registry
     });
 }
+
+/// Registers every memory module type, before the registry freezes.
+///
+/// New memories are added here, next to the behaviors and sensors that use them.
+const fn register_memory_module_types(_registry: &mut MemoryModuleTypeRegistry) {}

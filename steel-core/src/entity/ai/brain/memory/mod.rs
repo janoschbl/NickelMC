@@ -7,12 +7,12 @@ mod value;
 #[cfg(test)]
 mod tests;
 
-pub use map::Memories;
+pub use map::{Memories, PackedMemories, PackedMemory};
 pub use module_type::{
     MEMORY_MODULE_TYPES, MemoryModuleType, MemoryModuleTypeEntry, MemoryModuleTypeRef,
     MemoryModuleTypeRegistry, MemoryModuleTypeRegistryLock,
 };
-pub use value::{MemoryValue, RememberedEntities, RememberedEntity};
+pub use value::{MemoryValue, PersistentMemoryValue, RememberedEntities, RememberedEntity};
 
 pub(super) use module_type::init_memory_module_types;
 

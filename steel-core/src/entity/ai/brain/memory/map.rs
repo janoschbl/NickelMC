@@ -1,44 +1,33 @@
 //! Per-mob memory slots.
 
 use std::fmt::{self, Debug, Formatter};
-use std::hash::{Hash, Hasher};
 use std::ptr;
 
-use rustc_hash::FxHashMap;
+use simdnbt::owned::{NbtCompound, NbtTag};
+use smallvec::SmallVec;
 use steel_utils::{Downcast as _, DowncastType};
 
-use super::{MemoryModuleType, MemoryModuleTypeRef, MemoryStatus, MemoryValue};
+use super::{
+    MemoryModuleType, MemoryModuleTypeRef, MemoryModuleTypeRegistry, MemoryStatus, MemoryValue,
+};
 
-/// pinned TTL Sentinel to never expire.
+/// Slots a mob keeps inline before its memories spill to the heap.
+const INLINE_SLOTS: usize = 8;
+
+/// `time_to_live` of a memory that never expires.
 const NEVER_EXPIRE: i64 = i64::MAX;
-
-/// Identifies a memory by the address of its registry entry.
-#[derive(Clone, Copy)]
-struct MemoryKey(MemoryModuleTypeRef);
-
-impl PartialEq for MemoryKey {
-    fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self.0, other.0)
-    }
-}
-
-impl Eq for MemoryKey {}
-
-impl Hash for MemoryKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        ptr::from_ref(self.0).addr().hash(state);
-    }
-}
 
 /// One memory slot and its remaining lifetime.
 struct MemorySlot {
+    memory: MemoryModuleTypeRef,
     value: Option<Box<dyn MemoryValue>>,
     time_to_live: i64,
 }
 
 impl MemorySlot {
-    const fn empty() -> Self {
+    const fn empty(memory: MemoryModuleTypeRef) -> Self {
         Self {
+            memory,
             value: None,
             time_to_live: NEVER_EXPIRE,
         }
@@ -56,6 +45,10 @@ impl MemorySlot {
 
     const fn has_value(&self) -> bool {
         self.value.is_some()
+    }
+
+    const fn time_to_live(&self) -> i64 {
+        self.time_to_live
     }
 
     const fn can_expire(&self) -> bool {
@@ -81,9 +74,72 @@ impl MemorySlot {
 }
 
 /// The memories one mob's brain holds.
+///
+/// Slots are found by the address of their registry entry. A brain holds few
+/// enough that a linear scan beats hashing, and small brains never allocate.
 #[derive(Default)]
 pub struct Memories {
-    slots: FxHashMap<MemoryKey, MemorySlot>,
+    slots: SmallVec<[MemorySlot; INLINE_SLOTS]>,
+}
+
+/// One saved memory.
+#[derive(Debug, Clone)]
+pub struct PackedMemory {
+    /// The memory the value belongs to.
+    pub memory: MemoryModuleTypeRef,
+    /// The encoded value.
+    pub value: NbtTag,
+    /// Remaining lifetime in ticks, or `None` if the memory never expires.
+    pub time_to_live: Option<i64>,
+}
+
+/// The saved form of a mob's persistent memories.
+///
+/// Encoded as a compound keyed by memory id, each holding `value` and an
+/// optional `ttl`.
+#[derive(Debug, Clone, Default)]
+pub struct PackedMemories(Vec<PackedMemory>);
+
+impl PackedMemories {
+    /// The saved memories.
+    #[must_use]
+    pub fn memories(&self) -> &[PackedMemory] {
+        &self.0
+    }
+
+    /// Encodes the saved memories.
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut compound = NbtCompound::new();
+        for packed in &self.0 {
+            let mut entry = NbtCompound::new();
+            entry.insert("value", packed.value.clone());
+            if let Some(time_to_live) = packed.time_to_live {
+                entry.insert("ttl", time_to_live);
+            }
+            compound.insert(packed.memory.key.to_string(), entry);
+        }
+        compound
+    }
+
+    /// Decodes saved memories, skipping entries whose memory is unknown or not
+    /// persistent, or whose value is malformed.
+    #[must_use]
+    pub fn from_nbt(compound: &NbtCompound, registry: &MemoryModuleTypeRegistry) -> Self {
+        let memories = compound
+            .iter()
+            .filter_map(|(key, tag)| {
+                let memory = registry.by_key(&key.to_str().parse().ok()?)?;
+                let entry = tag.compound()?;
+                memory.can_serialize().then_some(PackedMemory {
+                    memory,
+                    value: entry.get("value")?.clone(),
+                    time_to_live: entry.long("ttl"),
+                })
+            })
+            .collect();
+        Self(memories)
+    }
 }
 
 impl Memories {
@@ -93,23 +149,33 @@ impl Memories {
         Self::default()
     }
 
+    fn slot(&self, memory: MemoryModuleTypeRef) -> Option<&MemorySlot> {
+        self.slots.iter().find(|slot| ptr::eq(slot.memory, memory))
+    }
+
+    fn slot_mut(&mut self, memory: MemoryModuleTypeRef) -> Option<&mut MemorySlot> {
+        self.slots
+            .iter_mut()
+            .find(|slot| ptr::eq(slot.memory, memory))
+    }
+
     /// Registers `memory`, leaving an already-registered slot untouched.
     pub fn register(&mut self, memory: MemoryModuleTypeRef) {
-        self.slots
-            .entry(MemoryKey(memory))
-            .or_insert(MemorySlot::empty());
+        if self.slot(memory).is_none() {
+            self.slots.push(MemorySlot::empty(memory));
+        }
     }
 
     /// Returns whether `memory` is registered on this mob.
     #[must_use]
     pub fn is_registered(&self, memory: MemoryModuleTypeRef) -> bool {
-        self.slots.contains_key(&MemoryKey(memory))
+        self.slot(memory).is_some()
     }
 
     /// Returns whether `memory` satisfies `status`.
     #[must_use]
     pub fn check(&self, memory: MemoryModuleTypeRef, status: MemoryStatus) -> bool {
-        let Some(slot) = self.slots.get(&MemoryKey(memory)) else {
+        let Some(slot) = self.slot(memory) else {
             return false;
         };
 
@@ -127,18 +193,51 @@ impl Memories {
     }
 
     /// Returns the value held by `memory`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `memory` is not registered on this mob. Use
+    /// [`get_internal`](Self::get_internal) when it may not be.
     #[must_use]
     pub fn get<V: MemoryValue + DowncastType>(
         &self,
         memory: &'static MemoryModuleType<V>,
     ) -> Option<&V> {
-        let slot = self.slots.get(&MemoryKey(memory.entry()));
-        debug_assert!(
-            slot.is_some(),
-            "read of memory {} which is not registered on this mob",
-            memory.key()
-        );
-        slot?.value.as_deref()?.downcast_ref::<V>()
+        let Some(value) = self.get_internal(memory) else {
+            panic!("Unregistered memory fetched: {}", memory.key());
+        };
+        value
+    }
+
+    /// Returns the value held by `memory`, or `None` if it is not registered.
+    #[must_use]
+    #[expect(
+        clippy::option_option,
+        reason = "the outer option tells an unregistered memory from an empty one, like vanilla getMemoryInternal"
+    )]
+    pub fn get_internal<V: MemoryValue + DowncastType>(
+        &self,
+        memory: &'static MemoryModuleType<V>,
+    ) -> Option<Option<&V>> {
+        let slot = self.slot(memory.entry())?;
+        Some(
+            slot.value
+                .as_deref()
+                .and_then(|value| value.downcast_ref::<V>()),
+        )
+    }
+
+    /// Returns the ticks until `memory` expires, `i64::MAX` if it never does.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `memory` is not registered on this mob.
+    #[must_use]
+    pub fn time_until_expiry(&self, memory: MemoryModuleTypeRef) -> i64 {
+        let Some(slot) = self.slot(memory) else {
+            panic!("Unregistered memory fetched: {}", memory.key);
+        };
+        slot.time_to_live()
     }
 
     /// Stores `value` in `memory` permanently.
@@ -172,15 +271,51 @@ impl Memories {
 
     /// Clears `memory`.
     pub fn erase(&mut self, memory: MemoryModuleTypeRef) {
-        if let Some(slot) = self.slots.get_mut(&MemoryKey(memory)) {
+        if let Some(slot) = self.slot_mut(memory) {
+            slot.clear();
+        }
+    }
+
+    /// Clears every memory.
+    pub fn clear(&mut self) {
+        for slot in &mut self.slots {
             slot.clear();
         }
     }
 
     /// Ages every memory by one tick, clearing those that have expired.
     pub fn forget_outdated(&mut self) {
-        for slot in self.slots.values_mut() {
+        for slot in &mut self.slots {
             slot.tick();
+        }
+    }
+
+    /// Collects the persistent memories that hold a value.
+    #[must_use]
+    pub fn pack(&self) -> PackedMemories {
+        let memories = self
+            .slots
+            .iter()
+            .filter_map(|slot| {
+                let value = slot.memory.encode(slot.value.as_deref()?)?;
+                Some(PackedMemory {
+                    memory: slot.memory,
+                    value,
+                    time_to_live: slot.can_expire().then_some(slot.time_to_live()),
+                })
+            })
+            .collect();
+        PackedMemories(memories)
+    }
+
+    /// Restores saved memories into the slots registered on this mob.
+    pub fn restore(&mut self, packed: &PackedMemories) {
+        for saved in &packed.0 {
+            let Some(value) = saved.memory.decode(&saved.value) else {
+                continue;
+            };
+            let time_to_live = saved.time_to_live.unwrap_or(NEVER_EXPIRE);
+            self.set_internal(saved.memory, Some(value), time_to_live);
         }
     }
 
@@ -191,7 +326,7 @@ impl Memories {
         value: Option<Box<dyn MemoryValue>>,
         time_to_live: i64,
     ) {
-        let Some(slot) = self.slots.get_mut(&MemoryKey(memory)) else {
+        let Some(slot) = self.slot_mut(memory) else {
             return;
         };
 
@@ -205,8 +340,8 @@ impl Memories {
 impl Debug for Memories {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         let mut map = formatter.debug_map();
-        for (key, slot) in &self.slots {
-            map.entry(&key.0.key, &slot.value);
+        for slot in &self.slots {
+            map.entry(&slot.memory.key, &slot.value);
         }
         map.finish()
     }

@@ -2,14 +2,15 @@ use std::ptr;
 use std::sync::Arc;
 
 use glam::DVec3;
+use simdnbt::owned::NbtTag;
 use steel_registry::vanilla_entities;
 use steel_utils::{DowncastType, DowncastTypeKey, Identifier};
 
 use super::{
     Memories, MemoryModuleType, MemoryModuleTypeRegistry, MemoryStatus, MemoryValue,
-    RememberedEntities, RememberedEntity,
+    PackedMemories, PersistentMemoryValue, RememberedEntities, RememberedEntity,
 };
-use crate::bootstrap::init_globals_once;
+use crate::bootstrap::init_globals;
 use crate::entity::registry::ENTITIES;
 use crate::entity::{SharedEntity, next_entity_id};
 use crate::test_support::test_world;
@@ -25,10 +26,24 @@ unsafe impl DowncastType for Ticks {
 
 impl MemoryValue for Ticks {}
 
+impl PersistentMemoryValue for Ticks {
+    fn to_nbt(&self) -> NbtTag {
+        NbtTag::Int(self.0)
+    }
+
+    fn from_nbt(tag: &NbtTag) -> Option<Self> {
+        tag.int().map(Self)
+    }
+}
+
 const fn test_memory<V: MemoryValue + DowncastType>(path: &'static str) -> MemoryModuleType<V> {
     MemoryModuleType::new(Identifier::new_static("steel_test", path))
 }
 
+static SAVED: MemoryModuleType<Ticks> =
+    MemoryModuleType::new_persistent(Identifier::new_static("steel_test", "saved"));
+static SAVED_PERMANENT: MemoryModuleType<Ticks> =
+    MemoryModuleType::new_persistent(Identifier::new_static("steel_test", "saved_permanent"));
 static COOLDOWN: MemoryModuleType<Ticks> = test_memory("cooldown");
 static DUPLICATE_COOLDOWN: MemoryModuleType<Ticks> = test_memory("cooldown");
 static OTHER_COOLDOWN: MemoryModuleType<Ticks> = test_memory("other_cooldown");
@@ -36,7 +51,7 @@ static NEARBY: MemoryModuleType<RememberedEntities> = test_memory("nearby");
 static TARGET: MemoryModuleType<RememberedEntity> = test_memory("target");
 
 fn spawn_entity() -> SharedEntity {
-    init_globals_once();
+    init_globals();
     let world = test_world();
     ENTITIES
         .create(
@@ -221,4 +236,71 @@ fn remembered_entities_skip_entities_that_left_the_world() {
     assert_eq!(remembered.len(), 2);
     let resolved: Vec<_> = remembered.resolve().map(|entity| entity.id()).collect();
     assert_eq!(resolved, vec![kept.id()]);
+}
+
+#[test]
+#[should_panic(expected = "Unregistered memory fetched")]
+fn reading_an_unregistered_memory_panics() {
+    let memories = Memories::new();
+    let _ = memories.get(&COOLDOWN);
+}
+
+#[test]
+fn get_internal_tells_unregistered_from_empty() {
+    let mut memories = Memories::new();
+    assert_eq!(memories.get_internal(&COOLDOWN), None);
+
+    memories.register(COOLDOWN.entry());
+    assert_eq!(memories.get_internal(&COOLDOWN), Some(None));
+
+    memories.set(&COOLDOWN, Ticks(5));
+    assert_eq!(memories.get_internal(&COOLDOWN), Some(Some(&Ticks(5))));
+}
+
+#[test]
+fn time_until_expiry_counts_down() {
+    let mut memories = Memories::new();
+    memories.register(COOLDOWN.entry());
+    assert_eq!(memories.time_until_expiry(COOLDOWN.entry()), i64::MAX);
+
+    memories.set_with_expiry(&COOLDOWN, Ticks(5), 10);
+    memories.forget_outdated();
+    memories.forget_outdated();
+
+    assert_eq!(memories.time_until_expiry(COOLDOWN.entry()), 8);
+}
+
+#[test]
+fn persistent_memories_round_trip_with_their_remaining_lifetime() {
+    let mut registry = MemoryModuleTypeRegistry::new();
+    registry.register(&SAVED);
+    registry.register(&SAVED_PERMANENT);
+    registry.register(&COOLDOWN);
+
+    let mut memories = Memories::new();
+    for memory in registry.iter() {
+        memories.register(memory);
+    }
+    memories.set_with_expiry(&SAVED, Ticks(7), 40);
+    memories.set(&SAVED_PERMANENT, Ticks(9));
+    memories.set(&COOLDOWN, Ticks(1));
+    memories.forget_outdated();
+
+    let nbt = memories.pack().to_nbt();
+    assert_eq!(nbt.len(), 2, "the non-persistent memory must not be saved");
+
+    let mut restored = Memories::new();
+    for memory in registry.iter() {
+        restored.register(memory);
+    }
+    restored.restore(&PackedMemories::from_nbt(&nbt, &registry));
+
+    assert_eq!(restored.get(&SAVED), Some(&Ticks(7)));
+    assert_eq!(restored.time_until_expiry(SAVED.entry()), 39);
+    assert_eq!(restored.get(&SAVED_PERMANENT), Some(&Ticks(9)));
+    assert_eq!(
+        restored.time_until_expiry(SAVED_PERMANENT.entry()),
+        i64::MAX
+    );
+    assert_eq!(restored.get(&COOLDOWN), None);
 }

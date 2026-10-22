@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use simdnbt::owned::NbtTag;
 use steel_utils::{DowncastType, DowncastTypeKey, ErasedType};
 
 use crate::entity::{SharedEntity, WeakEntity};
@@ -18,15 +19,13 @@ use crate::entity::{SharedEntity, WeakEntity};
 /// identity (the downcast key) are separate concepts: many memories share one
 /// value type, and a value type carries no registry meaning of its own.
 ///
-/// Memories that refer to entities must hold weak references
-/// ([`RememberedEntity`], [`RememberedEntities`]). A brain outlives the entities
-/// it has seen, so a strong reference would keep a removed entity alive and lets
-/// two mobs that remember each other form a cycle.
+/// Memories that refer to entities hold weak references
+/// ([`RememberedEntity`], [`RememberedEntities`]), so two mobs that remember
+/// each other cannot form a cycle.
 pub trait MemoryValue: ErasedType + Debug + Send + Sync + 'static {
     /// Returns whether this value is an empty collection.
     ///
-    /// Vanilla `Brain.isEmptyCollection`: writing an empty collection clears the
-    /// slot instead of storing it, so a
+    /// Writing an empty collection clears the slot instead of storing it, so a
     /// [`ValuePresent`](super::MemoryStatus::ValuePresent) entry condition never
     /// matches an empty list.
     fn is_empty_collection(&self) -> bool {
@@ -34,11 +33,24 @@ pub trait MemoryValue: ErasedType + Debug + Send + Sync + 'static {
     }
 }
 
+/// A memory value that survives saving, like a vanilla memory with a codec.
+///
+/// Only memories created with
+/// [`MemoryModuleType::new_persistent`](super::MemoryModuleType::new_persistent)
+/// are written by [`Memories::pack`](super::Memories::pack).
+pub trait PersistentMemoryValue: MemoryValue + Sized {
+    /// Encodes the value.
+    fn to_nbt(&self) -> NbtTag;
+
+    /// Decodes a value, or `None` if `tag` is malformed.
+    fn from_nbt(tag: &NbtTag) -> Option<Self>;
+}
+
 /// A brain memory referring to a single entity.
 ///
-/// Diverges from vanilla, which stores a strong reference and leaves behaviors
-/// to test `isAlive()`: here a memory of an entity that has left the world
-/// resolves to `None` on its own.
+/// Diverges from vanilla, which stores a strong reference until a sensor
+/// replaces it: a memory of an entity that has left the world resolves to
+/// `None` on its own.
 #[derive(Debug, Clone)]
 pub struct RememberedEntity(WeakEntity);
 

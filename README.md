@@ -1,169 +1,54 @@
-<p align="center">
-  <img src=".github/assets/readme/steel-logo.png" alt="SteelMC logo" width="192">
-</p>
+<img src="assets/icon.svg" width="64" height="64" alt="">
 
-<h1 align="center">SteelMC</h1>
+# NickelMC Slop
 
-<p align="center">
-  A Minecraft Java Edition server written in Rust.
-</p>
+NickelMC is a fork of SteelMC, a Minecraft Java server written in Rust. We throw as much AI at it as we can, because we are bored.
 
-<p align="center">
-  <a href="https://github.com/Steel-Foundation/SteelMC/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Steel-Foundation/SteelMC?display_name=tag&sort=semver&style=flat-square"></a>
-  <a href="https://github.com/Steel-Foundation/SteelMC/actions/workflows/test.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/Steel-Foundation/SteelMC/test.yml?branch=master&label=tests&style=flat-square"></a>
-  <a href="https://github.com/Steel-Foundation/SteelMC/actions/workflows/lint.yml"><img alt="Lint" src="https://img.shields.io/github/actions/workflow/status/Steel-Foundation/SteelMC/lint.yml?branch=master&label=lint&style=flat-square"></a>
-  <a href="LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/github/license/Steel-Foundation/SteelMC?style=flat-square"></a>
-</p>
+Agents write the code and agents review it. Expect rough edges.
 
-<p align="center">
-  <a href="https://steelmc.dev/">Website</a> ·
-  <a href="https://steelmc.dev/getting-started/introduction/">Documentation</a> ·
-  <a href="https://steelmc.dev/tracker">Implementation tracker</a> ·
-  <a href="https://steelmc.dev/discord">Discord</a>
-</p>
+## Goal
 
-![A sunset over a SteelMC-generated world, with forests, rivers, mountains, and a lit village](.github/assets/readme/sunset.webp)
+We start by solving every open pull request and the important issues in SteelMC. After that, we work toward a server where you can survive from the first night to an iron kit.
 
-> [!IMPORTANT]
-> SteelMC is still pre-alpha. You can connect and explore generated worlds, but
-> survival gameplay is incomplete and many vanilla systems are still missing. Do not
-> replace your production server with it yet.
+In this file, "survival" means that a player can gather, craft, smelt, fight four mob types, die, and respawn. The Nether, the End, and villagers come later.
 
-## What is SteelMC?
+## Where SteelMC stands
 
-SteelMC is an independent implementation of the Minecraft Java Edition server. It
-tracks the latest Java Edition release and currently targets **Minecraft 26.3**.
+SteelMC has networking, encryption, chunk generation, lighting, world saving and loading, player movement, inventories, commands, permissions, food, sleep, and advancements. It has 233 block behavior files and 40 item behavior files.
 
-The goal is to match vanilla behavior while making better use of modern multicore
-hardware. Gameplay updates remain synchronous, while chunk generation, lighting,
-packet processing, and chunk sending can run outside the main tick.
+It has one hostile mob (the endermite) and six passive mobs. Entity spawning is disabled. It has no hostile mob AI, no natural spawning, no player combat parity, no loot system, and no explosions.
 
-## World generation
+## Rules
 
-World generation is currently the most complete part of SteelMC. Its parity suite
-compares 7,500 randomly selected chunks with a reproducible vanilla reference: 2,500
-in each dimension. All tested chunks match block for block. Entity spawning is not
-included because most entity behavior has not been implemented yet.
+- Mob behavior must match vanilla 1:1. Agents check their work against the decompiled vanilla source. We never commit that source.
+- Every branch passes `cargo test`, `cargo fmt`, `cargo clippy`, and `typos` before it merges.
+- Unit tests cover only vanilla-critical behavior, such as loot rolls, damage calculations, and mob attributes.
+- Each phase ends with a manual playtest on a real client.
+- Each implementer agent gets a reviewer agent. We run at most four concurrent `cargo` builds.
 
-In a focused benchmark on a Ryzen 9 9950X, SteelMC generated a fresh
-10,201-chunk Overworld area in a median of 3.98 seconds. Results vary with hardware,
-and this benchmark does not represent every server workload.
+## Roadmap
 
-Read [Introducing SteelMC](https://steelmc.dev/blog/announcement/) for the design
-story, parity methodology, benchmark context, and limitations. Full results and
-reproduction instructions are available on the
-[benchmark page](https://steelmc.dev/reference/benchmarks/).
+| Phase | Work | Done when |
+|---|---|---|
+| 0. Baseline | Install the pinned nightly toolchain, build, and publish the fork. | `cargo test` passes and a 26.3 client joins and walks around. |
+| 1. Drops and death | Merge upstream PRs 769 (loot) and 625 (hurt and death). Fix issues 751 (torch and sign drops) and 574. | Blocks drop items, chests hold loot, and the player respawns. |
+| 2. Mob brain | Merge PRs 613, 614, and 616. Build the hostile mob foundation (issue 701). | A test mob chases the player and loses track when the player leaves. |
+| 3. First monsters | Add the zombie, skeleton, and spider. Then add the creeper, which needs explosions (issue 575, PR 627). | Each mob matches vanilla stats and attack timing in a unit test. |
+| 4. Spawning | Merge PR 712 and add the entity spawn stage. | Mobs spawn in darkness, despawn at distance, and respect the mob cap. |
+| 5. Survival playtest | Play from the first night to an iron kit. | No crash and no stuck state. |
+| 6. Wider content | Villagers, endermen, the Nether, minecarts, and dispensers. | Tracked per feature. |
 
-## Current status
+Parts of phases 1 to 3 touch the entity module, so we merge the brain, spawner, and hostile foundation work one after another. Other work runs in parallel, one git worktree per workstream.
 
-Today, clients can join a persistent multiplayer world, move and interact, use
-inventories and commands, and return later to saved chunks. SteelMC currently
-provides:
+SteelMC caps pull requests at about 1,000 lines and three open at a time. We do not follow that cap in the fork. Once a feature is stable, we may send it upstream in pieces that fit.
 
-- Java Edition networking, authentication, encryption, and compression
-- Persistent chunk generation, loading, saving, and lighting
-- Player movement, collision, block interaction, and inventories
-- Commands, permissions, chat, and server configuration
-- Early entity, block entity, and gameplay behavior implementations
+## Open decisions
 
-SteelMC is not ready to replace an established server:
-
-- Survival gameplay is incomplete.
-- Only a small number of entities have meaningful behavior.
-- Full vanilla and protocol parity have not been reached.
-- Plugins are not available yet.
-- Paper, Bukkit, Fabric, Forge, and NeoForge extensions are not compatible.
-
-Follow the [implementation tracker](https://steelmc.dev/tracker) for a more detailed
-view of what is available today.
-
-## Try it
-
-Pre-built releases, Docker images, and source-build instructions are available in
-the [installation guide](https://steelmc.dev/getting-started/installation/).
-
-Expect bugs and incomplete mechanics. If you try SteelMC, please share what you find
-on [Discord](https://steelmc.dev/discord) or open a
-[GitHub issue](https://github.com/Steel-Foundation/SteelMC/issues).
-
-## Contributing
-
-Contributions are welcome. Most changes begin by reading the vanilla source,
-understanding the behavior it implements, and deciding how to express that behavior
-cleanly in Rust.
-
-As a new contributor, please limit yourself to 3 open PRs at a time,
-so we can give feedback on your existing ones before you open more.
-Also, start with a small, simple contribution first,
-around 1k lines changed or less, so it's quicker to review.
-
-Before you start:
-
-1. Check existing issues and pull requests, then discuss substantial changes with
-   the community.
-2. Read the [contributor guide](https://steelmc.dev/development/start-contributing/)
-   and [code standards](https://steelmc.dev/development/code-standard/).
-3. Generate the targeted vanilla source with `./update-minecraft-src.sh` and verify
-   behavior against it.
-4. Run the relevant tests and checks before opening a pull request.
-
-The repository uses a pinned nightly Rust toolchain. The common validation commands
-are:
-
-```bash
-cargo test
-cargo fmt --all --check
-cargo clippy -r --all-targets --all-features
-typos
-```
-
-Nix and NixOS users can get the pinned toolchain, `lld`, `prek`, and `typos` in one
-step with `nix develop` (or `direnv allow`, using the checked-in `.envrc`).
-
-Generated Rust formatting is disabled by default. Enable the `fmt` feature on
-`steel-registry`, `steel-utils`, and `steel-worldgen` to format their generated files
-with prettyplease during compilation:
-
-```bash
-cargo build --features steel-registry/fmt,steel-utils/fmt,steel-worldgen/fmt
-```
-
-Generated documentation for SteelMC's Rust crates is available in the
-[Rust API reference](https://rustdoc.steelmc.dev/steel_core/index.html).
-
-AI may be used as a tool, but contributors must understand and be able to explain
-every line they submit. Fully autonomous pull requests are not accepted.
-
-For an easy entry into SteelMC as a new contributor, you can check out issues with the tag `good first issue`, or our [tracker](https://steelmc.dev/tracker/) of unimplemented content,
-which is always a good first start.
-
-## Community
-
-The [SteelMC Discord](https://steelmc.dev/discord) is where we discuss designs,
-coordinate work, share progress, and answer questions. Longer project updates are
-published on the [SteelMC website](https://steelmc.dev/).
-
-If you enjoy SteelMC, you can support its development by
-[sponsoring the project on GitHub](https://github.com/sponsors/Steel-Foundation). Any support is greatly appreciated!
+- The final fork name and where we host it. This sets our trademark obligations and where the source offer lives.
+- How many agents run at once. We start with four.
 
 ## License
 
-SteelMC is free software licensed under the
-[GNU Affero General Public License v3.0 or later](LICENSE).
+SteelMC is licensed under AGPL-3.0-or-later, and so is this fork. We keep the license text and the copyright notices, and we mark our changes with dates. If you run a public server from this code, you must offer players a visible link to download the source.
 
-The SteelMC logo was designed by **colonthreeing**.
-
-## Acknowledgements
-
-SteelMC's world generation, lighting, and other performance work has drawn ideas from
-[C2ME](https://github.com/RelativityMC/C2ME-fabric),
-[ScalableLux](https://github.com/RelativityMC/ScalableLux),
-[FastNoise](https://codeberg.org/ZenXArch/FastNoise),
-[Lithium](https://github.com/CaffeineMC/lithium), and
-[Structure Layout Optimizer](https://github.com/TelepathicGrunt/StructureLayoutOptimizer).
-
-## Top contributors
-
-<a href="https://github.com/Steel-Foundation/SteelMC/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Steel-Foundation/SteelMC" alt="SteelMC contributors">
-</a>
+Created in [T3 Code](https://t3.codes).

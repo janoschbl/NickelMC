@@ -522,12 +522,24 @@ fn source_scoreboard(source: &CommandSource) -> Result<&Scoreboard, CommandSynta
         })
 }
 
-fn world_candidates(world: &World, aabb: Option<WorldAabb>) -> Vec<SharedEntity> {
-    // Mirrors vanilla `EntitySelector`: the bounded lookup goes through the
-    // part-aware `Level.getEntities`, while the unbounded one does not.
+pub(super) fn world_candidates(world: &World, aabb: Option<WorldAabb>) -> Vec<SharedEntity> {
+    // Bounded selectors use vanilla's typed query: expand only parents found in
+    // the box. The selector predicate tests each part's own box afterwards.
     aabb.map_or_else(
         || world.entity_manager().get_accessible_entities(),
-        |aabb| world.get_entities_in_aabb(&aabb),
+        |aabb| {
+            let mut candidates = Vec::new();
+            for entity in world.entity_manager().get_entities_in_aabb(&aabb) {
+                candidates.push(Arc::clone(&entity));
+                candidates.extend(
+                    entity
+                        .parts()
+                        .iter()
+                        .map(|part| Arc::clone(part) as SharedEntity),
+                );
+            }
+            candidates
+        },
     )
 }
 

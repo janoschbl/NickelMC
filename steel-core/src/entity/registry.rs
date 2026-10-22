@@ -23,7 +23,7 @@ use crate::world::World;
 ///
 /// Takes the entity type, entity ID, spawn position, and world reference.
 /// Returns a new entity instance. The entity ID should be obtained from
-/// `next_entity_id()`.
+/// `EntityRegistry::reserve_id(entity_type).first()`.
 pub type EntityFactory = fn(EntityTypeRef, i32, DVec3, Weak<World>) -> SharedEntity;
 
 /// Factory function type for loading entities from disk.
@@ -142,7 +142,7 @@ impl EntityRegistry {
 
     /// Reserves the block of entity IDs a fresh instance of `entity_type` needs.
     ///
-    /// Always use this instead of [`next_entity_id`] when the type is not statically
+    /// Always use this instead of [`super::next_entity_id`] when the type is not statically
     /// known, so that a multipart mob also claims the IDs its parts will use.
     #[must_use]
     pub fn reserve_id(&self, entity_type: EntityTypeRef) -> EntityIdBlock {

@@ -543,7 +543,7 @@ impl EntityIdBlock {
     #[must_use]
     pub const fn part(self, index: u32) -> i32 {
         assert!(
-            index + 1 < self.count,
+            index < self.count.saturating_sub(1),
             "part index outside the reserved block"
         );
         self.first.wrapping_add(index.wrapping_add(1) as i32)

@@ -23,7 +23,7 @@ impl MultipartTestEntity {
                     base: EntityBase::new(
                         ids.part(index),
                         position,
-                        vanilla_entities::ITEM.dimensions,
+                        EntityDimensions::with_default_eye_height(1.0, 1.0),
                         world.clone(),
                     ),
                     part_base: PartEntityBase::new(
@@ -79,6 +79,10 @@ impl Entity for MultipartTestPart {
         &vanilla_entities::ITEM
     }
 
+    fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
+        self.part_base.size()
+    }
+
     fn is_same_entity(&self, other: &dyn Entity) -> bool {
         self.id() == other.id()
             || self
@@ -124,8 +128,9 @@ fn part_ids(entity: &SharedEntity) -> Vec<i32> {
 #[test]
 fn parts_take_the_ids_directly_after_their_parent() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_part_ids");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_part_ids");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     // This is the client-side contract: parts are synthesized at parent + 1..=n and
     // never spawned over the wire.
@@ -137,8 +142,9 @@ fn parts_take_the_ids_directly_after_their_parent() {
 #[test]
 fn tracking_a_multipart_entity_publishes_its_parts() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_registers_parts");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_registers_parts");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     for part in entity.parts() {
         let found = world
@@ -151,8 +157,9 @@ fn tracking_a_multipart_entity_publishes_its_parts() {
 #[test]
 fn parts_are_not_reachable_through_the_plain_entity_lookup() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_plain_lookup");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_plain_lookup");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
     let part_id = entity.parts()[0].id();
 
     // Vanilla keeps `getEntity` and `getEntityOrPart` separate; only the paths that
@@ -164,8 +171,9 @@ fn parts_are_not_reachable_through_the_plain_entity_lookup() {
 #[test]
 fn parts_bind_their_parent_when_tracking_starts() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_binds_parent");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_binds_parent");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     for part in entity.parts() {
         let parent = part.parent().expect("part should know its parent");
@@ -177,8 +185,9 @@ fn parts_bind_their_parent_when_tracking_starts() {
 #[test]
 fn parts_appear_in_bounding_box_queries() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_aabb_query");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_aabb_query");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     let found = world.get_entities_in_aabb(&spawn_area());
 
@@ -194,8 +203,9 @@ fn parts_appear_in_bounding_box_queries() {
 #[test]
 fn bounding_box_queries_can_exclude_a_parent_and_its_parts() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_aabb_excluding");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_aabb_excluding");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     // Vanilla excludes both the part itself and any part whose parent is `except`,
     // which is what stops a multipart mob shoving its own hitboxes.
@@ -207,8 +217,9 @@ fn bounding_box_queries_can_exclude_a_parent_and_its_parts() {
 #[test]
 fn parts_are_removed_when_the_parent_stops_being_tracked() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_unregisters_parts");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_unregisters_parts");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
     let part_ids = part_ids(&entity);
 
     // Vanilla unregisters parts from `onTrackingEnd`, which is what a chunk losing
@@ -227,12 +238,19 @@ fn parts_are_removed_when_the_parent_stops_being_tracked() {
 #[test]
 fn parts_are_never_tracked_for_clients() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_not_tracked");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_not_tracked");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     // A part reports its parent's entity type, so it inherits a live tracking range;
     // only the explicit guard in `EntityTracker::add` keeps it off the wire.
     for part in entity.parts() {
+        let shared: SharedEntity = Arc::clone(part) as SharedEntity;
+        world.entity_tracker().add(
+            &shared,
+            |_| panic!("parts must be rejected before querying viewers"),
+            |_| panic!("parts must be rejected before resolving viewers"),
+        );
         assert!(
             world
                 .entity_tracker()
@@ -246,8 +264,9 @@ fn parts_are_never_tracked_for_clients() {
 #[test]
 fn a_multipart_entity_does_not_collide_with_its_own_parts() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_self_collision");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_self_collision");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
 
     // Vanilla passes the moving entity as `except` to `Level.getEntities`, which drops
     // a part both when it is `except` and when its parent is. `is_same_entity` carries
@@ -266,8 +285,9 @@ fn a_multipart_entity_does_not_collide_with_its_own_parts() {
 #[test]
 fn removed_parts_drop_out_of_queries() {
     init_vanilla_registry();
-    let world = fresh_test_world("multipart_removed_parts");
-    let entity = spawn_multipart(&world);
+    let fixture = fresh_test_world("multipart_removed_parts");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
     let removed = &entity.parts()[0];
     let surviving = entity.parts()[1].id();
 
@@ -288,4 +308,85 @@ fn reading_past_the_reserved_block_is_rejected() {
     // Silently returning the next entity's ID would corrupt both the parts map and
     // the client's `parent + 1 + i` synthesis.
     let _ = reserve_entity_ids(PART_COUNT + 1).part(PART_COUNT);
+}
+
+#[test]
+fn part_hitboxes_are_queried_independently_of_the_parent() {
+    init_vanilla_registry();
+    let fixture = fresh_test_world("multipart_independent_hitbox");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
+    let part = &entity.parts()[0];
+    let position = SPAWN + DVec3::new(6.0, 0.0, 0.0);
+    part.set_part_position(position);
+    part.refresh_dimensions();
+    let area = WorldAabb::from_min_max(
+        position + DVec3::new(0.3, 0.1, -0.1),
+        position + DVec3::new(0.4, 0.2, 0.1),
+    );
+
+    assert!(!area.intersects(entity.bounding_box()));
+    let found = world.get_entities_in_aabb(&area);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), part.id());
+    assert!(world.has_entity_in_aabb_matching(&area, |_| true));
+    assert_eq!(
+        world.get_entity_bounding_boxes_in_aabb_matching(&area, |_| true),
+        vec![part.bounding_box()]
+    );
+    assert_eq!(
+        world
+            .nearest_entity_in_aabb_matching(&area, position, |_| true)
+            .expect("moved part must be found")
+            .id(),
+        part.id()
+    );
+}
+
+#[test]
+fn part_query_predicates_can_reenter_the_world() {
+    init_vanilla_registry();
+    let fixture = fresh_test_world("multipart_reentrant_query");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
+    let part_id = entity.parts()[0].id();
+    let found = world.get_entities_in_aabb_matching(&spawn_area(), |candidate| {
+        world
+            .get_accessible_entity_or_part_by_id(candidate.id())
+            .is_some()
+            && candidate.id() == part_id
+    });
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), part_id);
+}
+
+#[test]
+fn parts_reappear_when_the_parent_is_tracked_again() {
+    init_vanilla_registry();
+    let fixture = fresh_test_world("multipart_retracking");
+    let world = &fixture.world;
+    let entity = spawn_multipart(world);
+    let chunk = ChunkPos::from_entity_pos(SPAWN);
+    world.update_entity_chunk_visibility(chunk, EntityVisibility::Hidden);
+    assert!(world.get_entities_in_aabb(&spawn_area()).is_empty());
+    world.update_entity_chunk_visibility(chunk, EntityVisibility::Ticking);
+    for part in entity.parts() {
+        assert_eq!(
+            world
+                .get_accessible_entity_or_part_by_id(part.id())
+                .expect("retracked part should resolve")
+                .id(),
+            part.id()
+        );
+        assert_eq!(
+            part.parent().expect("parent remains bound").id(),
+            entity.id()
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "part index outside the reserved block")]
+fn overflowing_part_index_is_rejected() {
+    let _ = reserve_entity_ids(PART_COUNT + 1).part(u32::MAX);
 }

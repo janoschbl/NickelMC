@@ -608,12 +608,8 @@ impl World {
     /// part rather than trusting the parent's box, and skips a part both when it *is*
     /// `except_id` and when its parent is.
     ///
-    /// Vanilla's two bounded overloads disagree here: the predicate one above tests
-    /// each part's own box, while the `EntityTypeTest` one expands a matched parent
-    /// into its parts with no box test at all, so it can return a part that lies
-    /// outside the query. Steel has a single bounded query and follows the
-    /// intersection-testing rule for all of them, since a lookup returning entities
-    /// outside its own bounding box is the more surprising of the two behaviors.
+    /// Typed selector queries expand matched parents separately; this helper is
+    /// for the predicate overload, which tests every part's own box.
     fn visit_parts_in_aabb(
         &self,
         aabb: &WorldAabb,

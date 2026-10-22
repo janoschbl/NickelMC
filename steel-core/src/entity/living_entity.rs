@@ -1269,20 +1269,23 @@ pub trait LivingEntity: Entity {
         };
 
         let seed = self.death_loot_table_seed();
-        let seed = if seed == 0 {
-            rand::random()
-        } else {
-            seed as u64
+        let drops = world.with_loot_random(loot_table, seed, |rng| {
+            Ok(death_loot_items_with_rng(
+                self,
+                loot_table,
+                world.as_ref(),
+                source,
+                killed_by_player,
+                rng,
+            ))
+        });
+        let drops = match drops {
+            Ok(drops) => drops,
+            Err(error) => {
+                log::error!("Failed to generate death loot {}: {error}", loot_table.key);
+                return;
+            }
         };
-        let mut rng = RandomSource::Legacy(LegacyRandom::from_seed(seed));
-        let drops = death_loot_items_with_rng(
-            self,
-            loot_table,
-            world.as_ref(),
-            source,
-            killed_by_player,
-            &mut rng,
-        );
 
         if has_custom_death_loot_table && let Some(mob) = self.as_mob() {
             mob.clear_custom_death_loot_table();
@@ -3295,6 +3298,10 @@ fn death_loot_items_with_rng<E: LivingEntity + ?Sized>(
     let this_equipment = living_loot_equipment(entity);
     let causing_equipment = causing_entity.and_then(loot_equipment);
     let direct_equipment = direct_entity.and_then(loot_equipment);
+    let luck = last_damage_player
+        .as_deref()
+        .and_then(Entity::as_living_entity)
+        .map_or(0.0, LivingEntity::get_luck);
     let last_damage_player_equipment = last_damage_player.as_deref().and_then(loot_equipment);
     let this_entity = entity_loot_ref(entity.as_entity_event_source(), Some(&this_equipment));
     let causing_entity =
@@ -3311,6 +3318,7 @@ fn death_loot_items_with_rng<E: LivingEntity + ?Sized>(
     };
 
     let mut context = LootContext::new(rng)
+        .with_luck(luck)
         .with_world(world)
         .with_origin(position.x, position.y, position.z)
         .with_game_time(world.game_time())
@@ -3338,6 +3346,28 @@ fn death_loot_items_with_rng<E: LivingEntity + ?Sized>(
 
 /// Runs vanilla `LivingEntity.dropFromShearingLootTable` for `loot_table`, returning the
 /// drops resolved with the vanilla shearing loot params (origin, entity, tool).
+pub(crate) fn shearing_loot_items<E: LivingEntity + ?Sized>(
+    entity: &E,
+    loot_table: LootTableRef,
+    tool: &ItemStack,
+) -> Vec<ItemStack> {
+    let Some(world) = entity.level() else {
+        return Vec::new();
+    };
+    match world.with_loot_random(loot_table, 0, |rng| {
+        Ok(shearing_loot_items_with_rng(entity, loot_table, tool, rng))
+    }) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!(
+                "Failed to generate shearing loot {}: {error}",
+                loot_table.key
+            );
+            Vec::new()
+        }
+    }
+}
+
 pub(crate) fn shearing_loot_items_with_rng<E: LivingEntity + ?Sized>(
     entity: &E,
     loot_table: LootTableRef,

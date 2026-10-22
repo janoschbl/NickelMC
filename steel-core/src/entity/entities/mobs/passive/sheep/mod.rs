@@ -1,6 +1,6 @@
 //! Vanilla Sheep entity with wool color, shearing, and breeding parity.
 use std::sync::{Arc, Weak};
-use steel_utils::random::{RandomSource, legacy_random::LegacyRandom};
+use steel_utils::random::legacy_random::LegacyRandom;
 
 use crate::loot::vanilla_loot_tables;
 use glam::DVec3;
@@ -29,6 +29,8 @@ use crate::entity::ai::goal::{
     RandomLookAroundGoal, TemptGoal, WaterAvoidingRandomStrollGoal,
 };
 use crate::entity::damage::DamageSource;
+use crate::entity::living_entity::shearing_loot_items;
+#[cfg(test)]
 use crate::entity::living_entity::shearing_loot_items_with_rng;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad, EntityPose,
@@ -209,10 +211,7 @@ impl SheepEntity {
             None,
         );
 
-        let mut rng = RandomSource::Legacy(LegacyRandom::from_seed(rand::random()));
-        for drop in
-            shearing_loot_items_with_rng(self, &vanilla_loot_tables::SHEARING_SHEEP, tool, &mut rng)
-        {
+        for drop in shearing_loot_items(self, &vanilla_loot_tables::SHEARING_SHEEP, tool) {
             self.spawn_shearing_drop(&drop);
         }
 

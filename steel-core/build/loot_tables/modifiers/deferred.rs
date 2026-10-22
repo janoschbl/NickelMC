@@ -7,6 +7,7 @@ use super::super::{
     quote,
 };
 use serde::Deserialize;
+use std::collections::BTreeSet;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -294,7 +295,7 @@ impl CompileModifier for SetStewEffect {
         self.condition.as_ref()
     }
     fn compile(&self, compiler: &mut Compiler) -> TokenStream {
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = BTreeSet::new();
         let arms = self
             .effects
             .iter()

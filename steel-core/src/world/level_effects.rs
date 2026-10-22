@@ -1,6 +1,5 @@
 use crate::loot::LOOT_TABLES;
 use std::ptr;
-use steel_utils::random::{RandomSource, legacy_random::LegacyRandom};
 
 use super::{
     Arc, BLOCK_BEHAVIORS, BlockLootContext, BlockPos, BlockStateExt, BlockStateId, CLevelEvent,
@@ -418,33 +417,36 @@ impl World {
         state: BlockStateId,
         context: &BlockLootContext<'_>,
     ) -> Vec<ItemStack> {
-        let block = state.get_block();
-        let Some(loot_table) = block.config.loot_table else {
+        let Some(loot_key) = state.get_block().config.loot_table else {
             return Vec::new();
         };
+        let Some(loot_table) = LOOT_TABLES.by_key(loot_key) else {
+            log::error!("Configured block loot table {loot_key} is not registered");
+            return Vec::new();
+        };
+        match context.world().with_loot_random(loot_table, 0, |loot_rng| {
+            let empty_tool = ItemStack::empty();
+            let block_entity = context.world().get_block_entity(context.pos());
+            let mut ctx = LootContext::new(loot_rng)
+                .with_world(context.world())
+                .with_tool(context.tool().unwrap_or(&empty_tool))
+                .with_luck(context.luck())
+                .with_block_state(state)
+                .with_origin(
+                    f64::from(context.pos().x()) + 0.5,
+                    f64::from(context.pos().y()) + 0.5,
+                    f64::from(context.pos().z()) + 0.5,
+                );
+            if let Some(block_entity) = &block_entity {
+                ctx = ctx.with_block_entity(block_entity.as_ref());
+            }
+            let entity_equipment = context.entity().and_then(loot_equipment);
+            if let Some(entity) = context.entity() {
+                ctx = ctx.with_this_entity(entity_loot_ref(entity, entity_equipment.as_ref()));
+            }
 
-        let mut loot_rng = RandomSource::Legacy(LegacyRandom::from_seed(rand::random()));
-        let empty_tool = ItemStack::empty();
-        let block_entity = context.world().get_block_entity(context.pos());
-        let mut ctx = LootContext::new(&mut loot_rng)
-            .with_world(context.world())
-            .with_tool(context.tool().unwrap_or(&empty_tool))
-            .with_luck(context.luck())
-            .with_block_state(state)
-            .with_origin(
-                f64::from(context.pos().x()) + 0.5,
-                f64::from(context.pos().y()) + 0.5,
-                f64::from(context.pos().z()) + 0.5,
-            );
-        if let Some(block_entity) = &block_entity {
-            ctx = ctx.with_block_entity(block_entity.as_ref());
-        }
-        let entity_equipment = context.entity().and_then(loot_equipment);
-        if let Some(entity) = context.entity() {
-            ctx = ctx.with_this_entity(entity_loot_ref(entity, entity_equipment.as_ref()));
-        }
-
-        match loot_table.get_random_items(&mut ctx) {
+            loot_table.get_random_items(&mut ctx)
+        }) {
             Ok(items) => items,
             Err(error) => {
                 log::error!("Failed to generate block loot {}: {error}", loot_table.key);

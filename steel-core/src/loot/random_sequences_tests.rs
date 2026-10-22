@@ -1,4 +1,5 @@
 use super::*;
+use crate::loot::LootError;
 use crate::loot::vanilla_loot_tables;
 use std::env::temp_dir;
 use steel_utils::random::legacy_random::LegacyRandom;
@@ -133,6 +134,44 @@ fn recursive_access_reports_an_error_without_waiting() {
         })
         .expect("outer access");
     draw(&sequences, &key);
+}
+
+#[test]
+fn concurrent_draws_serialize_without_losing_or_duplicating_stream_values() {
+    use std::{sync::Barrier, thread};
+
+    let sequences = RandomSequences::from_persistent(12345, Default::default()).expect("settings");
+    let expected = RandomSequences::from_persistent(12345, Default::default()).expect("settings");
+    let key = Identifier::vanilla_static("concurrent");
+    let barrier = Barrier::new(4);
+    let mut actual = thread::scope(|scope| {
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                scope.spawn(|| {
+                    (0..32)
+                        .map(|_| {
+                            barrier.wait();
+                            sequences
+                                .with_random(&key, |random| {
+                                    thread::yield_now();
+                                    Ok(random.next_i64())
+                                })
+                                .expect("contention must not fail generation")
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("worker"))
+            .collect::<Vec<_>>()
+    });
+    let mut reference: Vec<_> = (0..128).map(|_| draw(&expected, &key)).collect();
+    actual.sort_unstable();
+    reference.sort_unstable();
+    assert_eq!(actual, reference);
+    assert_eq!(draw(&sequences, &key), draw(&expected, &key));
 }
 
 #[test]

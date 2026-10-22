@@ -125,6 +125,43 @@ fn first_storage_access_fills_once_and_preserves_generated_items_on_reload() {
 }
 
 #[test]
+fn concurrent_first_loot_access_generates_and_fills_exactly_once() {
+    use std::{sync::Barrier, thread};
+
+    let fixture = fresh_test_world("concurrent_lazy_barrel");
+    let barrel = BarrelBlockEntity::new(
+        Arc::downgrade(&fixture.world),
+        BlockPos::new(1, 64, 1),
+        vanilla_blocks::BARREL.default_state(),
+    );
+    barrel.set_loot_table(Some(pending(12345)));
+    let barrier = Barrier::new(4);
+    thread::scope(|scope| {
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    barrel.unpack_loot_table(None).expect("concurrent unpack");
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().expect("worker");
+        }
+    });
+    let reference = BarrelBlockEntity::new(
+        Arc::downgrade(&fixture.world),
+        BlockPos::new(1, 64, 1),
+        vanilla_blocks::BARREL.default_state(),
+    );
+    reference.set_loot_table(Some(pending(12345)));
+    reference.unpack_loot_table(None).expect("reference unpack");
+    assert_eq!(barrel.save_custom_only(), reference.save_custom_only());
+    assert!(barrel.loot_table().is_none());
+    assert!(!barrel.storage.container.lock().is_empty());
+}
+
+#[test]
 fn failed_generation_keeps_pending_loot_and_aborts_before_locking_any_inventory() {
     let fixture = fresh_test_world("failed_barrel_loot");
     let barrel = BarrelBlockEntity::new(

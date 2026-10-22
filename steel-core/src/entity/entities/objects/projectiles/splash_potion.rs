@@ -72,7 +72,7 @@ impl SplashPotionEntity {
 
     /// Applies one effect with distance falloff and duration scaling
     fn apply_effect(
-        &self,
+        self: &Arc<Self>,
         world: &World,
         living: &dyn LivingEntity,
         effect: &RegistryMobEffectInstance,
@@ -82,12 +82,13 @@ impl SplashPotionEntity {
     ) {
         let behavior = MOB_EFFECT_BEHAVIORS.get_behavior(effect.effect());
         if let Some(instantaneous) = behavior.as_instantaneous() {
+            let source: SharedEntity = Arc::<Self>::clone(self);
             instantaneous.apply_instantaneous(
                 world,
                 living,
                 effect.amplifier(),
-                Some(self.id()),
-                owner.map(|owner| owner.id()),
+                Some(&source),
+                owner,
                 scale,
             );
             return;
@@ -100,8 +101,7 @@ impl SplashPotionEntity {
         if scaled_effect.ends_within(MIN_REMAINING_TICKS) {
             return;
         }
-        let effect_source: &dyn Entity = owner.map_or(self, |owner| owner.as_ref());
-        living.add_mob_effect_with_source(scaled_effect, Some(effect_source));
+        living.add_mob_effect(scaled_effect);
     }
 }
 
@@ -114,7 +114,7 @@ impl Entity for SplashPotionEntity {
         self.entity_type
     }
 
-    fn tick(&self) {
+    fn tick(self: Arc<Self>) {
         self.throwable_projectile_tick();
     }
 
@@ -170,11 +170,11 @@ impl Projectile for SplashPotionEntity {
         self.thrown_potion_knockback_direction(hurt_entity)
     }
 
-    fn on_hit(&self, hit: &ProjectileHit) {
+    fn on_hit(self: Arc<Self>, hit: &ProjectileHit) {
         self.thrown_potion_on_hit(hit);
     }
 
-    fn on_hit_block(&self, hit: &ClipHitResult) {
+    fn on_hit_block(self: Arc<Self>, hit: &ClipHitResult) {
         self.thrown_potion_on_hit_block(hit);
     }
 }
@@ -205,7 +205,12 @@ impl ThrowableItemProjectile for SplashPotionEntity {
 }
 
 impl AbstractThrownPotion for SplashPotionEntity {
-    fn on_hit_as_potion(&self, world: &Arc<World>, potion_item: &ItemStack, hit: &ProjectileHit) {
+    fn on_hit_as_potion(
+        self: &Arc<Self>,
+        world: &Arc<World>,
+        potion_item: &ItemStack,
+        hit: &ProjectileHit,
+    ) {
         let contents = potion_item
             .get_or_default(vanilla_components::POTION_CONTENTS, PotionContents::empty());
         let duration_scale =
@@ -251,15 +256,201 @@ mod tests {
     use std::sync::Arc;
 
     use glam::DVec3;
-    use steel_registry::{init_vanilla_registry, vanilla_entities};
-    use steel_utils::{BlockPos, Direction};
+    use steel_registry::data_components::{PotionContents, vanilla_components};
+    use steel_registry::item_stack::ItemStack;
+    use steel_registry::{
+        MobEffectInstance, init_vanilla_registry, vanilla_entities, vanilla_items,
+        vanilla_mob_effects, vanilla_potions,
+    };
+    use steel_utils::types::GameType;
+    use steel_utils::{BlockPos, ChunkPos, Direction};
 
     use crate::behavior::init_behaviors;
-    use crate::entity::{Entity, Projectile, ProjectileHit};
-    use crate::test_support::test_world;
+    use crate::entity::{
+        AbstractThrownPotion, Entity, LivingEntity, Projectile, ProjectileHit, SharedEntity,
+        ThrowableItemProjectile,
+    };
+    use crate::test_support::{
+        TestPlayerBuilder, fresh_test_world, insert_ready_full_chunk, test_world,
+    };
     use crate::world::ClipHitResult;
 
     use super::SplashPotionEntity;
+
+    fn block_hit(position: DVec3) -> ProjectileHit {
+        ProjectileHit::Block {
+            location: position,
+            hit: ClipHitResult {
+                location: position,
+                direction: Direction::Up,
+                block_pos: BlockPos::containing(position.x, position.y, position.z),
+                miss: false,
+                inside: false,
+                world_border_hit: false,
+            },
+        }
+    }
+
+    #[test]
+    fn splash_range_uses_hit_box_distance_and_excludes_spectators() {
+        init_vanilla_registry();
+        init_behaviors();
+        let fixture = fresh_test_world("splash_range");
+        let world = &fixture.world;
+        insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+        let origin = DVec3::new(8.0, 65.0, 8.0);
+        let potion = Arc::new(SplashPotionEntity::new(
+            &vanilla_entities::SPLASH_POTION,
+            1,
+            origin,
+            Arc::downgrade(world),
+        ));
+        let mut item = ItemStack::new(&vanilla_items::SPLASH_POTION);
+        item.set(
+            vanilla_components::POTION_CONTENTS,
+            PotionContents::new(
+                None,
+                None,
+                vec![MobEffectInstance::simple(vanilla_mob_effects::LUCK, 200, 0)],
+                None,
+            ),
+        );
+
+        for (id, offset, spectator, expected) in [
+            (2, 0.0, false, Some(200)),
+            (3, 2.0, false, Some(121)),
+            (4, 4.5, false, None),
+            (5, 0.0, true, None),
+        ] {
+            let player = TestPlayerBuilder::new(Arc::clone(world), "SplashTest", id).build();
+            player
+                .try_set_position(origin + DVec3::X * offset)
+                .expect("test position");
+            if spectator {
+                player.restore_game_modes(GameType::Spectator, None);
+            }
+            world
+                .try_add_entity(Arc::clone(&player) as SharedEntity)
+                .expect("attach player");
+            potion.on_hit_as_potion(world, &item, &block_hit(origin));
+            assert_eq!(
+                player
+                    .mob_effect(vanilla_mob_effects::LUCK)
+                    .map(|effect| effect.duration()),
+                expected,
+                "offset={offset}, spectator={spectator}"
+            );
+        }
+    }
+
+    #[test]
+    fn splash_duration_cutoff_preserves_infinite_and_rounds_after_both_scales() {
+        init_vanilla_registry();
+        init_behaviors();
+        let fixture = fresh_test_world("splash_duration");
+        let world = &fixture.world;
+        let potion = Arc::new(SplashPotionEntity::new(
+            &vanilla_entities::SPLASH_POTION,
+            1,
+            DVec3::ZERO,
+            Arc::downgrade(world),
+        ));
+        let player = TestPlayerBuilder::new(Arc::clone(world), "SplashTest", 2).build();
+        for (duration, scale, duration_scale, expected) in [
+            (40, 0.5, 1.0, None),
+            (41, 0.5, 1.0, Some(21)),
+            (101, 0.5, 0.5, Some(25)),
+            (-1, 0.001, 0.001, Some(-1)),
+            (0, 1.0, 1.0, None),
+        ] {
+            player.remove_mob_effect(vanilla_mob_effects::LUCK);
+            potion.apply_effect(
+                world,
+                player.as_ref(),
+                &MobEffectInstance::simple(vanilla_mob_effects::LUCK, duration, 0),
+                scale,
+                duration_scale,
+                None,
+            );
+            assert_eq!(
+                player
+                    .mob_effect(vanilla_mob_effects::LUCK)
+                    .map(|effect| effect.duration()),
+                expected,
+                "duration={duration}"
+            );
+        }
+    }
+
+    #[test]
+    fn splash_instant_healing_rounds_distance_scale_and_ignores_duration_scale() {
+        init_vanilla_registry();
+        init_behaviors();
+        let fixture = fresh_test_world("splash_instant");
+        let world = &fixture.world;
+        let potion = Arc::new(SplashPotionEntity::new(
+            &vanilla_entities::SPLASH_POTION,
+            1,
+            DVec3::ZERO,
+            Arc::downgrade(world),
+        ));
+        let player = TestPlayerBuilder::new(Arc::clone(world), "SplashTest", 2).build();
+        for (scale, expected) in [(1.0, 14.0), (0.5, 12.0), (0.124, 10.0), (0.125, 11.0)] {
+            player.set_health(10.0);
+            potion.apply_effect(
+                world,
+                player.as_ref(),
+                &MobEffectInstance::simple(vanilla_mob_effects::INSTANT_HEALTH, 1, 0),
+                scale,
+                0.0,
+                None,
+            );
+            assert_eq!(player.get_health(), expected);
+            assert!(
+                player
+                    .mob_effect(vanilla_mob_effects::INSTANT_HEALTH)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn water_with_custom_effects_does_not_extinguish_entities() {
+        init_vanilla_registry();
+        init_behaviors();
+        let fixture = fresh_test_world("splash_water");
+        let world = &fixture.world;
+        insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+        let origin = DVec3::new(8.0, 65.0, 8.0);
+        let player = TestPlayerBuilder::new(Arc::clone(world), "SplashTest", 2).build();
+        player.try_set_position(origin).expect("test position");
+        world
+            .try_add_entity(Arc::clone(&player) as SharedEntity)
+            .expect("attach player");
+        for custom in [true, false] {
+            player.ignite_for_ticks(100);
+            let potion = Arc::new(SplashPotionEntity::new(
+                &vanilla_entities::SPLASH_POTION,
+                1,
+                origin,
+                Arc::downgrade(world),
+            ));
+            let mut contents = PotionContents::of(&vanilla_potions::WATER);
+            if custom {
+                contents = PotionContents::new(
+                    contents.potion(),
+                    None,
+                    vec![MobEffectInstance::simple(vanilla_mob_effects::LUCK, 200, 0)],
+                    None,
+                );
+            }
+            let mut item = ItemStack::new(&vanilla_items::SPLASH_POTION);
+            item.set(vanilla_components::POTION_CONTENTS, contents);
+            potion.set_item(item);
+            potion.on_hit(&block_hit(origin));
+            assert_eq!(player.is_on_fire(), custom);
+        }
+    }
 
     #[test]
     fn on_hit_discards_the_splash_potion() {
@@ -267,12 +458,12 @@ mod tests {
         init_behaviors();
 
         let world = test_world();
-        let potion = SplashPotionEntity::new(
+        let potion = Arc::new(SplashPotionEntity::new(
             &vanilla_entities::SPLASH_POTION,
             1,
             DVec3::ZERO,
             Arc::downgrade(world),
-        );
+        ));
         let hit = ProjectileHit::Block {
             location: DVec3::ZERO,
             hit: ClipHitResult {
@@ -285,7 +476,7 @@ mod tests {
             },
         };
 
-        potion.on_hit(&hit);
+        Arc::clone(&potion).on_hit(&hit);
         assert!(potion.is_removed());
     }
 }

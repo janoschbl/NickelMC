@@ -703,7 +703,14 @@ where
     entity.set_item_clamped(item_stack.clone());
 
     let (yaw, player_pitch) = player.rotation();
-    entity.shoot_from_rotation(player.as_ref(), player_pitch, yaw, pitch_offset, power, uncertainty);
+    entity.shoot_from_rotation(
+        player.as_ref(),
+        player_pitch,
+        yaw,
+        pitch_offset,
+        power,
+        uncertainty,
+    );
 
     let entity: SharedEntity = Arc::new(entity);
     if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {

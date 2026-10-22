@@ -8,7 +8,8 @@ use steel_registry::data_components::{PotionContents, vanilla_components};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::potion::Potion;
 use steel_registry::vanilla_block_tags::BlockTag;
-use steel_registry::{level_events, vanilla_damage_types, vanilla_potions};
+use steel_registry::vanilla_potion_tags::PotionTag;
+use steel_registry::{REGISTRY, TaggedRegistryExt as _, level_events, vanilla_damage_types};
 use steel_utils::{BlockPos, BlockStateId, Direction, types::UpdateFlags};
 
 use crate::behavior::MOB_EFFECT_BEHAVIORS;
@@ -32,7 +33,12 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
     }
 
     /// The effect-specific area-of-effect (splash) or cloud-spawning (lingering) behavior.
-    fn on_hit_as_potion(&self, world: &Arc<World>, potion_item: &ItemStack, hit: &ProjectileHit);
+    fn on_hit_as_potion(
+        self: &Arc<Self>,
+        world: &Arc<World>,
+        potion_item: &ItemStack,
+        hit: &ProjectileHit,
+    );
 
     /// Returns the horizontal direction from the potion to the hurt entity
     fn thrown_potion_knockback_direction(&self, hurt_entity: &dyn LivingEntity) -> (f64, f64) {
@@ -41,8 +47,11 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
     }
 
     /// Handles impact effects emits the break event and discards the potion
-    fn thrown_potion_on_hit(&self, hit: &ProjectileHit) {
-        self.projectile_on_hit(hit);
+    fn thrown_potion_on_hit(self: Arc<Self>, hit: &ProjectileHit)
+    where
+        Self: Sized + 'static,
+    {
+        Arc::clone(&self).projectile_on_hit(hit);
         let Some(world) = self.level() else {
             return;
         };
@@ -50,9 +59,8 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
         let potion_item = self.get_item();
         let contents = potion_item
             .get_or_default(vanilla_components::POTION_CONTENTS, PotionContents::empty());
-        if contents.is(&vanilla_potions::WATER) {
-            self.on_hit_as_water(&world);
-        } else if contents.has_effects() {
+        self.affect_entities_around(&world, &contents);
+        if contents.has_effects() {
             self.on_hit_as_potion(&world, &potion_item, hit);
         }
 
@@ -70,12 +78,27 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
             contents.get_color(),
             None,
         );
+        if !self.is_silent() {
+            let sound = if has_instant_effects {
+                level_events::SOUND_INSTANT_POTION_SPLASH
+            } else {
+                level_events::SOUND_SPELL_POTION_SPLASH
+            };
+            world.level_event(sound, self.block_position(), 0, None);
+        }
         self.set_removed(RemovalReason::Discarded);
     }
 
-    /// Splashes water: hurts water-sensitive entities in range and
-    /// extinguishes burning ones.
-    fn on_hit_as_water(&self, world: &Arc<World>) {
+    /// Applies the potion's tagged water interactions to nearby living entities.
+    fn affect_entities_around(self: &Arc<Self>, world: &Arc<World>, contents: &PotionContents)
+    where
+        Self: Sized + 'static,
+    {
+        let hurts = potion_is_in_tag(contents, &PotionTag::HURTS_WATER_SENSITIVE_ENTITIES);
+        let extinguishes = potion_is_in_tag(contents, &PotionTag::EXTINGUISHES_ENTITIES);
+        if !hurts && !extinguishes {
+            return;
+        }
         let aabb = self.bounding_box().inflate_xyz(4.0, 2.0, 4.0);
         let potion_pos = self.position();
 
@@ -91,16 +114,16 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
                 continue;
             }
 
-            if sensitive_to_water {
+            if hurts && sensitive_to_water {
                 let mut damage = DamageSource::environment(&vanilla_damage_types::INDIRECT_MAGIC)
-                    .with_direct_entity(self.id());
+                    .with_direct_entity(Arc::<Self>::clone(self));
                 if let Some(owner) = self.get_owner() {
-                    damage = damage.with_causing_entity(owner.id());
+                    damage = damage.with_causing_entity(owner);
                 }
                 entity.hurt(world, &damage, 1.0);
             }
 
-            if entity.is_on_fire() && entity.is_alive() {
+            if extinguishes && entity.is_on_fire() && entity.is_alive() {
                 entity.extinguish_fire();
             }
         }
@@ -119,7 +142,7 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
         let contents = self
             .get_item()
             .get_or_default(vanilla_components::POTION_CONTENTS, PotionContents::empty());
-        if !contents.is(&vanilla_potions::WATER) {
+        if !potion_is_in_tag(&contents, &PotionTag::DOUSES_FIRE) {
             return;
         }
 
@@ -142,6 +165,12 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
             dowse_lit_campfire(world, pos, state, self.get_owner());
         }
     }
+}
+
+fn potion_is_in_tag(contents: &PotionContents, tag: &steel_utils::Identifier) -> bool {
+    contents.potion().is_some_and(|potion| {
+        contents.custom_effects().is_empty() && REGISTRY.potions.is_in_tag(potion.value(), tag)
+    })
 }
 
 /// Checks for instant effects in the base potion excluding custom effects

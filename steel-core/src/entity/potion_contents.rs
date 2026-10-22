@@ -36,7 +36,7 @@ pub(crate) fn apply_potion_contents(
         }
 
         let scaled_effect = effect.with_scaled_duration(duration_scale);
-        user.add_mob_effect(to_runtime_instance(
+        user.living().add_mob_effect(to_runtime_instance(
             &scaled_effect,
             scaled_effect.duration(),
         ));

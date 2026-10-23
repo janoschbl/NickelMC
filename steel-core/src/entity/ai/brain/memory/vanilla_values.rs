@@ -164,7 +164,13 @@ impl MemoryValue for GlobalPositionSet {
 }
 impl PersistentMemoryValue for GlobalPositionSet {
     fn to_nbt(&self) -> NbtTag {
-        GlobalPositions(self.0.clone()).to_nbt()
+        let mut unique = Vec::new();
+        for pos in &self.0 {
+            if !unique.contains(pos) {
+                unique.push(pos.clone());
+            }
+        }
+        GlobalPositions(unique).to_nbt()
     }
     fn from_nbt(tag: &NbtTag) -> Option<Self> {
         let mut positions = Vec::new();
@@ -194,7 +200,11 @@ impl MemoryValue for EntityUuids {
 pub trait PositionTracker: steel_utils::ErasedType + std::fmt::Debug + Send + Sync {
     fn current_position(&self) -> Option<DVec3>;
     fn current_block_position(&self) -> Option<BlockPos>;
-    fn is_visible_by(&self, visible: &super::NearestVisibleLivingEntities) -> bool;
+    fn is_visible_by(
+        &self,
+        visible: &super::NearestVisibleLivingEntities,
+        memories: &super::Memories,
+    ) -> bool;
 }
 
 /// A fixed position, preserving the exact vector for look targets.
@@ -211,7 +221,11 @@ impl PositionTracker for BlockPosTracker {
     fn current_block_position(&self) -> Option<BlockPos> {
         Some(BlockPos::from(self.0))
     }
-    fn is_visible_by(&self, _visible: &super::NearestVisibleLivingEntities) -> bool {
+    fn is_visible_by(
+        &self,
+        _visible: &super::NearestVisibleLivingEntities,
+        _memories: &super::Memories,
+    ) -> bool {
         true
     }
 }
@@ -244,11 +258,15 @@ impl PositionTracker for EntityTracker {
             entity.position()
         }))
     }
-    fn is_visible_by(&self, visible: &super::NearestVisibleLivingEntities) -> bool {
+    fn is_visible_by(
+        &self,
+        visible: &super::NearestVisibleLivingEntities,
+        memories: &super::Memories,
+    ) -> bool {
         self.entity.resolve().is_some_and(|entity| {
-            entity
-                .as_living_entity()
-                .is_none_or(|living| living.is_alive() && visible.contains(&entity))
+            entity.as_living_entity().is_none_or(|living| {
+                crate::entity::LivingEntity::is_alive(living) && visible.contains(&entity, memories)
+            })
         })
     }
 }

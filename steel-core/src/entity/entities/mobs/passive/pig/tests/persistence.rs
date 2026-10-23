@@ -16,8 +16,7 @@ fn hurt_time_survives_mob_save_load_and_spawn_nbt() {
     let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes)).expect("saved mob NBT");
     let loaded = PigEntity::new(&vanilla_entities::PIG, 2, DVec3::ZERO, Weak::new());
     loaded.load_additional((&borrowed).into());
-    assert_eq!(loaded.hurt_time(), 9);
-    assert_eq!(loaded.living_base().hurt_duration(), 0);
+    assert_eq!(loaded.living_base().hurt_time(), 9);
 
     let mut nbt = NbtCompound::new();
     nbt.insert("HurtTime", -3_i16);
@@ -25,7 +24,21 @@ fn hurt_time_survives_mob_save_load_and_spawn_nbt() {
     nbt.write(&mut bytes);
     let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes)).expect("spawn mob NBT");
     loaded.apply_spawn_data((&borrowed).into());
-    assert_eq!(loaded.hurt_time(), -3);
+    assert_eq!(loaded.living_base().hurt_time(), -3);
+}
+
+#[test]
+fn command_nbt_contains_a_single_hurt_time_tag() {
+    init_vanilla_registry();
+    let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+    pig.living_base().begin_hurt_animation();
+
+    let nbt = pig.nbt_for_data_compare();
+
+    assert_eq!(
+        nbt.keys().filter(|key| key.to_str() == "HurtTime").count(),
+        1
+    );
 }
 
 #[test]

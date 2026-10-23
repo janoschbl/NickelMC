@@ -9,7 +9,7 @@ use steel_registry::item_stack::ItemStack;
 use steel_utils::nbt::merge_nbt_compounds;
 use steel_utils::{BlockPos, WorldAabb, axis::Axis, types::Difficulty};
 
-use super::{AddEntityError, ENTITIES, SharedEntity, next_entity_id};
+use super::{AddEntityError, ENTITIES, SharedEntity};
 use crate::physics::{CollisionWorld, WorldCollisionProvider, collide};
 use crate::world::World;
 
@@ -125,7 +125,7 @@ pub(crate) fn create_entity_instance(
     ENTITIES
         .create(
             entity_type,
-            next_entity_id(),
+            ENTITIES.reserve_id(entity_type).first(),
             position,
             Arc::downgrade(world),
         )

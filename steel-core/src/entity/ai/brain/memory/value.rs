@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use simdnbt::owned::NbtTag;
 use steel_utils::{DowncastType, DowncastTypeKey, ErasedType};
+use uuid::Uuid;
 
 use crate::entity::{SharedEntity, WeakEntity};
 
@@ -48,11 +49,15 @@ pub trait PersistentMemoryValue: MemoryValue + Sized {
 
 /// A brain memory referring to a single entity.
 ///
-/// Diverges from vanilla, which stores a strong reference until a sensor
-/// replaces it: a memory of an entity that has left the world resolves to
-/// `None` on its own.
+/// Identity survives removal without retaining an entity ownership cycle.
 #[derive(Debug, Clone)]
-pub struct RememberedEntity(WeakEntity);
+pub struct RememberedEntity {
+    /// Runtime identity of the original allocation.
+    pub id: i32,
+    /// Persistent identity, retained even after the allocation is released.
+    pub uuid: Uuid,
+    entity: WeakEntity,
+}
 
 // SAFETY: This Steel-owned key uniquely identifies the concrete Rust type within
 // the process.
@@ -66,13 +71,19 @@ impl RememberedEntity {
     /// Remembers `entity` without keeping it alive.
     #[must_use]
     pub fn new(entity: &SharedEntity) -> Self {
-        Self(Arc::downgrade(entity))
+        Self {
+            id: entity.id(),
+            uuid: entity.uuid(),
+            entity: Arc::downgrade(entity),
+        }
     }
 
-    /// Returns the remembered entity while it is still in the world.
+    /// Returns the original allocation, including a removed entity still owned elsewhere.
     #[must_use]
     pub fn resolve(&self) -> Option<SharedEntity> {
-        self.0.upgrade()
+        self.entity
+            .upgrade()
+            .filter(|entity| entity.id() == self.id && entity.uuid() == self.uuid)
     }
 }
 
@@ -89,7 +100,7 @@ impl From<&SharedEntity> for RememberedEntity {
 /// rather than removed, so the memory stays cheap to read and the list is only
 /// rebuilt when its sensor next runs.
 #[derive(Debug, Clone, Default)]
-pub struct RememberedEntities(Vec<WeakEntity>);
+pub struct RememberedEntities(Vec<RememberedEntity>);
 
 // SAFETY: This Steel-owned key uniquely identifies the concrete Rust type within
 // the process.
@@ -106,7 +117,7 @@ impl MemoryValue for RememberedEntities {
 impl RememberedEntities {
     /// Returns the entities still in the world, in remembered order.
     pub fn resolve(&self) -> impl Iterator<Item = SharedEntity> + '_ {
-        self.0.iter().filter_map(WeakEntity::upgrade)
+        self.0.iter().filter_map(RememberedEntity::resolve)
     }
 
     /// Returns how many entities were remembered, including any that have since
@@ -125,6 +136,6 @@ impl RememberedEntities {
 
 impl<'entity> FromIterator<&'entity SharedEntity> for RememberedEntities {
     fn from_iter<I: IntoIterator<Item = &'entity SharedEntity>>(entities: I) -> Self {
-        Self(entities.into_iter().map(Arc::downgrade).collect())
+        Self(entities.into_iter().map(RememberedEntity::new).collect())
     }
 }

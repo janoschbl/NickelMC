@@ -530,7 +530,7 @@ fn saw_something_sensor() -> Box<dyn Sensor> {
     Box::new(SightingSensor)
 }
 
-fn idle_activities(_mob: &dyn PathfinderMob) -> Vec<ActivityData> {
+fn idle_activities(_mob: &dyn crate::entity::Entity) -> Vec<ActivityData> {
     vec![ActivityData::new(
         &vanilla_activities::IDLE,
         0,

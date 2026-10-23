@@ -5,6 +5,7 @@ use std::ptr;
 
 use simdnbt::owned::{NbtCompound, NbtTag};
 use smallvec::SmallVec;
+use steel_utils::nbt::NbtNumeric;
 use steel_utils::{Downcast as _, DowncastType};
 
 use super::{
@@ -129,12 +130,30 @@ impl PackedMemories {
         let memories = compound
             .iter()
             .filter_map(|(key, tag)| {
-                let memory = registry.by_key(&key.to_str().parse().ok()?)?;
-                let entry = tag.compound()?;
-                memory.can_serialize().then_some(PackedMemory {
+                let key = key.to_str();
+                let Some(memory) = key.parse().ok().and_then(|key| registry.by_key(&key)) else {
+                    log::warn!("Unknown brain memory: {key}");
+                    return None;
+                };
+                if !memory.can_serialize() {
+                    return None;
+                }
+                let Some((entry, value)) = tag
+                    .compound()
+                    .and_then(|entry| Some((entry, entry.get("value")?)))
+                else {
+                    log::warn!("Malformed brain memory: {key}");
+                    return None;
+                };
+                Some(PackedMemory {
                     memory,
-                    value: entry.get("value")?.clone(),
-                    time_to_live: entry.long("ttl"),
+                    value: value.clone(),
+                    time_to_live: entry.get("ttl").and_then(|tag| match tag {
+                        NbtTag::Long(value) => Some(*value),
+                        NbtTag::Double(value) => Some(*value as i64),
+                        NbtTag::Float(value) => Some(*value as i64),
+                        _ => tag.codec_i32().map(i64::from),
+                    }),
                 })
             })
             .collect();
@@ -318,6 +337,7 @@ impl Memories {
     pub fn restore(&mut self, packed: &PackedMemories) {
         for saved in &packed.0 {
             let Some(value) = saved.memory.decode(&saved.value) else {
+                log::warn!("Malformed value for brain memory: {}", saved.memory.key);
                 continue;
             };
             let time_to_live = saved.time_to_live.unwrap_or(NEVER_EXPIRE);

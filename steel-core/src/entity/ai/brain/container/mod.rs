@@ -1,6 +1,5 @@
 //! The brain itself.
 
-mod activities;
 mod provider;
 
 #[cfg(test)]
@@ -12,14 +11,14 @@ use std::sync::Arc;
 
 use steel_registry::activity::ActivityRef;
 
-pub use activities::{Activities, ActivityData, ActivityRequirements};
+pub use super::{Activities, ActivityData, ActivityRequirements};
 pub use provider::BrainProvider;
 
 use super::behavior::{BehaviorControl, BehaviorStatus};
 use super::context::BrainContext;
 use super::memory::{Memories, MemoryModuleTypeRef, PackedMemories};
 use super::sensor::{Sensor, WrappedSensor};
-use crate::entity::PathfinderMob;
+use crate::entity::Entity;
 use crate::world::World;
 
 /// Slots in a Java `HashMap` of activities before its first resize.
@@ -193,7 +192,7 @@ impl Brain {
     /// Expired memories are dropped before anything reads them, sensors then
     /// write what the mob perceives, stopped behaviors get their chance to
     /// start, and running ones tick or stop.
-    pub fn tick(&mut self, mob: &dyn PathfinderMob, level: &Arc<World>) {
+    pub fn tick(&mut self, mob: &dyn Entity, level: &Arc<World>) {
         self.memories.forget_outdated();
         self.tick_sensors(mob, level);
         self.start_each_non_running_behavior(mob, level);
@@ -201,7 +200,7 @@ impl Brain {
     }
 
     /// Stops every running behavior.
-    pub fn stop_all(&mut self, mob: &dyn PathfinderMob, level: &Arc<World>) {
+    pub fn stop_all(&mut self, mob: &dyn Entity, level: &Arc<World>) {
         let Self {
             memories,
             activities,
@@ -214,7 +213,7 @@ impl Brain {
         }
     }
 
-    fn tick_sensors(&mut self, mob: &dyn PathfinderMob, level: &Arc<World>) {
+    fn tick_sensors(&mut self, mob: &dyn Entity, level: &Arc<World>) {
         let Self {
             memories,
             activities,
@@ -231,7 +230,7 @@ impl Brain {
     ///
     /// The active activities are read live, so a behavior that switches activity
     /// affects the groups that follow it.
-    fn start_each_non_running_behavior(&mut self, mob: &dyn PathfinderMob, level: &Arc<World>) {
+    fn start_each_non_running_behavior(&mut self, mob: &dyn Entity, level: &Arc<World>) {
         let Self {
             memories,
             activities,
@@ -260,7 +259,7 @@ impl Brain {
     /// A behavior that started under an activity the brain has since left keeps
     /// running until it times out or gives up. Switching activity erases that
     /// activity's memories instead of cutting its behaviors off mid-run.
-    fn tick_each_running_behavior(&mut self, mob: &dyn PathfinderMob, level: &Arc<World>) {
+    fn tick_each_running_behavior(&mut self, mob: &dyn Entity, level: &Arc<World>) {
         let Self {
             memories,
             activities,

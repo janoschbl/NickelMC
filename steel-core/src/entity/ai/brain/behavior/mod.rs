@@ -1,6 +1,14 @@
 //! Brain behaviors: what a mob does once its memories say it can.
 
+mod attack_target;
 mod control;
+mod move_to_target_sink;
+mod look_at_target_sink;
+pub use look_at_target_sink::LookAtTargetSink;
+pub use attack_target::{
+    SetWalkTargetFromAttackTargetIfTargetOutOfReach, StartAttacking, StopAttackingIfTargetInvalid,
+};
+pub use move_to_target_sink::MoveToTargetSink;
 
 #[cfg(test)]
 mod tests;
@@ -86,6 +94,11 @@ pub trait Behavior: Send {
 
     /// Runs once when the behavior stops, however it stopped.
     fn stop(&mut self, _context: &mut BrainContext<'_>) {}
+
+    /// Override for behaviors whose lifetime is not limited by their duration.
+    fn timed_out(&self, time: i64, end_timestamp: i64) -> bool {
+        time > end_timestamp
+    }
 
     /// Name used in brain debug output. Vanilla `Behavior.debugString`.
     fn debug_name(&self) -> &'static str {

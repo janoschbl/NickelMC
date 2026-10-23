@@ -7,7 +7,7 @@ use simdnbt::owned::NbtTag;
 use steel_registry::vanilla_entities;
 use steel_utils::{DowncastType, DowncastTypeKey, Identifier};
 
-use super::container::Activities;
+use super::Activities;
 use super::context::BrainContext;
 use super::memory::{Memories, MemoryModuleType, MemoryValue, PersistentMemoryValue};
 use crate::bootstrap::init_globals;

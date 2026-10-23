@@ -5,8 +5,8 @@ use std::ptr;
 use steel_registry::activity::ActivityRef;
 use steel_registry::vanilla_activities;
 
-use crate::entity::ai::brain::behavior::BehaviorControl;
-use crate::entity::ai::brain::memory::{Memories, MemoryModuleTypeRef, MemoryStatus};
+use super::behavior::BehaviorControl;
+use super::memory::{Memories, MemoryModuleTypeRef, MemoryStatus};
 
 /// Vanilla `Brain.SCHEDULE_UPDATE_DELAY`.
 const SCHEDULE_UPDATE_DELAY: i64 = 20;
@@ -74,12 +74,12 @@ impl ActivityData {
     }
 }
 
-/// The activity state of a brain: what each activity needs, and which are active.
+/// The activity state of a brain: what each activity needs, and which are running.
 ///
 /// Activities are compared by the address of their registry entry, like
 /// [memories](Memories). Switching activity reads and erases memories, so those
 /// methods take the mob's [`Memories`]. Behaviors reach this through
-/// [`BrainContext`](crate::entity::ai::brain::BrainContext).
+/// [`BrainContext`](super::BrainContext).
 pub struct Activities {
     requirements: Vec<(ActivityRef, ActivityRequirements)>,
     memories_to_erase_when_stopped: Vec<(ActivityRef, Vec<MemoryModuleTypeRef>)>,
@@ -94,8 +94,7 @@ impl Activities {
     /// [`CORE`](vanilla_activities::CORE) and the default to
     /// [`IDLE`](vanilla_activities::IDLE).
     ///
-    /// Nothing is active until the first switch; [`Brain::new`](super::Brain::new)
-    /// performs it.
+    /// Nothing is active until the brain performs its first activity switch.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -169,7 +168,7 @@ impl Activities {
         }
     }
 
-    /// Switches to the first activity whose requirements are met, if any.
+    /// Switches to the first activity whose requirements are met.
     pub fn set_active_activity_to_first_valid(
         &mut self,
         memories: &mut Memories,
@@ -215,8 +214,7 @@ impl Activities {
         self.active.push(activity);
     }
 
-    /// What vanilla does when switching activity, instead of stopping the
-    /// leaving activity's behaviors.
+    /// Erases memories for activities that are no longer active.
     fn erase_memories_for_other_activities_than(
         &self,
         memories: &mut Memories,

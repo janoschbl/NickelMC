@@ -10,6 +10,7 @@ use pathfinder::{find_ground_path_target_surface, path_end_node_can_reach_target
 
 use std::sync::Arc;
 
+use crate::loot::{LOOT_TABLES, LootTableRef};
 use glam::DVec3;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
@@ -23,7 +24,6 @@ use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::ItemRef;
-use steel_registry::loot_table::LootTableRef;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::{
@@ -353,6 +353,11 @@ pub trait Mob: LivingEntity + Leashable {
 
     fn set_mob_flags(&self, flags: i8);
 
+    /// Returns whether the entity-specific spawn predicate accepts this spawn.
+    fn check_spawn_rules(&self, _world: &Arc<World>, _reason: EntitySpawnReason) -> bool {
+        true
+    }
+
     /// Returns whether this mob has a saddle equipped.
     fn is_saddled(&self) -> bool {
         let mut is_saddled = false;
@@ -618,9 +623,9 @@ pub trait Mob: LivingEntity + Leashable {
         if item.key == vanilla_items::NAME_TAG.key {
             let name_tag_result = {
                 let mut inventory = player.inventory.lock();
-                let item_stack = inventory.get_item_in_hand_mut(hand);
+                let mut item_stack = inventory.get_item_in_hand_mut(hand);
                 ITEM_BEHAVIORS.get_behavior(item).interact_living_entity(
-                    item_stack,
+                    &mut item_stack,
                     player,
                     living_entity,
                     hand,
@@ -634,8 +639,8 @@ pub trait Mob: LivingEntity + Leashable {
         if ITEM_BEHAVIORS.get_behavior(item).as_spawn_egg().is_some() {
             let spawn_egg_result = {
                 let mut inventory = player.inventory.lock();
-                let item_stack = inventory.get_item_in_hand_mut(hand);
-                SpawnEggItem::interact_with_mob(item_stack, player, self)
+                let mut item_stack = inventory.get_item_in_hand_mut(hand);
+                SpawnEggItem::interact_with_mob(&mut item_stack, player, self)
             };
             if spawn_egg_result.consumes_action() {
                 return spawn_egg_result;
@@ -1152,7 +1157,7 @@ pub trait Mob: LivingEntity + Leashable {
             .death_loot_table()
             .lock()
             .as_ref()
-            .and_then(|key| REGISTRY.loot_tables.by_key(key))
+            .and_then(|key| LOOT_TABLES.by_key(key))
     }
 
     fn has_custom_death_loot_table(&self) -> bool {
@@ -1615,7 +1620,7 @@ pub trait Mob: LivingEntity + Leashable {
             }
             if equipment.get_ref(slot).is_damageable_item() {
                 let item = equipment.get_ref(slot).item();
-                let sun_blocker = equipment.get_mut(slot);
+                let mut sun_blocker = equipment.get_mut(slot);
                 if sun_blocker.hurt_and_break(
                     rand::random_range(0..SUN_BURN_DURABILITY_ROLL_BOUND),
                     has_infinite_materials,

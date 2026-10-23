@@ -1,5 +1,6 @@
 //! Slot abstraction for inventory access.
 
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 use crate::player::player_inventory::Prediction;
 use steel_registry::item_stack::ItemStack;
 use steel_utils::ErasedType;
@@ -81,10 +82,10 @@ pub trait Slot: ErasedType + Send + Sync {
     fn storage(&self) -> &SlotStorage;
 
     /// Returns a reference to the item in this slot.
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack;
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a>;
 
     /// Returns a mutable reference to the item in this slot.
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack;
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a>;
 
     /// Sets the item in this slot.
     fn set_item(&self, guard: &mut ContainerLockGuard, stack: ItemStack);
@@ -116,7 +117,7 @@ pub trait Slot: ErasedType + Send + Sync {
 
     /// Returns true if partial removal is allowed from this slot.
     fn allow_modification(&self, guard: &ContainerLockGuard, player: &Player) -> bool {
-        self.may_pickup(guard, player) && self.may_place(self.get_item(guard))
+        self.may_pickup(guard, player) && self.may_place(&self.get_item(guard))
     }
 
     /// Returns the maximum stack size for this slot.
@@ -129,7 +130,7 @@ pub trait Slot: ErasedType + Send + Sync {
 
     /// Removes up to `amount` items from this slot and returns them.
     fn remove(&self, guard: &mut ContainerLockGuard, amount: i32) -> ItemStack {
-        let item = self.get_item_mut(guard);
+        let mut item = self.get_item_mut(guard);
         if item.is_empty() || amount <= 0 {
             return ItemStack::empty();
         }
@@ -245,6 +246,7 @@ pub trait Slot: ErasedType + Send + Sync {
 
 #[cfg(test)]
 mod tests {
+    use crate::inventory::stack_reference::{StackRead, StackWrite};
     use std::sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -274,11 +276,11 @@ mod tests {
             self.base.storage()
         }
 
-        fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+        fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
             self.base.get_item(guard)
         }
 
-        fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+        fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
             self.base.get_item_mut(guard)
         }
 
@@ -320,7 +322,8 @@ mod tests {
             called: Arc::clone(&called),
         });
         assert!(slot.downcast_ref::<SafeInsertOverrideSlot>().is_some());
-        let mut guard = ContainerLockGuard::lock_all(&[container_ref]);
+        let mut guard = ContainerLockGuard::lock_all(&[container_ref])
+            .expect("container access should succeed");
 
         let remaining = slot.safe_insert(&mut guard, ItemStack::new(&vanilla_items::STONE), 1);
 

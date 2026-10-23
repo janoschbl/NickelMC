@@ -1,11 +1,12 @@
-//! Mutable access to an entity-owned item slot.
+//! Item slots exposed by entities to commands.
 
 use steel_registry::item_stack::ItemStack;
 
-/// A vanilla entity slot, including slots backed by synchronized item data.
+/// A readable slot whose setter reports whether the replacement was accepted.
 pub trait SlotAccess {
-    /// Reads the current stack.
+    /// Returns the current stack, including an empty stack for an empty slot.
     fn get(&self) -> ItemStack;
-    /// Attempts to replace the current stack.
-    fn set(&self, item: ItemStack) -> bool;
+
+    /// Replaces the stack when permitted by this slot.
+    fn set(&self, stack: ItemStack) -> bool;
 }

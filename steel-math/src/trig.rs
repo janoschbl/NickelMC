@@ -26,6 +26,7 @@ use std::{
     sync::LazyLock,
 };
 
+const FRAC_BIAS: f64 = f64::from_bits(4_805_340_802_404_319_232);
 /// `65536 / (2π)` — Mojang's stored constant.
 const INDEX_SCALE: f64 = 10_430.378_350_470_453;
 const TABLE_LEN: usize = 65_536;
@@ -62,7 +63,6 @@ pub fn cos(angle: f64) -> f32 {
     SIN_TABLE[idx]
 }
 
-const FRAC_BIAS: f64 = f64::from_bits(4_805_340_802_404_319_232);
 static ATAN2_TABLE: LazyLock<[(f64, f64); 257]> = LazyLock::new(|| {
     from_fn(|index| {
         let phi = (index as f64 / 256.0).asin();
@@ -133,6 +133,26 @@ mod test {
             assert_eq!((atan2(y, x) as f32 * crate::RAD_TO_DEG).to_bits(), expected);
         }
         assert!(atan2(f64::NAN, 1.0).is_nan());
+    }
+
+    #[test]
+    fn atan2_matches_the_vanilla_java_approximation() {
+        // Java 26.3 Mth.atan2 oracle; using the platform atan2 would fail the
+        // shallow-angle case even though its mathematical answer is closer.
+        for (y, x, expected) in [
+            (0.5, 1.0, 0.463_647_263_461_001_2),
+            (1.0, 0.5, 1.107_149_063_333_895_4),
+            (-0.5, 1.0, -0.463_647_263_461_001_2),
+            (0.5, -1.0, 2.677_945_390_128_791_7),
+            (-1.0, -0.5, -2.034_443_590_255_898),
+            (1.0, 1.0, 0.785_398_136_641_139_8),
+            (0.001, 2.0, 0.000_499_154_032_592_071_5),
+        ] {
+            assert!((atan2(y, x) - expected).abs() < 1.0e-15, "y={y}, x={x}");
+        }
+        assert!(atan2(f64::NAN, 1.0).is_nan());
+        assert_eq!(atan2(-0.0, 1.0).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(atan2(0.0, 0.0).to_bits(), 0.0_f64.to_bits());
     }
 
     #[test]

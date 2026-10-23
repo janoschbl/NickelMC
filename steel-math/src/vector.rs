@@ -7,6 +7,17 @@ use glam::DVec3;
 
 use crate::trig;
 
+/// Normalizes with `Vec3`'s near-zero cutoff rather than glam's exact-zero cutoff.
+#[must_use]
+pub fn normalize(vector: DVec3) -> DVec3 {
+    let length = vector.length();
+    if length < 1.0e-5 {
+        DVec3::ZERO
+    } else {
+        vector / length
+    }
+}
+
 /// Returns the table-backed cosine and sine vanilla's rotations index.
 fn cos_sin(radians: f32) -> (f64, f64) {
     let angle = f64::from(radians);
@@ -53,6 +64,15 @@ pub fn z_rot(vector: DVec3, radians: f32) -> DVec3 {
 mod tests {
     use super::*;
     use std::f32::consts::FRAC_PI_2;
+
+    #[test]
+    fn normalize_uses_vanilla_near_zero_cutoff() {
+        assert_eq!(normalize(DVec3::new(0.000_009, 0.0, 0.0)), DVec3::ZERO);
+        assert_eq!(normalize(DVec3::new(0.000_01, 0.0, 0.0)), DVec3::X);
+        assert!(
+            (normalize(DVec3::new(3.0, 0.0, 4.0)) - DVec3::new(0.6, 0.0, 0.8)).length() < 1.0e-15
+        );
+    }
 
     /// The sine table steps by 2π / 65536, bounding the error on a unit vector.
     const TABLE_EPSILON: f64 = 1e-4;

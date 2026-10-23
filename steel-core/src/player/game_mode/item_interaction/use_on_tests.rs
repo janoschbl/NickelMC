@@ -126,7 +126,7 @@ impl Interaction {
         (0..inv.get_container_size())
             .map(|slot| inv.get_item(slot))
             .filter(|stack| stack.is(item))
-            .map(ItemStack::count)
+            .map(|stack| stack.count())
             .sum()
     }
 }

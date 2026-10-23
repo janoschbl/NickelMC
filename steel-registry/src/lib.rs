@@ -18,6 +18,7 @@
     clippy::unused_self,
     reason = "registry model code mirrors vanilla/generated data and keeps existing panic-heavy registry invariants"
 )]
+pub mod activity;
 pub mod attribute;
 pub mod banner_pattern;
 pub mod biome;
@@ -58,7 +59,6 @@ pub mod item_stack;
 pub mod item_stack_template;
 pub mod items;
 pub mod jukebox_song;
-pub mod loot_table;
 mod macros;
 pub mod map_decoration_type;
 pub mod menu_type;
@@ -86,6 +86,7 @@ pub use structure::processor as structure_processor;
 pub use structure::set as structure_set;
 pub use structure::template_pool;
 pub mod advancement;
+pub mod environment_attribute;
 pub mod ticket_type;
 pub mod timeline;
 pub mod trim_material;
@@ -111,6 +112,16 @@ pub use potion::{Potion, PotionEffect, PotionRef};
 pub use resolvable_profile::{
     PartialProfile, PlayerModelType, PlayerSkinPatch, ResolvableProfile, ResolvableProfileContents,
 };
+
+#[expect(warnings)]
+#[rustfmt::skip]
+#[path = "generated/vanilla_activities.rs"]
+pub mod vanilla_activities;
+
+#[expect(warnings)]
+#[rustfmt::skip]
+#[path = "generated/vanilla_environment_attributes.rs"]
+pub mod vanilla_environment_attributes;
 
 #[expect(warnings)]
 #[rustfmt::skip]
@@ -395,11 +406,6 @@ pub mod vanilla_poi_type_tags;
 #[rustfmt::skip]
 #[path = "generated/vanilla_fluid_tags.rs"]
 pub mod vanilla_fluid_tags;
-
-#[expect(warnings)]
-#[rustfmt::skip]
-#[path = "generated/vanilla_loot_tables.rs"]
-pub mod vanilla_loot_tables;
 
 #[expect(warnings)]
 #[rustfmt::skip]

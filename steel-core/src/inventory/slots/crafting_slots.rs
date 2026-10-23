@@ -122,7 +122,7 @@ impl ResultHandler for CraftingHandler {
                     };
 
                     {
-                        let item = crafting.get_item_mut(grid_slot);
+                        let mut item = crafting.get_item_mut(grid_slot);
                         if !item.is_empty() {
                             item.shrink_one();
                         }
@@ -174,6 +174,6 @@ impl ResultHandler for CraftingHandler {
             return false;
         };
 
-        ItemStack::matches(result_item, &assembled)
+        ItemStack::matches(&result_item, &assembled)
     }
 }

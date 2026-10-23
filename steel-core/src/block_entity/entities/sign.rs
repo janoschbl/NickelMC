@@ -3,6 +3,9 @@
 //! Signs store text on both front and back sides, along with color and glow
 //! information.
 
+#[cfg(test)]
+use crate::block_entity::BlockEntityLifecycleExt as _;
+
 use std::array;
 use std::sync::{Arc, Weak};
 
@@ -11,10 +14,10 @@ use simdnbt::borrow::{
 };
 use simdnbt::owned::{NbtCompound, NbtList};
 use steel_registry::block_entity_type::BlockEntityTypeRef;
+use steel_registry::data_components::DataComponentMap;
 use steel_registry::data_components::vanilla_components::{
     SIGN_TEXT_BACK, SIGN_TEXT_FRONT, SignText as SignTextComponent, WAXED,
 };
-use steel_registry::item_stack::ItemStack;
 use steel_registry::{DyeColor, vanilla_block_entity_types};
 use steel_utils::{
     BlockPos, BlockStateId, DowncastType, DowncastTypeKey, locks::SyncMutex, types::SignTextSlot,
@@ -22,7 +25,7 @@ use steel_utils::{
 use text_components::{TextComponent, content::Content};
 use uuid::Uuid;
 
-use crate::block_entity::{BlockEntity, BlockEntityBase};
+use crate::block_entity::{BlockEntity, BlockEntityBase, ImplicitComponentGetter};
 use crate::entity::Entity;
 use crate::world::World;
 
@@ -38,6 +41,8 @@ pub const SIGN_LINES: usize = 4;
 pub struct SignText {
     /// The 4 lines of text (raw, unfiltered).
     pub messages: [TextComponent; SIGN_LINES],
+    /// Filtered lines, retained even when server-side filtering is disabled.
+    pub filtered_messages: Option<[TextComponent; SIGN_LINES]>,
     /// Text color (dye color applied to the sign).
     pub color: DyeColor,
     /// Whether the text has a glowing effect (from glow ink sac).
@@ -56,6 +61,7 @@ impl SignText {
     pub fn new() -> Self {
         Self {
             messages: array::from_fn(|_| TextComponent::new()),
+            filtered_messages: None,
             color: DyeColor::Black,
             has_glowing_text: false,
         }
@@ -70,6 +76,9 @@ impl SignText {
     /// Sets a message line by index.
     pub fn set_message(&mut self, index: usize, message: TextComponent) {
         if index < SIGN_LINES {
+            if let Some(filtered) = &mut self.filtered_messages {
+                filtered[index] = message.clone();
+            }
             self.messages[index] = message;
         }
     }
@@ -87,10 +96,11 @@ impl SignText {
     }
 
     /// Builds sign text from an item's `sign_text_front`/`sign_text_back`
-    /// component. Filtered messages are dropped: Steel has no text filtering.
+    /// component, preserving the filtered representation for persistence.
     fn from_component(component: Option<&SignTextComponent>) -> Self {
         component.map_or_else(Self::new, |component| Self {
             messages: component.messages.clone(),
+            filtered_messages: component.filtered_messages.clone(),
             color: component.color,
             has_glowing_text: component.has_glowing_text,
         })
@@ -120,6 +130,15 @@ impl SignText {
             }
         }
 
+        self.filtered_messages = nbt.list("filtered_messages").and_then(|messages| {
+            let tags = messages.to_owned().as_nbt_tags();
+            let messages = tags
+                .iter()
+                .map(TextComponent::from_nbt)
+                .collect::<Option<Vec<_>>>()?;
+            messages.try_into().ok()
+        });
+
         // Load color
         if let Some(color_str) = nbt.string("color") {
             self.color =
@@ -143,6 +162,19 @@ impl SignText {
                     .collect::<Vec<_>>(),
             ),
         );
+        if let Some(filtered) = &self.filtered_messages
+            && filtered != &self.messages
+        {
+            nbt.insert(
+                "filtered_messages",
+                NbtList::from(
+                    filtered
+                        .iter()
+                        .map(TextComponent::to_codec_nbt)
+                        .collect::<Vec<_>>(),
+                ),
+            );
+        }
 
         // Save color
         nbt.insert("color", self.color.serialized_name());
@@ -311,11 +343,34 @@ impl BlockEntity for SignBlockEntity {
         }
     }
 
-    fn apply_components_from_item(&self, item: &ItemStack) {
+    fn apply_implicit_components(&self, components: &mut ImplicitComponentGetter<'_>) {
         let mut sign = self.sign.lock();
-        sign.front_text = SignText::from_component(item.get(SIGN_TEXT_FRONT));
-        sign.back_text = SignText::from_component(item.get(SIGN_TEXT_BACK));
-        sign.is_waxed = item.has(WAXED);
+        sign.front_text = SignText::from_component(components.get(SIGN_TEXT_FRONT).as_ref());
+        sign.back_text = SignText::from_component(components.get(SIGN_TEXT_BACK).as_ref());
+        sign.is_waxed = components.get(WAXED).is_some();
+    }
+
+    fn collect_implicit_components(
+        &self,
+        components: &mut DataComponentMap,
+    ) -> std::io::Result<()> {
+        let sign = self.sign.lock();
+        for (component, text) in [
+            (SIGN_TEXT_FRONT, &sign.front_text),
+            (SIGN_TEXT_BACK, &sign.back_text),
+        ] {
+            components.set(
+                component,
+                Some(SignTextComponent::new(
+                    text.messages.clone(),
+                    text.filtered_messages.clone(),
+                    text.color,
+                    text.has_glowing_text,
+                )),
+            );
+        }
+        components.set(WAXED, sign.is_waxed.then_some(()));
+        Ok(())
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {
@@ -375,15 +430,14 @@ mod tests {
 
     use simdnbt::borrow::read_tag;
     use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
+    use steel_registry::item_stack::ItemStack;
     use steel_registry::{init_vanilla_registry, vanilla_blocks, vanilla_items};
     use steel_utils::{BlockPos, translations, types::SignTextSlot};
     use text_components::{Modifier as _, TextComponent};
     use uuid::Uuid;
 
-    use super::{
-        DyeColor, ItemStack, SIGN_TEXT_FRONT, SignBlockEntity, SignText, SignTextComponent, WAXED,
-    };
-    use crate::block_entity::BlockEntity as _;
+    use super::{DyeColor, SIGN_TEXT_FRONT, SignBlockEntity, SignText, SignTextComponent, WAXED};
+    use crate::block_entity::{BlockEntity as _, BlockEntityLifecycleExt as _};
     use crate::test_support::fresh_test_world;
 
     #[test]
@@ -410,6 +464,7 @@ mod tests {
         let mut expected = SignText::new();
         expected.messages[0] = TextComponent::plain("plain");
         expected.messages[1] = TextComponent::plain("styled").bold(true);
+        expected.filtered_messages = Some(array::from_fn(|_| TextComponent::plain("filtered")));
 
         let mut nbt = NbtCompound::new();
         expected.save(&mut nbt);
@@ -431,6 +486,7 @@ mod tests {
         decoded.load(compound);
 
         assert_eq!(decoded.messages, expected.messages);
+        assert_eq!(decoded.filtered_messages, expected.filtered_messages);
         assert_eq!(decoded.color, expected.color);
         assert_eq!(decoded.has_glowing_text, expected.has_glowing_text);
     }
@@ -462,11 +518,16 @@ mod tests {
         let mut item = ItemStack::new(&vanilla_items::OAK_SIGN);
         item.set(
             SIGN_TEXT_FRONT,
-            SignTextComponent::new(messages.clone(), None, DyeColor::Red, true),
+            SignTextComponent::new(
+                messages.clone(),
+                Some(array::from_fn(|_| TextComponent::plain("filtered"))),
+                DyeColor::Red,
+                true,
+            ),
         );
         item.set(WAXED, ());
 
-        sign.apply_components_from_item(&item);
+        sign.apply_components_from_item_stack(&item);
 
         let front = sign.get_text(SignTextSlot::Front);
         assert_eq!(front.messages, messages);
@@ -474,6 +535,19 @@ mod tests {
         assert!(front.has_glowing_text);
         assert!(!sign.get_text(SignTextSlot::Back).has_message());
         assert!(sign.is_waxed());
+
+        let collected = sign.collect_components().expect("valid components");
+        assert_eq!(
+            collected.get(SIGN_TEXT_FRONT),
+            item.get(SIGN_TEXT_FRONT).cloned()
+        );
+        assert_eq!(collected.get(WAXED), Some(()));
+        assert!(
+            sign.base()
+                .stored_components()
+                .get(SIGN_TEXT_FRONT)
+                .is_none()
+        );
     }
 
     #[test]

@@ -82,15 +82,15 @@ fn small_fireball_round_trips_deflected_acceleration_owner_and_rendered_item() {
     loaded.load_additional((&borrowed).into());
     assert_eq!(loaded.acceleration_power(), 0.025);
     assert_eq!(loaded.owner_uuid(), Some(owner));
-    assert_eq!(loaded.get_item().item(), &vanilla_items::DIAMOND);
+    assert!(loaded.get_item().is(&vanilla_items::DIAMOND));
     assert_eq!(loaded.get_item().count(), 1);
     loaded.hurting_on_deflection(true);
     assert_eq!(loaded.acceleration_power(), 0.1);
     loaded.set_item(ItemStack::empty());
-    assert_eq!(loaded.get_item().item(), &vanilla_items::FIRE_CHARGE);
+    assert!(loaded.get_item().is(&vanilla_items::FIRE_CHARGE));
     let slot = loaded.get_slot(0).expect("fireball item slot");
     assert!(slot.set(ItemStack::new(&vanilla_items::DIAMOND)));
-    assert_eq!(slot.get().item(), &vanilla_items::DIAMOND);
+    assert!(slot.get().is(&vanilla_items::DIAMOND));
     assert!(loaded.get_slot(1).is_none());
 }
 

@@ -22,7 +22,7 @@ pub use container::GeneratedLoot;
 pub use context::*;
 pub use entries::LootCandidate;
 pub use output::{LootModifier, LootOutput, with_modifier};
-pub use table::{LootTable, LootTableRef};
+pub use table::{EMPTY_LOOT_TABLE, LootTable, LootTableRef};
 pub use table_registry::{LOOT_TABLES, LootTableRegistry};
 pub use vanilla::vanilla_loot_tables;
 

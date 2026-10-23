@@ -265,9 +265,7 @@ impl RandomizableContainerStorage {
         };
         let equipment = player.map(|player| living_loot_equipment(player));
         let result = (|| {
-            let table = LOOT_TABLES
-                .by_key(loot.loot_table())
-                .ok_or_else(|| LootError::MissingTable(loot.loot_table().clone()))?;
+            let table = LOOT_TABLES.by_key_or_empty(loot.loot_table());
             let pos = base.pos();
             world.with_loot_random(table, loot.seed(), |random| {
                 let mut context = LootContext::new(random).with_world(&world).with_origin(

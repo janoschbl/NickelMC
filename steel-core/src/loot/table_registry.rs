@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 use steel_registry::RegistryExt;
 use steel_utils::Identifier;
 
-use super::{LootTable, LootTableRef, vanilla_loot_tables};
+use super::{EMPTY_LOOT_TABLE, LootTable, LootTableRef, vanilla_loot_tables};
 
 /// Registered vanilla loot-table identities, independent of their execution context.
 pub static LOOT_TABLES: LazyLock<LootTableRegistry> = LazyLock::new(|| {
@@ -46,6 +46,15 @@ impl LootTableRegistry {
         self.tables_by_key.insert(table.key.clone(), id);
         self.tables_by_id.push(table);
         id
+    }
+
+    /// Resolves a saved table key like vanilla `getLootTable`: unregistered keys yield the empty table.
+    #[must_use]
+    pub fn by_key_or_empty(&self, key: &Identifier) -> LootTableRef {
+        self.by_key(key).unwrap_or_else(|| {
+            log::warn!("Loot table {key} is not registered; treating it as empty");
+            &EMPTY_LOOT_TABLE
+        })
     }
 
     /// Iterates table identities in registration order.

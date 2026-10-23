@@ -1,5 +1,8 @@
 //! NBT-preserving fallback block entity.
 
+#[cfg(test)]
+use crate::block_entity::BlockEntityLifecycleExt as _;
+
 use std::sync::Weak;
 
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
@@ -116,7 +119,13 @@ mod tests {
         assert_eq!(saved.int("y"), Some(70));
         assert_eq!(saved.int("z"), Some(-4));
         assert_eq!(saved.int("custom"), Some(7));
-        assert_eq!(entity.collect_components().get(REPAIR_COST), Some(3));
+        assert_eq!(
+            entity
+                .collect_components()
+                .expect("valid components")
+                .get(REPAIR_COST),
+            Some(3)
+        );
         assert!(!custom.contains("id"));
         assert!(!custom.contains("x"));
         assert!(!custom.contains("components"));

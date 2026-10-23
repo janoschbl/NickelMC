@@ -1,5 +1,7 @@
 use crate::behavior::blocks::{SkullData, SkullType};
 use crate::behavior::skull_types;
+#[cfg(test)]
+use crate::block_entity::BlockEntityLifecycleExt as _;
 use crate::block_entity::{BlockEntity, BlockEntityBase, ImplicitComponentGetter};
 use crate::world::World;
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
@@ -7,8 +9,8 @@ use simdnbt::owned::NbtCompound;
 use simdnbt::{FromNbtTag, ToNbtTag};
 use std::sync::Weak;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
+use steel_registry::data_components::DataComponentPatch;
 use steel_registry::data_components::vanilla_components::{CUSTOM_NAME, NOTE_BLOCK_SOUND, PROFILE};
-use steel_registry::data_components::{DataComponentMap, DataComponentPatch};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, ResolvableProfile, vanilla_block_entity_types};
 use steel_utils::locks::SyncMutex;
@@ -95,6 +97,20 @@ impl SkullBlockEntity {
 }
 
 impl BlockEntity for SkullBlockEntity {
+    fn collect_implicit_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) -> std::io::Result<()> {
+        use steel_registry::data_components::vanilla_components::{
+            CUSTOM_NAME, NOTE_BLOCK_SOUND, PROFILE,
+        };
+        let state = self.state.lock();
+        components.set(CUSTOM_NAME, state.custom_name.clone());
+        components.set(NOTE_BLOCK_SOUND, state.note_block_sound.clone());
+        components.set(PROFILE, state.owner.clone());
+        Ok(())
+    }
+
     fn base(&self) -> &BlockEntityBase {
         &self.base
     }
@@ -138,13 +154,6 @@ impl BlockEntity for SkullBlockEntity {
         state.note_block_sound = components.get(NOTE_BLOCK_SOUND);
         state.custom_name = components.get(CUSTOM_NAME);
     }
-
-    fn collect_implicit_components(&self, components: &mut DataComponentMap) {
-        let state = self.state.lock();
-        components.set(PROFILE, state.owner.clone());
-        components.set(NOTE_BLOCK_SOUND, state.note_block_sound.clone());
-        components.set(CUSTOM_NAME, state.custom_name.clone());
-    }
 }
 
 #[cfg(test)]
@@ -174,7 +183,7 @@ mod tests {
         assert_eq!(stored.get(REPAIR_COST), Some(7));
         assert!(!stored.has(CUSTOM_NAME));
         assert!(!stored.has(NOTE_BLOCK_SOUND));
-        let collected = skull.collect_components();
+        let collected = skull.collect_components().expect("valid components");
         assert_eq!(collected.get(CUSTOM_NAME), Some(name));
         assert_eq!(collected.get(NOTE_BLOCK_SOUND), Some(sound));
 

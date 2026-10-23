@@ -3,6 +3,9 @@
 //! Signs store text on both front and back sides, along with color and glow
 //! information.
 
+#[cfg(test)]
+use crate::block_entity::BlockEntityLifecycleExt as _;
+
 use std::array;
 use std::sync::{Arc, Weak};
 
@@ -347,7 +350,10 @@ impl BlockEntity for SignBlockEntity {
         sign.is_waxed = components.get(WAXED).is_some();
     }
 
-    fn collect_implicit_components(&self, components: &mut DataComponentMap) {
+    fn collect_implicit_components(
+        &self,
+        components: &mut DataComponentMap,
+    ) -> std::io::Result<()> {
         let sign = self.sign.lock();
         for (component, text) in [
             (SIGN_TEXT_FRONT, &sign.front_text),
@@ -364,6 +370,7 @@ impl BlockEntity for SignBlockEntity {
             );
         }
         components.set(WAXED, sign.is_waxed.then_some(()));
+        Ok(())
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {
@@ -529,7 +536,7 @@ mod tests {
         assert!(!sign.get_text(SignTextSlot::Back).has_message());
         assert!(sign.is_waxed());
 
-        let collected = sign.collect_components();
+        let collected = sign.collect_components().expect("valid components");
         assert_eq!(
             collected.get(SIGN_TEXT_FRONT),
             item.get(SIGN_TEXT_FRONT).cloned()

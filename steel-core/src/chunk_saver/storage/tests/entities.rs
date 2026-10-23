@@ -1,4 +1,5 @@
 use super::*;
+use crate::block_entity::BlockEntityLifecycleExt as _;
 use crate::entity::{ENTITY_LOAD_MAX_HORIZONTAL_POSITION, ENTITY_LOAD_MAX_VERTICAL_POSITION};
 use steel_registry::RegistryEntry as _;
 use steel_registry::data_components::vanilla_components::{CUSTOM_NAME, REPAIR_COST};
@@ -128,7 +129,9 @@ fn block_entity_stored_components_survive_chunk_save_load() {
         .chunk
         .get_block_entity(block_pos)
         .expect("enchanting table should survive chunk load");
-    let components = loaded_entity.collect_components();
+    let components = loaded_entity
+        .collect_components()
+        .expect("valid components");
     assert_eq!(components.get(CUSTOM_NAME), Some(name));
     assert_eq!(components.get(REPAIR_COST), Some(3));
     let full = loaded_entity.save_with_full_metadata();
@@ -165,7 +168,13 @@ fn owned_block_entity_load_preserves_stored_components() {
             state,
             nbt,
         );
-        assert_eq!(entity.collect_components().get(REPAIR_COST), Some(3));
+        assert_eq!(
+            entity
+                .collect_components()
+                .expect("valid components")
+                .get(REPAIR_COST),
+            Some(3)
+        );
 
         let mut item = ItemStack::new(REGISTRY.items.by_block(state.get_block()));
         item.set(REPAIR_COST, 5);
@@ -684,5 +693,11 @@ fn unimplemented_block_entities_preserve_nbt_through_proto_save_load() {
         Some("minecraft:chests/simple_dungeon".to_owned())
     );
     assert_eq!(saved.long("LootTableSeed"), Some(42));
-    assert_eq!(loaded_entity.collect_components().get(REPAIR_COST), Some(3));
+    assert_eq!(
+        loaded_entity
+            .collect_components()
+            .expect("valid components")
+            .get(REPAIR_COST),
+        Some(3)
+    );
 }

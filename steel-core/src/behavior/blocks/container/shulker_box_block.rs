@@ -19,17 +19,18 @@ use text_components::TextComponent;
 use crate::{
     behavior::{
         BlockBehavior, BlockCollisionBoxes, BlockCollisionContext, BlockEntityCreation,
-        BlockLootContext, BlockPlaceContext, InteractionResult, InventoryAccess,
+        BlockPlaceContext, InteractionResult, InventoryAccess,
     },
     block_entity::{
         BLOCK_ENTITIES, BlockEntity, BlockEntityTicker,
         entities::{AnimationStatus, ShulkerBoxBlockEntity},
     },
     inventory::{
-        container::calculate_redstone_signal_from_container,
+        container::calculate_redstone_signal_from_containers,
         lock::{ContainerLockGuard, ContainerRef},
         menu::kinds::shulker_box,
     },
+    nameable::Nameable as _,
     player::Player,
     world::{LevelReader, World},
 };
@@ -104,11 +105,26 @@ impl BlockBehavior for ShulkerBoxBlock {
             && let Some(container_ref) = block_entity.container_ref()
             && block_entity.can_open(state, world, pos)
         {
+            if !block_entity.can_player_open(player) {
+                if !crate::entity::Entity::is_spectator(player) {
+                    player.send_overlay_message(
+                        &translations::CONTAINER_IS_LOCKED
+                            .message([block_entity.name()])
+                            .component(),
+                    );
+                }
+                return InteractionResult::Success;
+            }
+            if let Some(loot) = block_entity.as_randomizable_container()
+                && let Err(error) = loot.unpack_loot_table(Some(player))
+            {
+                log::error!("Could not unpack shulker box loot at {pos:?}: {error}");
+                return InteractionResult::Success;
+            }
             let inventory = Arc::clone(&player.inventory);
-            player.open_menu(
-                TextComponent::translated(translations::CONTAINER_SHULKER_BOX.msg()),
-                move |context| shulker_box(inventory, context.container_id, container_ref),
-            );
+            player.open_menu(block_entity.name(), move |context| {
+                shulker_box(inventory, context.container_id, container_ref)
+            });
 
             player.award_custom_stat(&vanilla_custom_stats::OPEN_SHULKER_BOX);
             // TODO: Anger nearby piglins (PiglinAi.angerNearbyPiglins)
@@ -133,25 +149,17 @@ impl BlockBehavior for ShulkerBoxBlock {
         };
 
         if player.prevents_block_drops() && !shulker_box_block_entity.is_empty() {
-            let item = shulker_box_block_entity.shulker_box_as_item(state);
-            world.pop_resource(pos, item);
-        } else {
-            // TODO: maybe? shulkerBoxBlockEntity.unpackLootTable(player);
+            match shulker_box_block_entity.shulker_box_as_item(state) {
+                Ok(item) => world.pop_resource(pos, item),
+                Err(error) => log::error!("Could not collect shulker box at {pos:?}: {error}"),
+            }
+        } else if let Some(loot) = shulker_box_block_entity.as_randomizable_container()
+            && let Err(error) = loot.unpack_loot_table(Some(player))
+        {
+            log::error!("Could not unpack shulker box loot at {pos:?}: {error}");
         }
 
         state
-    }
-
-    fn get_drops(
-        &self,
-        state: BlockStateId,
-        context: &BlockLootContext<'_>,
-    ) -> Option<Vec<ItemStack>> {
-        let block_entity = context.block_entity()?;
-        let shulker_box_block_entity = block_entity.downcast_ref::<ShulkerBoxBlockEntity>()?;
-
-        let item = shulker_box_block_entity.shulker_box_as_item(state);
-        Some(vec![item])
     }
 
     fn new_block_entity(
@@ -265,12 +273,12 @@ impl BlockBehavior for ShulkerBoxBlock {
         else {
             return 0;
         };
-        let guard = ContainerLockGuard::lock_all(&[&container_ref]);
-        guard
-            .get(container_ref.container_id())
-            .map_or(0, |container| {
-                calculate_redstone_signal_from_container(container)
-            })
+        let Ok(guard) = ContainerLockGuard::lock_all(&[&container_ref]) else {
+            // TODO: Handle preparation failures without reporting an empty
+            // inventory if lazy access is added to shulker-box storage.
+            return 0;
+        };
+        calculate_redstone_signal_from_containers(guard.get(container_ref.container_id()))
     }
 
     fn fits_inside_container_items(&self) -> bool {

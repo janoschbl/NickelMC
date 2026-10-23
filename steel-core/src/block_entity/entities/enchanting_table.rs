@@ -1,5 +1,8 @@
 //! Enchanting table block entity.
 
+#[cfg(test)]
+use crate::block_entity::BlockEntityLifecycleExt as _;
+
 use std::sync::{Arc, Weak};
 
 use simdnbt::borrow::{
@@ -85,8 +88,12 @@ impl BlockEntity for EnchantingTableBlockEntity {
         *self.name.lock() = components.get(CUSTOM_NAME);
     }
 
-    fn collect_implicit_components(&self, components: &mut DataComponentMap) {
+    fn collect_implicit_components(
+        &self,
+        components: &mut DataComponentMap,
+    ) -> std::io::Result<()> {
         components.set(CUSTOM_NAME, self.custom_name());
+        Ok(())
     }
 }
 
@@ -168,7 +175,13 @@ mod tests {
             "an implicit component must not also be stored"
         );
         assert_eq!(stored.get(REPAIR_COST), Some(3));
-        assert_eq!(table.collect_components().get(CUSTOM_NAME), Some(name));
+        assert_eq!(
+            table
+                .collect_components()
+                .expect("valid components")
+                .get(CUSTOM_NAME),
+            Some(name)
+        );
     }
 
     #[test]

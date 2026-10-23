@@ -188,11 +188,7 @@ impl SquidEntity {
                 let tentacle_scale = tentacle_movement / PI as f32;
 
                 if tentacle_scale > 0.75 {
-                    self.set_velocity(DVec3::new(
-                        movement_vector.x,
-                        movement_vector.y,
-                        movement_vector.z,
-                    ));
+                    self.set_velocity(movement_vector);
                 }
             } else {
                 self.set_velocity(self.velocity() * 0.9);

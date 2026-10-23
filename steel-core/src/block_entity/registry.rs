@@ -328,6 +328,10 @@ pub fn init_block_entities() {
         registry.register(&vanilla_block_entity_types::SKULL, |level, pos, state| {
             Arc::new(SkullBlockEntity::new(level, pos, state))
         });
+        registry.register(
+            &vanilla_block_entity_types::MOB_SPAWNER,
+            |level, pos, state| Arc::new(SpawnerBlockEntity::new(level, pos, state)),
+        );
 
         registry
     });

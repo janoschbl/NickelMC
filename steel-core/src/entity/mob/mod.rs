@@ -353,6 +353,11 @@ pub trait Mob: LivingEntity + Leashable {
 
     fn set_mob_flags(&self, flags: i8);
 
+    /// Returns whether the entity-specific spawn predicate accepts this spawn.
+    fn check_spawn_rules(&self, _world: &Arc<World>, _reason: EntitySpawnReason) -> bool {
+        true
+    }
+
     /// Returns whether this mob has a saddle equipped.
     fn is_saddled(&self) -> bool {
         let mut is_saddled = false;

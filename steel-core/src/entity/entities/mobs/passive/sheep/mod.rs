@@ -35,7 +35,7 @@ use crate::entity::living_entity::shearing_loot_items_with_rng;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad, EntityPose,
     EntitySpawnReason, EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase,
-    PathfinderMob, SharedEntity, SpawnGroupData, sync_dirty_mob_effects,
+    PathfinderMob, SharedEntity, SpawnGroupData, SpawnRule, sync_dirty_mob_effects,
 };
 use crate::inventory::recipe_manager;
 use crate::physics::MoveResult;
@@ -62,7 +62,7 @@ const SHEARED_BIT: i8 = 0x10;
 const ATE_AGE_UP_SECONDS: i32 = 60;
 
 /// Vanilla sheep entity.
-#[entity_behavior(class = "Sheep")]
+#[entity_behavior(class = "Sheep", spawn_rule)]
 pub struct SheepEntity {
     base: EntityBase,
     entity_type: EntityTypeRef,
@@ -79,6 +79,9 @@ unsafe impl DowncastType for SheepEntity {
 }
 
 impl SheepEntity {
+    /// Vanilla `SpawnPlacements` predicate: `Animal.checkAnimalSpawnRules`.
+    pub(crate) const SPAWN_RULE: SpawnRule = <Self as Animal>::check_animal_spawn_rules;
+
     /// Creates a new sheep entity.
     #[must_use]
     pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {

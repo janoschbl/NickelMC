@@ -33,7 +33,6 @@ use crate::world::{
 const DEFAULT_EXPLOSION_POWER: f32 = 4.0;
 const MAX_EXPLOSION_POWER: f32 = 128.0;
 const GRAVITY: f64 = 0.04;
-const AIR_DRAG: f32 = 0.98;
 const INITIAL_HORIZONTAL_SPEED: f64 = 0.02;
 const INITIAL_VERTICAL_SPEED: f32 = 0.2;
 const EXPLOSION_HEIGHT_FRACTION: f32 = 0.0625;
@@ -281,7 +280,7 @@ impl Entity for PrimedTntEntity {
         self.apply_gravity();
         Arc::clone(&self).move_entity(MoverType::SelfMovement, self.velocity());
         self.apply_effects_from_blocks();
-        let mut velocity = self.velocity() * f64::from(AIR_DRAG);
+        let mut velocity = self.velocity() * f64::from(self.get_air_drag());
         if self.on_ground() {
             velocity = DVec3::new(
                 velocity.x * GROUND_HORIZONTAL_DRAG,
@@ -302,6 +301,9 @@ impl Entity for PrimedTntEntity {
             self.base.reset_fall_distance_in_water();
             // Vanilla's remaining-fuse smoke particle is client-local.
         }
+        self.base.set_requires_precise_position(
+            self.horizontal_collision() || self.vertical_collision(),
+        );
     }
 
     fn blocks_building(&self) -> bool {

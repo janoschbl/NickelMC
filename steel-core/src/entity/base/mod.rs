@@ -225,6 +225,7 @@ pub struct EntityBaseState {
     dimensions: EntityDimensions,
     bounding_box: WorldAabb,
     movement_flags: EntityMovementFlags,
+    requires_precise_position: bool,
     ground_contact: EntityGroundContact,
     movement_progress: EntityMovementProgress,
     fire_freeze: EntityFireFreezeState,
@@ -258,6 +259,7 @@ impl EntityBaseState {
             dimensions,
             bounding_box: Self::make_bounding_box(position, dimensions),
             movement_flags: EntityMovementFlags::new(),
+            requires_precise_position: false,
             ground_contact: EntityGroundContact::airborne(),
             movement_progress: EntityMovementProgress::new(),
             fire_freeze: EntityFireFreezeState::new(),
@@ -653,6 +655,16 @@ impl EntityBase {
     #[inline]
     pub fn horizontal_collision(&self) -> bool {
         self.state.lock().movement_flags.horizontal_collision()
+    }
+
+    /// Returns whether tracking must use an absolute position packet.
+    pub fn requires_precise_position(&self) -> bool {
+        self.state.lock().requires_precise_position
+    }
+
+    /// Selects absolute position synchronization for collision-sensitive entities.
+    pub fn set_requires_precise_position(&self, required: bool) {
+        self.state.lock().requires_precise_position = required;
     }
 
     /// Returns true if the last movement was clipped vertically.

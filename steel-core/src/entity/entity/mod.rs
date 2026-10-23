@@ -148,6 +148,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         self.uuid().to_string()
     }
 
+    /// Returns whether tracking must preserve the full position precision.
+    fn requires_precise_position(&self) -> bool {
+        self.base().requires_precise_position()
+    }
+
     /// Resolves this entity's team from its current level's domain scoreboard.
     fn team(&self) -> Option<crate::scoreboard::ScoreboardTeam> {
         self.level()?

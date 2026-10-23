@@ -41,6 +41,25 @@ fn primed_tnt(world: &Arc<World>, position: DVec3) -> Arc<PrimedTntEntity> {
 }
 
 #[test]
+fn tnt_requires_precise_tracking_only_after_collision() {
+    let fixture = ready_tnt_world("tnt_precise_tracking");
+    let world = &fixture.world;
+    let tnt = primed_tnt(world, test_tnt_position());
+    assert!(world.set_block(
+        TEST_TNT_BLOCK_POS.below(),
+        vanilla_blocks::STONE.default_state(),
+        UpdateFlags::UPDATE_NONE
+    ));
+    Arc::clone(&tnt).tick();
+    assert!(tnt.vertical_collision());
+    assert!(tnt.requires_precise_position());
+    tnt.set_velocity(DVec3::Y * 0.2);
+    Arc::clone(&tnt).tick();
+    assert!(!tnt.horizontal_collision() && !tnt.vertical_collision());
+    assert!(!tnt.requires_precise_position());
+}
+
+#[test]
 fn priming_applies_vanilla_float_tau_launch_motion() {
     const SEED: i64 = 0x7A71;
     const EXPECTED_INITIAL_MOTION_X: f64 = -0.003_337_386_497_296_714_6;

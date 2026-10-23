@@ -56,6 +56,35 @@ fn move_preserves_fluid_contact_until_the_entity_fluid_update() {
 }
 
 #[test]
+fn item_entering_water_preserves_contact_until_its_fluid_update() {
+    init_vanilla_registry();
+    init_behaviors();
+    let fixture = fresh_test_world("item_move_fluid_boundary");
+    let world = &fixture.world;
+    insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+    assert!(world.set_block(
+        BlockPos::new(8, 64, 8),
+        vanilla_blocks::WATER.default_state(),
+        UpdateFlags::UPDATE_NONE
+    ));
+    let item = Arc::new(crate::entity::entities::ItemEntity::new(
+        &vanilla_entities::ITEM,
+        crate::entity::next_entity_id(),
+        DVec3::new(7.5, 64.0, 8.5),
+        Arc::downgrade(world),
+    ));
+    item.set_no_physics(true);
+    assert!(
+        Arc::clone(&item)
+            .move_entity(MoverType::SelfMovement, DVec3::X)
+            .is_some()
+    );
+    assert!(!item.is_in_water());
+    item.refresh_fluid_contact_with_currents();
+    assert!(item.is_in_water());
+}
+
+#[test]
 fn living_move_refreshes_fluid_before_fall_state_is_applied() {
     init_vanilla_registry();
     init_behaviors();

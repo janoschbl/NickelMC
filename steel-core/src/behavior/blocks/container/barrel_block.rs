@@ -66,6 +66,8 @@ impl BlockBehavior for BarrelBlock {
 
         if let Some(randomizable) = block_entity.as_randomizable_container() {
             if player.is_spectator() && randomizable.loot_table().is_some() {
+                player.send_spectator_cant_open_message();
+                player.award_custom_stat(&vanilla_custom_stats::OPEN_BARREL);
                 return InteractionResult::Success;
             }
             if let Err(error) = randomizable.unpack_loot_table(Some(player)) {

@@ -3,16 +3,14 @@
 use std::str::FromStr as _;
 use std::sync::{Arc, Weak};
 
-use crate::loot::{LOOT_TABLES, LootContext, LootError, LootResult};
+use crate::loot::{LOOT_TABLES, LootContext, LootResult};
 use glam::DVec3;
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::NbtCompound;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::blocks::properties::BlockStateProperties;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::{
-    RegistryExt as _, vanilla_block_entity_types, vanilla_blocks, vanilla_entities,
-};
+use steel_registry::{vanilla_block_entity_types, vanilla_blocks, vanilla_entities};
 use steel_utils::types::UpdateFlags;
 use steel_utils::{
     BlockPos, BlockStateId, Direction, DowncastType, DowncastTypeKey, Identifier, locks::SyncMutex,
@@ -212,9 +210,7 @@ impl BrushableBlockEntity {
         let Some(key) = state.loot_table.as_ref() else {
             return Ok(());
         };
-        let table = LOOT_TABLES
-            .by_key(key)
-            .ok_or_else(|| LootError::MissingTable(key.clone()))?;
+        let table = LOOT_TABLES.by_key_or_empty(key);
         let items = world.with_loot_random(table, state.loot_table_seed, |rng| {
             let equipment = living_loot_equipment(player);
             let mut ctx = LootContext::new(rng)

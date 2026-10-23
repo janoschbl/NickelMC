@@ -18,6 +18,13 @@ pub struct LootTable {
 /// A stable reference to a registered loot table.
 pub type LootTableRef = &'static LootTable;
 
+/// Vanilla `LootTable.EMPTY`: what a saved table key resolves to when no table is registered for it.
+pub static EMPTY_LOOT_TABLE: LootTable = LootTable {
+    key: Identifier::new_static("steel", "empty"),
+    param_set: Identifier::vanilla_static("empty"),
+    random_sequence: None,
+};
+
 steel_registry::impl_registry_entry_eq!(LootTable);
 
 impl RegistryEntry for LootTable {

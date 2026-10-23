@@ -3,7 +3,7 @@
 use std::str::FromStr as _;
 use std::sync::{Arc, Weak};
 
-use crate::loot::{LOOT_TABLES, LootContext, LootError, LootResult};
+use crate::loot::{LOOT_TABLES, LootContext, LootResult};
 use glam::DVec3;
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::NbtCompound;
@@ -212,9 +212,7 @@ impl BrushableBlockEntity {
         let Some(key) = state.loot_table.as_ref() else {
             return Ok(());
         };
-        let table = LOOT_TABLES
-            .by_key(key)
-            .ok_or_else(|| LootError::MissingTable(key.clone()))?;
+        let table = LOOT_TABLES.by_key_or_empty(key);
         let items = world.with_loot_random(table, state.loot_table_seed, |rng| {
             let equipment = living_loot_equipment(player);
             let mut ctx = LootContext::new(rng)

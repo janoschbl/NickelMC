@@ -19,8 +19,14 @@
 //! `65536 / (2π)` rounded to a double, and the table is indexed by the
 //! low 16 bits of the scaled angle.
 
-use std::sync::LazyLock;
+use std::{
+    array::from_fn,
+    f64::consts::{FRAC_PI_2, PI},
+    mem::swap,
+    sync::LazyLock,
+};
 
+const FRAC_BIAS: f64 = f64::from_bits(4_805_340_802_404_319_232);
 /// `65536 / (2π)` — Mojang's stored constant.
 const INDEX_SCALE: f64 = 10_430.378_350_470_453;
 const TABLE_LEN: usize = 65_536;
@@ -57,9 +63,97 @@ pub fn cos(angle: f64) -> f32 {
     SIN_TABLE[idx]
 }
 
+static ATAN2_TABLE: LazyLock<[(f64, f64); 257]> = LazyLock::new(|| {
+    from_fn(|index| {
+        let phi = (index as f64 / 256.0).asin();
+        (phi, phi.cos())
+    })
+});
+
+/// Approximates the angle using `Mth.atan2`'s lookup and correction steps.
+#[must_use]
+pub fn atan2(mut y: f64, mut x: f64) -> f64 {
+    let squared_length = x * x + y * y;
+    if squared_length.is_nan() {
+        return f64::NAN;
+    }
+
+    let negative_y = y < 0.0;
+    if negative_y {
+        y = -y;
+    }
+    let negative_x = x < 0.0;
+    if negative_x {
+        x = -x;
+    }
+    let steep = y > x;
+    if steep {
+        swap(&mut x, &mut y);
+    }
+
+    let inverse = f64::from_bits(6_910_469_410_427_058_090 - (squared_length.to_bits() >> 1));
+    let inverse = inverse * (1.5 - 0.5 * squared_length * inverse * inverse);
+    x *= inverse;
+    y *= inverse;
+    let biased_y = FRAC_BIAS + y;
+    let index = biased_y.to_bits() as u32 as usize;
+    let (phi, cosine) = ATAN2_TABLE[index];
+    let sine = biased_y - FRAC_BIAS;
+    let difference = y * cosine - x * sine;
+    let mut theta = phi + (6.0 + difference * difference) * difference * 0.166_666_666_666_666_66;
+    if steep {
+        theta = FRAC_PI_2 - theta;
+    }
+    if negative_x {
+        theta = PI - theta;
+    }
+    if negative_y {
+        theta = -theta;
+    }
+    theta
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn atan2_matches_java_squid_rotation_inputs() {
+        // Java 25, using the 26.3 Mth implementation and casting before RAD_TO_DEG.
+        for (y, x, expected) in [
+            (0.0, 0.0, 0x0000_0000),
+            (1.0, 1.0, 0x4233_ffff),
+            (0.123, 0.456, 0x4171_8764),
+            (-0.123, 0.456, 0xc171_8764),
+            (0.456, -0.123, 0x42d2_30ec),
+            (-0.456, -0.123, 0xc2d2_30ec),
+            (1.0e-6, 0.2, 0x3995_ef46),
+            (0.2, 1.0e-6, 0x42b3_ffda),
+        ] {
+            assert_eq!((atan2(y, x) as f32 * crate::RAD_TO_DEG).to_bits(), expected);
+        }
+        assert!(atan2(f64::NAN, 1.0).is_nan());
+    }
+
+    #[test]
+    fn atan2_matches_the_vanilla_java_approximation() {
+        // Java 26.3 Mth.atan2 oracle; using the platform atan2 would fail the
+        // shallow-angle case even though its mathematical answer is closer.
+        for (y, x, expected) in [
+            (0.5, 1.0, 0.463_647_263_461_001_2),
+            (1.0, 0.5, 1.107_149_063_333_895_4),
+            (-0.5, 1.0, -0.463_647_263_461_001_2),
+            (0.5, -1.0, 2.677_945_390_128_791_7),
+            (-1.0, -0.5, -2.034_443_590_255_898),
+            (1.0, 1.0, 0.785_398_136_641_139_8),
+            (0.001, 2.0, 0.000_499_154_032_592_071_5),
+        ] {
+            assert!((atan2(y, x) - expected).abs() < 1.0e-15, "y={y}, x={x}");
+        }
+        assert!(atan2(f64::NAN, 1.0).is_nan());
+        assert_eq!(atan2(-0.0, 1.0).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(atan2(0.0, 0.0).to_bits(), 0.0_f64.to_bits());
+    }
 
     #[test]
     fn sin_at_zero_is_zero() {

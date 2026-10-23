@@ -2,6 +2,7 @@
 
 use std::{
     io, mem,
+    ops::ControlFlow,
     path::Path,
     sync::{
         Arc, LazyLock, Weak,
@@ -42,7 +43,8 @@ use steel_protocol::{
     packets::game::CSetTime,
 };
 
-use rustc_hash::FxHashSet;
+use crate::loot::{LootContext, random_sequences::RandomSequences};
+use rustc_hash::{FxHashMap, FxHashSet};
 use simdnbt::owned::NbtCompound;
 use steel_registry::biome::{BiomeRef, TemperatureModifier};
 use steel_registry::blocks::block_state_ext::BlockStateExt;
@@ -56,7 +58,6 @@ use steel_registry::game_events::GameEventRef;
 use steel_registry::game_rules::{ErasedGameRuleRef, GameRule, GameRuleValue, GameRuleValueType};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::level_events;
-use steel_registry::loot_table::LootContext;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -93,7 +94,7 @@ use crate::{
     entity::{
         AddEntityError, Entity, EntityChangeSenders, EntityChunkCallback, EntityLifecycleChanges,
         EntityMovementSyncPacket, EntityOwnership, EntityTracker, EntityVisibility,
-        InactiveEntityCallback, MobEffectSyncPacket, RemovalReason, SharedEntity,
+        InactiveEntityCallback, MobEffectSyncPacket, PartEntity, RemovalReason, SharedEntity,
         WorldEntityManager,
         entities::{ExperienceOrbEntity, ItemEntity},
         entity_loot_ref,
@@ -115,8 +116,9 @@ mod broadcasts;
 pub(crate) mod clock;
 mod domain_entity_directory;
 mod entity_management;
-mod environment;
+pub mod environment;
 mod events;
+pub mod explosion;
 /// Vanilla game-event contexts, listeners, and dispatch storage.
 pub mod game_event;
 mod level_effects;
@@ -142,7 +144,7 @@ pub use crate::config::WorldStorageConfig;
 use crate::worldgen::generators::vanilla::fuzzed_biome_at_block;
 use crate::worldgen::{ChunkGenerator, ChunkGeneratorType};
 use block_event::BlockEventQueue;
-pub(crate) use block_region::{BlockRegionBounds, MAX_BLOCK_REGION_WORKSET_SLOTS};
+pub(crate) use block_region::{BlockRegionBounds, BlockRegionRead, MAX_BLOCK_REGION_WORKSET_SLOTS};
 use block_updates::CollectingNeighborUpdater;
 pub use border::WorldBorderError;
 pub(crate) use border::{MAX_CENTER_COORDINATE, MAX_SIZE};
@@ -151,6 +153,11 @@ pub(crate) use domain_entity_directory::DomainEntityDirectory;
 use entity_management::NavigatingMobTracker;
 #[cfg(test)]
 use entity_management::nearest_player_distance_in_range;
+pub use explosion::{
+    BlockInteraction, DefaultExplosionDamageCalculator, EntityBasedExplosionDamageCalculator,
+    Explosion, ExplosionDamageCalculator, ExplosionInteraction, ExplosionOptions, ExplosionOutcome,
+};
+pub(crate) use explosion::{ExplosionBlockReader, ImmutableExplosionBlockCalculator};
 pub use level_reader::{LevelAccessor, LevelReader, ScheduledTickAccess};
 pub use player_index::{PlayerAreaMap, PlayerMap};
 pub use raycast::{ClipBlockShape, ClipFluid, ClipHitResult, RaytraceAction};
@@ -240,7 +247,10 @@ pub struct WorldConfig {
 
 /// A struct that represents a world.
 pub struct World {
+    server: SyncRwLock<Weak<crate::server::Server>>,
     pub(crate) damage_history: Weak<DamageHistory>,
+    /// Gameplay and command users share one scoreboard across each domain.
+    scoreboard: SyncRwLock<Arc<crate::scoreboard::Scoreboard>>,
     /// The chunk map of the world.
     pub chunk_map: Arc<ChunkMap>,
     /// All players in the world with dual indexing by UUID and entity ID.
@@ -260,6 +270,8 @@ pub struct World {
     pub(crate) game_time: Arc<GameTime>,
     /// Per-world saved data storage.
     pub(crate) saved_data: SavedDataManager,
+    pub(crate) random_sequences: SyncRwLock<Option<Arc<RandomSequences>>>,
+    pub(crate) loot_random: SyncMutex<RandomSource>,
     /// Runtime world border state.
     world_border: SyncMutex<WorldBorder>,
     /// Vanilla sleeping player counts for night-skip checks.
@@ -312,9 +324,24 @@ pub struct World {
     pub poi_storage: SyncMutex<PointOfInterestStorage>,
     /// World-change requests queued by world-local ticks for server safe-point processing.
     pending_world_changes: SyncMutex<Vec<(SharedEntity, WorldChangeRequest)>>,
+    /// Live multipart sub-entities, indexed by session entity ID.
+    ///
+    /// Mirrors vanilla `ServerLevel.dragonParts`. Steel names it generically because
+    /// [`PartEntity`] supports any multipart mob, not only the Ender Dragon. Parts are
+    /// held here instead of in the entity manager because they are never sectioned,
+    /// saved, or sent to clients.
+    entity_parts: SyncMutex<FxHashMap<i32, Arc<dyn PartEntity>>>,
 }
 
 impl World {
+    pub(crate) fn set_server(&self, server: Weak<crate::server::Server>) {
+        *self.server.write() = server;
+    }
+
+    pub(crate) fn server(&self) -> Option<Arc<crate::server::Server>> {
+        self.server.read().upgrade()
+    }
+
     /// Creates a new world with custom configuration.
     ///
     /// This allows specifying storage backend (disk or RAM-only) and other options.
@@ -426,7 +453,9 @@ impl World {
             chunk_map.start_generation_refill_loop();
 
             Self {
+                server: SyncRwLock::new(Weak::new()),
                 damage_history: Arc::downgrade(&config.damage_history),
+                scoreboard: SyncRwLock::new(Arc::new(crate::scoreboard::Scoreboard::new())),
                 chunk_map,
                 players: PlayerMap::new(),
                 player_area_map: PlayerAreaMap::new(),
@@ -435,6 +464,10 @@ impl World {
                 game_time: level_data.game_time_handle(),
                 level_data: SyncRwLock::new(level_data),
                 saved_data,
+                random_sequences: SyncRwLock::new(None),
+                loot_random: SyncMutex::new(RandomSource::Legacy(LegacyRandom::from_seed(
+                    rand::random(),
+                ))),
                 world_border: SyncMutex::new(world_border),
                 sleep_status: SyncMutex::new(sleep_status::SleepStatus::default()),
                 view_distance,
@@ -462,6 +495,7 @@ impl World {
                 scheduled_fluid_ticks_this_tick: SyncMutex::new(None),
                 poi_storage: SyncMutex::new(PointOfInterestStorage::new()),
                 pending_world_changes: SyncMutex::new(Vec::new()),
+                entity_parts: SyncMutex::new(FxHashMap::default()),
             }
         }))
     }
@@ -498,6 +532,15 @@ impl World {
     #[must_use]
     pub fn domain(&self) -> &str {
         self.key.namespace.as_ref()
+    }
+
+    /// Returns this domain's shared scoreboard.
+    pub fn scoreboard(&self) -> Arc<crate::scoreboard::Scoreboard> {
+        Arc::clone(&self.scoreboard.read())
+    }
+
+    pub(crate) fn set_scoreboard(&self, scoreboard: Arc<crate::scoreboard::Scoreboard>) {
+        *self.scoreboard.write() = scoreboard;
     }
 
     pub(crate) fn set_domain_entity_directory(&self, directory: Arc<DomainEntityDirectory>) {

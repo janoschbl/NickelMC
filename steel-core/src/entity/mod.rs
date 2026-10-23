@@ -1,5 +1,8 @@
 //! This module contains entity-related traits and types.
 
+mod container_user;
+pub use container_user::ContainerUser;
+
 use std::sync::Weak;
 use std::{
     any::try_as_dyn,
@@ -7,12 +10,16 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use crate::loot::LootTableRef;
+use crate::loot::{
+    DamageSourceInfo, EntityEquipmentRef, EntityEquipmentSlots, EntityRef, EntityRefFlags,
+    LootContext,
+};
 use glam::DVec3;
-use rand::{SeedableRng as _, rngs::StdRng};
 use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
-use steel_math::wrap_degrees;
+use steel_math::{trig, wrap_degrees};
 use steel_protocol::packets::game::{
     AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, CSwingAnimation,
     CTeleportEntity, EquipmentSlotItem, RelativeMovement, SoundSource,
@@ -32,10 +39,6 @@ use steel_registry::fluid::{FluidState, FluidStateExt as _};
 use steel_registry::game_events::GameEventRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::ItemRef;
-use steel_registry::loot_table::{
-    DamageSourceInfo, EntityEquipmentRef, EntityEquipmentSlots, EntityRef, EntityRefFlags,
-    LootContext, LootTableRef,
-};
 use steel_registry::mob_effect::MobEffectRef;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -52,6 +55,7 @@ use steel_registry::{RegistryEntry, RegistryExt};
 use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vanilla_mob_effects};
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
+use steel_utils::random::RandomSource;
 use steel_utils::types::{Difficulty, InteractionHand, UpdateFlags};
 use steel_utils::{
     BlockPos, BlockStateId, ChunkPos, Direction, Downcast as _, ErasedType, Identifier,
@@ -76,7 +80,7 @@ use crate::physics::{
     WorldCollisionProvider, move_entity as resolve_entity_movement,
 };
 use crate::world::game_event::GameEventContext;
-use crate::world::{ClipBlockShape, ClipFluid, LevelReader, World};
+use crate::world::{ClipBlockShape, ClipFluid, Explosion, LevelReader, World};
 use crate::{enchantment_helper, entity::damage::DamageSource, player::Player};
 
 use entities::ExperienceOrbEntity;
@@ -84,8 +88,14 @@ use entities::ExperienceOrbEntity;
 pub(crate) const ENTITY_LOAD_MAX_HORIZONTAL_POSITION: f64 = 3.000_051_2E7;
 pub(crate) const ENTITY_LOAD_MAX_VERTICAL_POSITION: f64 = 2.0E7;
 
-/// The default air drag value for entities.
-pub const DEFAULT_AIR_DRAG: f64 = 0.98;
+/// The default air drag value for entities (vanilla `Entity.getAirDrag` returns the float `0.98F`).
+pub const DEFAULT_AIR_DRAG: f32 = 0.98;
+
+/// Vanilla `LivingEntity.BASE_HORIZONTAL_AIR_DRAG`, also the omnidirectional air drag.
+pub const BASE_HORIZONTAL_AIR_DRAG: f32 = 0.91;
+
+/// Vanilla `LivingEntity.BASE_VERTICAL_AIR_DRAG`.
+pub const BASE_VERTICAL_AIR_DRAG: f32 = 0.98;
 
 /// Clamps an entity position using vanilla's load-time world-bound limits.
 pub(crate) fn clamp_loaded_entity_position(pos: DVec3) -> DVec3 {
@@ -446,13 +456,13 @@ pub(crate) fn get_input_vector(input: DVec3, speed: f32, yaw_degrees: f32) -> DV
     } else {
         input
     } * f64::from(speed);
-    let yaw = yaw_degrees.to_radians();
-    let sin = yaw.sin();
-    let cos = yaw.cos();
+    let yaw = f64::from(yaw_degrees.to_radians());
+    let sin = f64::from(trig::sin(yaw));
+    let cos = f64::from(trig::cos(yaw));
     DVec3::new(
-        movement.x * f64::from(cos) - movement.z * f64::from(sin),
+        movement.x * cos - movement.z * sin,
         movement.y,
-        movement.z * f64::from(cos) + movement.x * f64::from(sin),
+        movement.z * cos + movement.x * sin,
     )
 }
 
@@ -496,16 +506,82 @@ fn physics_state_for_move(entity: &dyn Entity) -> EntityPhysicsState {
     })
 }
 
+/// A contiguous block of session entity IDs.
+///
+/// Vanilla allocates one ID per `Entity`, but a multipart mob's sub-entities must
+/// occupy the IDs directly after the parent: the client synthesizes them at
+/// `parent_id + 1 ..= parent_id + n` in `EnderDragon.recreateFromPacket` and never
+/// receives spawn packets for them. Vanilla gets that contiguity for free because
+/// the parts are constructed inside the parent's constructor on a single thread;
+/// Steel ticks worlds in parallel, so parent and parts must come from one
+/// locked allocation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntityIdBlock {
+    first: i32,
+    count: u32,
+}
+
+impl EntityIdBlock {
+    /// Returns the ID of the entity that owns the block.
+    #[must_use]
+    pub const fn first(self) -> i32 {
+        self.first
+    }
+
+    /// Returns how many IDs the block reserves in total, including the owner.
+    #[must_use]
+    pub const fn len(self) -> u32 {
+        self.count
+    }
+
+    /// Returns whether the block reserves no IDs at all.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.count == 0
+    }
+
+    /// Returns the ID of the `index`-th sub-entity, i.e. `first() + index + 1`.
+    ///
+    /// This is the client-side contract: a multipart mob's parts always follow
+    /// their parent's ID in order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is outside the reserved block. Reading past the end would
+    /// silently hand out an ID belonging to the next entity, so this is checked
+    /// rather than wrapped.
+    #[must_use]
+    pub const fn part(self, index: u32) -> i32 {
+        assert!(
+            index < self.count.saturating_sub(1),
+            "part index outside the reserved block"
+        );
+        self.first.wrapping_add(index.wrapping_add(1) as i32)
+    }
+}
+
+/// Reserves `count` consecutive entity IDs under a single lock acquisition.
+///
+/// Use this whenever an entity may own sub-entities; see [`EntityIdBlock`].
+#[must_use]
+pub fn reserve_entity_ids(count: u32) -> EntityIdBlock {
+    let mut counter = ENTITY_COUNTER.lock();
+    let first = *counter;
+    *counter = counter.wrapping_add(count as i32);
+    EntityIdBlock { first, count }
+}
+
 /// Allocates a new unique entity ID.
 ///
 /// This is the primary way to get entity IDs for spawning entities.
 /// Thread-safe through the shared counter lock.
+///
+/// Only valid for types that never own sub-entities. When the entity type is not
+/// statically known, reserve through the entity registry instead so a multipart
+/// type also claims the IDs its parts need.
 #[must_use]
 pub fn next_entity_id() -> i32 {
-    let mut counter = ENTITY_COUNTER.lock();
-    let id = *counter;
-    *counter = counter.wrapping_add(1);
-    id
+    reserve_entity_ids(1).first()
 }
 
 fn apply_block_effect_segment(
@@ -515,7 +591,7 @@ fn apply_block_effect_segment(
     to: DVec3,
     max_iterations: i32,
     effect_collector: &mut InsideBlockEffectCollector,
-    visited_blocks: &mut FxHashSet<BlockPos>,
+    visited_blocks: &mut block_effects::VisitedBlockPositions,
 ) -> BlockEffectSegmentResult {
     let aabb = entity.make_bounding_box_at(to).deflate(1.0E-5);
     if aabb.is_empty() {
@@ -652,7 +728,8 @@ fn apply_effects_from_block_movements(entity: &dyn Entity, movements: &[EntityMo
 
     apply_step_on_block(entity, &world);
 
-    let mut visited_blocks = FxHashSet::default();
+    // Deduplicates effects across every movement segment of this tick.
+    let mut visited_blocks = block_effects::VisitedBlockPositions::default();
     let mut effect_collector = InsideBlockEffectCollector::new();
     let before_effects = BlockEffectFireSnapshot::from_entity(entity);
     for movement in movements.iter().copied() {
@@ -771,6 +848,7 @@ pub mod entities;
     reason = "the entity module mirrors vanilla's Entity class and groups its implementation"
 )]
 mod entity;
+pub mod entity_selector;
 mod fluid_contact;
 #[expect(warnings)]
 #[rustfmt::skip]
@@ -783,17 +861,21 @@ mod item_frame;
 mod leash;
 mod living_base;
 mod living_entity;
+mod slot_access;
+pub use slot_access::SlotAccess;
 mod living_reference;
 mod manager;
 mod mob;
 pub mod mob_effect;
 mod monster;
 mod movement_sync;
+mod part;
 mod potion_contents;
 pub mod projectile;
 mod reference;
 mod registry;
 mod spawn;
+mod spawn_placements;
 mod storage;
 mod synced_data;
 mod ticking;
@@ -804,6 +886,9 @@ use crate::portal::{
     TeleportTransition, WorldChangeRequest, portal_shape::PortalShape,
 };
 pub(crate) use ageable::{AgeableMob, AgeableMobBase};
+/// Brain AI is public API: memories are an open set that owners outside this
+/// crate extend, unlike the crate-internal goal AI beside it.
+pub use ai::brain;
 pub(crate) use animal::{Animal, AnimalBase};
 pub use base::{
     DEFAULT_MAX_AIR_SUPPLY, DEFAULT_TICKS_REQUIRED_TO_FREEZE, EntityAmethystStepSound, EntityBase,
@@ -818,10 +903,11 @@ pub use callback::{
 };
 pub use conversion::{AfterConversion, ConversionParams, ConversionType};
 pub(crate) use entity::apply_entity_look_at;
-pub(crate) use entity::position_rider_default;
+pub(crate) use entity::nbt_dvec3;
 pub use entity::{
     AcceptedClientMovement, AcceptedClientMovementOutcome, Entity, EntityEventSource,
 };
+pub(crate) use entity::{compute_modified_friction, position_rider_default};
 pub use fluid_contact::EntityFluidContact;
 pub use identity::EntityGeneration;
 pub use inside_block_effects::{
@@ -830,11 +916,13 @@ pub use inside_block_effects::{
 pub(crate) use item_based_steering::{ItemBasedSteering, ItemSteerable};
 pub use item_frame::ItemFrame;
 pub use living_base::{
-    ActiveItemUseState, ActiveMobEffect, DEATH_DURATION, DEFAULT_SWING_DURATION, LivingEntityBase,
-    LivingRotationState, LivingSwingState, LivingTravelInput, MobEffectInstance,
-    MobEffectSyncChange, MobEffectSyncPacket,
+    ActiveItemUseState, ActiveMobEffect, DEATH_DURATION, DEFAULT_SWING_DURATION,
+    HURT_DURATION_TICKS, LivingEntityBase, LivingRotationState, LivingSwingState,
+    LivingTravelInput, MobEffectInstance, MobEffectSyncChange, MobEffectSyncPacket,
+    sync_dirty_mob_effects,
 };
 pub use living_entity::LivingEntity;
+pub(crate) use manager::EntityCollisionCandidates;
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityLifecycleChanges, EntityMoveError,
     EntityMoveUpdate, EntityOwnership, EntityVisibility, WorldEntityManager,
@@ -848,24 +936,26 @@ pub use movement_sync::{
     EntityRotationSyncState, EntityVelocitySyncState, POSITION_SYNC_THRESHOLD,
     PackedEntityRotation, ServerEntityMovementSyncState, ServerEntityMovementSyncUpdate,
 };
+pub use part::{PartEntity, PartEntityBase};
 pub(crate) use potion_contents::apply_potion_contents;
 pub use projectile::{
-    EntityHitResult, Projectile, ProjectileBase, ProjectileDeflection, ProjectileEventSource,
-    ProjectileHit, ThrowableItemProjectile, ThrowableProjectile, ViewVectorHitResult,
-    compute_margin, get_hit_result_on_view_vector, spawn_throwable_item_projectile,
+    AbstractThrownPotion, EntityHitResult, Projectile, ProjectileBase, ProjectileDeflection,
+    ProjectileEventSource, ProjectileHit, SPLASH_RANGE_SQ, ThrowableItemProjectile,
+    ThrowableProjectile, ViewVectorHitResult, compute_margin, get_hit_result_on_view_vector,
+    spawn_throwable_item_projectile,
 };
 pub use reference::EntityReference;
+pub(crate) use registry::SpawnRule;
 pub use registry::{ENTITIES, EntityLoadRequest, EntityRegistry, init_entities};
 pub(crate) use spawn::{
     AgeableMobGroupData, EntitySpawnPlacement, EntitySpawnReason, EntitySpawnRequest,
     SpawnGroupData, add_spawned_entity, apply_implicit_item_stack_components,
-    create_entity_instance, spawn_entity,
+    apply_item_stack_components, create_entity_instance, load_entity_recursive_owned, spawn_entity,
 };
+pub(crate) use spawn_placements::SpawnPlacements;
 pub(crate) use storage::{EntityStorage, EntityStorageAddResult};
 pub use synced_data::{EntitySyncedData, LivingEntitySyncedData};
-pub(crate) use ticking::{
-    snapshot_old_pos_and_rot_for_tick, tick_vehicle_passengers_with_ticked_if,
-};
+pub(crate) use ticking::{snapshot_old_pos_and_rot_for_tick, tick_vehicle_passengers_if};
 pub use tracker::{EntityChangeSenders, EntityTracker};
 
 #[cfg(test)]
@@ -978,7 +1068,7 @@ pub(crate) fn change_entity_world(
         return None;
     }
 
-    if entity.as_player().is_some() {
+    let changed = if entity.as_player().is_some() {
         let Some(player) = source_world.players.get_by_entity_id(entity.id()) else {
             tracing::error!(
                 entity_id = entity.id(),
@@ -991,10 +1081,12 @@ pub(crate) fn change_entity_world(
         if !player.change_world_within_domain(teleport_transition) {
             return None;
         }
-        return Some(entity);
-    }
-
-    change_non_player_entity_world(entity, teleport_transition)
+        entity
+    } else {
+        change_non_player_entity_world(entity, teleport_transition)?
+    };
+    changed.on_teleported();
+    Some(changed)
 }
 
 fn change_non_player_entity_world(
@@ -1392,6 +1484,7 @@ pub(crate) fn entity_loot_ref<'a>(
     let living_entity = entity.as_living_entity();
     let sheep = living_entity.and_then(LivingEntity::sheep_loot_state);
     EntityRef {
+        entity: Some(entity),
         entity_type: Some(&entity.entity_type().key),
         flags: EntityRefFlags {
             is_on_fire: entity.is_on_fire(),

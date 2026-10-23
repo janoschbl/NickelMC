@@ -23,7 +23,7 @@ use crate::{
 
 /// Current data version for player saves.
 /// Increment when making breaking changes to the format.
-pub const PLAYER_DATA_VERSION: i32 = 6;
+pub const PLAYER_DATA_VERSION: i32 = 7;
 
 /// Persistent player data saved by Steel's storage backend.
 ///
@@ -63,6 +63,9 @@ pub struct PersistentPlayerData {
 
     /// Current health points.
     pub health: f32,
+
+    /// Remaining hurt animation ticks, saved as vanilla's signed short.
+    pub hurt_time: i16,
 
     /// Current game mode (0=survival, 1=creative, 2=adventure, 3=spectator).
     pub game_mode: i32,
@@ -105,6 +108,9 @@ pub struct PersistentPlayerData {
 
     /// Vanilla `Player.totalExperience`, updated by point grants but independent of level/progress.
     pub experience_total: i32,
+
+    /// Saved enchantment seed (`XpSeed`); zero is rerolled when loaded.
+    pub enchantment_seed: i32,
 
     /// Vanilla death-screen score. Point grants change it with Java `int` wrapping.
     pub score: i32,
@@ -225,9 +231,14 @@ impl PersistentPlayerData {
             }
         }
 
-        let (experience_level, experience_progress, experience_total) = {
+        let (experience_level, experience_progress, experience_total, enchantment_seed) = {
             let lock = player.experience.lock();
-            (lock.level(), lock.progress(), lock.total_points())
+            (
+                lock.level(),
+                lock.progress(),
+                lock.total_points(),
+                lock.enchantment_seed(),
+            )
         };
         let score = player.score();
         let root_vehicle = Self::root_vehicle_from_player(player)
@@ -247,6 +258,7 @@ impl PersistentPlayerData {
             was_in_powder_snow: fire_freeze.was_in_powder_snow(),
             has_visual_fire: fire_freeze.has_visual_fire(),
             health: player.get_health(),
+            hurt_time: player.living_base().hurt_time() as i16,
             game_mode: player.game_mode() as i32,
             prev_game_mode: player
                 .previous_game_mode()
@@ -271,6 +283,7 @@ impl PersistentPlayerData {
             experience_level,
             experience_progress,
             experience_total,
+            enchantment_seed,
             score,
             seen_credits: player.has_seen_credits(),
             root_vehicle,
@@ -447,6 +460,7 @@ impl PersistentPlayerData {
 
         // Health
         player.set_health(self.health);
+        player.living_base().set_hurt_time(self.hurt_time);
 
         // Game mode
         player.restore_game_modes(
@@ -504,7 +518,8 @@ impl PersistentPlayerData {
                 self.experience_level,
                 self.experience_progress,
                 self.experience_total,
-            );
+            )
+            .with_loaded_enchantment_seed(self.enchantment_seed, rand::random);
         }
         player.set_score(self.score);
         player.set_seen_credits(self.seen_credits);

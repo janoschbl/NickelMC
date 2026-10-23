@@ -17,6 +17,12 @@ use steel_utils::threading::{available_worker_threads, worker_threads_for_availa
 use steel_utils::translations;
 
 impl Server {
+    pub(crate) fn bind_world_context(self: &Arc<Self>) {
+        for world in self.worlds.values() {
+            world.set_server(Arc::downgrade(self));
+        }
+    }
+
     pub(super) fn advance_server_tick(&self) -> (u64, bool) {
         let (tick_count, runs_normally) = {
             let mut tick_manager = self.tick_rate_manager.write();
@@ -31,6 +37,7 @@ impl Server {
 
     /// Runs gameplay packets, game ticks, and chunk sending.
     pub async fn run(self: Arc<Self>, cancel_token: CancellationToken) {
+        self.bind_world_context();
         self.packet_processor.open_after_tick();
         let packet_worker_count =
             worker_threads_for_available(self.config.packet_workers, available_worker_threads());
@@ -130,6 +137,10 @@ impl Server {
         match command_data.storage {
             Ok(saved) => log::info!("Saved {saved} domain command storages"),
             Err(error) => log::error!("Failed to save domain command storage: {error}"),
+        }
+        match command_data.random_sequences {
+            Ok(saved) => log::info!("Saved {saved} domain random-sequence collections"),
+            Err(error) => log::error!("Failed to save domain random sequences: {error}"),
         }
         let mut total_saved = 0;
         for world in self.worlds.values() {
@@ -333,6 +344,10 @@ impl Server {
         match results.storage {
             Ok(saved) => tracing::debug!(saved, "Domain command-storage autosave completed"),
             Err(error) => tracing::error!(%error, "Domain command-storage autosave failed"),
+        }
+        match results.random_sequences {
+            Ok(saved) => tracing::debug!(saved, "Domain random-sequence autosave completed"),
+            Err(error) => tracing::error!(%error, "Domain random-sequence autosave failed"),
         }
     }
 

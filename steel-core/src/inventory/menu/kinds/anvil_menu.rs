@@ -1,4 +1,5 @@
 //! Anvil menu.
+use crate::inventory::stack_reference::StackItems;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicI32, Ordering},
@@ -26,7 +27,7 @@ use text_components::TextComponent;
 use crate::{
     behavior::ITEM_BEHAVIORS,
     inventory::{
-        container::{ResultContainer, SimpleContainer},
+        container::{DEFAULT_DISTANCE_BUFFER, ResultContainer, SimpleContainer},
         prelude::*,
         slots::AnvilResultHandler,
     },
@@ -150,7 +151,7 @@ impl AnvilKind {
             panic!("failed to lock input and/or result containers to create anvil result")
         };
 
-        let [first, second] = input_container.items() else {
+        let StackItems::Owned([first, second]) = input_container.items() else {
             panic!("input_container in anvil menu does not fit expected shape")
         };
 
@@ -371,7 +372,10 @@ impl MenuKind for AnvilKind {
         REGISTRY
             .blocks
             .is_in_tag(state.get_block(), &BlockTag::ANVIL)
-            && player.is_within_block_interaction_range_with_buffer(self.block_pos, 4.0)
+            && player.is_within_block_interaction_range_with_buffer(
+                self.block_pos,
+                f64::from(DEFAULT_DISTANCE_BUFFER),
+            )
     }
 
     fn slots_changed(
@@ -404,7 +408,9 @@ impl MenuKind for AnvilKind {
         }
 
         {
-            let mut guard = behavior.lock_all_containers();
+            let Ok(mut guard) = behavior.lock_all_containers() else {
+                return;
+            };
             self.create_result(behavior, &mut guard, player);
         }
         behavior.broadcast_changes(&player.connection);

@@ -38,7 +38,7 @@ use steel_utils::{BlockPos, Identifier};
 
 const PLAYER_MAGIC: [u8; 4] = *b"STLP";
 const GLOBAL_MAGIC: [u8; 4] = *b"STLG";
-const PLAYER_STORAGE_VERSION: u16 = 9;
+const PLAYER_STORAGE_VERSION: u16 = 10;
 const GLOBAL_STORAGE_VERSION: u16 = 1;
 const GLOBAL_PLAYER_DATA_VERSION: i32 = 1;
 
@@ -73,6 +73,7 @@ struct PlayerDataFile {
     was_in_powder_snow: bool,
     has_visual_fire: bool,
     health: f32,
+    hurt_time: i16,
     game_mode: i32,
     prev_game_mode: Option<i32>,
     abilities: AbilitiesFile,
@@ -86,6 +87,7 @@ struct PlayerDataFile {
     experience_level: i32,
     experience_progress: f32,
     experience_total: i32,
+    enchantment_seed: i32,
     score: i32,
     seen_credits: bool,
     root_vehicle: Option<RootVehicleFile>,
@@ -319,6 +321,7 @@ impl PlayerDataFile {
             was_in_powder_snow: data.was_in_powder_snow,
             has_visual_fire: data.has_visual_fire,
             health: data.health,
+            hurt_time: data.hurt_time,
             game_mode: data.game_mode,
             prev_game_mode: data.prev_game_mode,
             abilities: AbilitiesFile {
@@ -340,6 +343,7 @@ impl PlayerDataFile {
             experience_level: data.experience_level,
             experience_progress: data.experience_progress,
             experience_total: data.experience_total,
+            enchantment_seed: data.enchantment_seed,
             score: data.score,
             seen_credits: data.seen_credits,
             root_vehicle: data
@@ -403,6 +407,7 @@ impl PlayerDataFile {
             was_in_powder_snow: self.was_in_powder_snow,
             has_visual_fire: self.has_visual_fire,
             health: self.health,
+            hurt_time: self.hurt_time,
             game_mode: self.game_mode,
             prev_game_mode: self.prev_game_mode,
             abilities: PersistentAbilities {
@@ -425,6 +430,7 @@ impl PlayerDataFile {
             experience_level: self.experience_level,
             experience_progress: self.experience_progress,
             experience_total: self.experience_total,
+            enchantment_seed: self.enchantment_seed,
             score: self.score,
             seen_credits: self.seen_credits,
             root_vehicle: self.root_vehicle.map(|root_vehicle| PersistentRootVehicle {

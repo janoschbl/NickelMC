@@ -42,6 +42,7 @@ fn sample_player_file(data_version: i32) -> PlayerDataFile {
         was_in_powder_snow: false,
         has_visual_fire: false,
         health: 20.0,
+        hurt_time: 7,
         game_mode: 2,
         prev_game_mode: Some(0),
         abilities: AbilitiesFile {
@@ -63,6 +64,7 @@ fn sample_player_file(data_version: i32) -> PlayerDataFile {
         experience_level: 7,
         experience_progress: 0.5,
         experience_total: 32,
+        enchantment_seed: 1234,
         score: 9,
         seen_credits: true,
         root_vehicle: None,
@@ -446,10 +448,12 @@ fn player_file_roundtrip_preserves_domain_world_data() {
     );
     assert_eq!(decoded.world, "lobby:void");
     assert_eq!(decoded.game_mode, 2);
+    assert_eq!(decoded.hurt_time, 7);
     assert_eq!(decoded.selected_slot, 4);
     assert_eq!(decoded.experience_level, 7);
     assert_eq!(decoded.experience_progress.to_bits(), 0.5_f32.to_bits());
     assert_eq!(decoded.experience_total, 32);
+    assert_eq!(decoded.enchantment_seed, 1234);
     assert_eq!(decoded.score, 9);
     assert!(decoded.seen_credits);
 }

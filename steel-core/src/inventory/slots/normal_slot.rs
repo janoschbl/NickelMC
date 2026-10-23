@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 use steel_registry::item_stack::ItemStack;
 use steel_utils::{DowncastType, DowncastTypeKey};
 
@@ -43,7 +44,7 @@ impl Slot for NormalSlot {
         &self.storage
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         let (container, index) = self.backing();
         guard
             .get(container.container_id())
@@ -51,7 +52,7 @@ impl Slot for NormalSlot {
             .get_item(index)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         let (container, index) = self.backing();
         guard
             .get_mut(container.container_id())

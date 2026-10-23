@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use steel_registry::item_stack::ItemStack;
 use steel_utils::{DowncastType, DowncastTypeKey};
 
@@ -6,6 +7,7 @@ use crate::inventory::container::Container;
 /// A Simple Container
 pub struct SimpleContainer {
     items: Vec<ItemStack>,
+    times_changed: u32,
 }
 
 // SAFETY: This key is owned by Steel and uniquely identifies `SimpleContainer`.
@@ -19,24 +21,36 @@ impl SimpleContainer {
     pub fn new(size: usize) -> Self {
         Self {
             items: vec![ItemStack::empty(); size],
+            times_changed: 0,
         }
     }
 
     /// Creates a Simple Container with already initialized items
     #[must_use]
     pub const fn from_items(items: Vec<ItemStack>) -> Self {
-        Self { items }
+        Self {
+            items,
+            times_changed: 0,
+        }
+    }
+
+    /// Number of `set_changed` calls so far; compare snapshots to detect a change.
+    #[must_use]
+    pub const fn times_changed(&self) -> u32 {
+        self.times_changed
     }
 }
 
 impl Container for SimpleContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
-    fn set_changed(&mut self) {}
+    fn set_changed(&mut self) {
+        self.times_changed = self.times_changed.wrapping_add(1);
+    }
 }

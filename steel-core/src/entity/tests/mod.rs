@@ -1,3 +1,4 @@
+use crate::loot::vanilla_loot_tables;
 use std::{
     io::Cursor,
     sync::{Arc, Weak},
@@ -20,7 +21,7 @@ use steel_registry::vanilla_entity_data::LivingEntityData as SyncedLivingEntityD
 use steel_registry::{
     REGISTRY, init_vanilla_registry, sound_events, vanilla_attributes, vanilla_blocks,
     vanilla_damage_types, vanilla_entities, vanilla_fluids, vanilla_game_events, vanilla_items,
-    vanilla_loot_tables, vanilla_mob_effects,
+    vanilla_mob_effects,
 };
 use steel_utils::Downcast as _;
 use steel_utils::locks::SyncMutex;
@@ -52,12 +53,12 @@ use super::{
     DEFAULT_SWING_DURATION, DEFAULT_TICKS_REQUIRED_TO_FREEZE, ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
     ENTITY_LOAD_MAX_VERTICAL_POSITION, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
     EntityMoveError, EntityOwnership, EntitySyncedData, EntityVerticalMovementStateUpdate,
-    InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity, LivingEntityBase,
-    LivingTravelInput, MobEffectInstance, RemovalReason, SPEED_MODIFIER_POWDER_SNOW_ID,
-    SharedEntity, block_state_suffocates_eye_box, closest_open_space_direction,
-    fall_damage_reset_clip_target, fall_flying_collision_damage, fall_flying_free_fall_interval,
-    get_input_vector, indirect_passengers, passenger_transition_position,
-    passenger_transition_rotation, remove_after_changing_dimensions,
+    HURT_DURATION_TICKS, InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity,
+    LivingEntityBase, LivingTravelInput, MobEffectInstance, RemovalReason,
+    SPEED_MODIFIER_POWDER_SNOW_ID, SharedEntity, block_state_suffocates_eye_box,
+    closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
+    fall_flying_free_fall_interval, get_input_vector, indirect_passengers,
+    passenger_transition_position, passenger_transition_rotation, remove_after_changing_dimensions,
     should_apply_entity_cramming_damage, should_apply_resolved_movement, start_riding_entities,
     transfer_leashables_to_holder, trapdoor_usable_as_ladder_state,
 };
@@ -133,6 +134,15 @@ impl Entity for TypedTestEntity {
     fn projectile_owner_uuid(&self) -> Option<Uuid> {
         self.projectile_owner_uuid
     }
+}
+
+#[test]
+fn teamless_alliance_uses_object_identity_not_reused_entity_ids() {
+    let first = TypedTestEntity::new(1, &vanilla_entities::PIG);
+    let replacement = TypedTestEntity::new(1, &vanilla_entities::PIG);
+    assert!(first.is_allied_to(&first));
+    assert!(!first.is_allied_to(&replacement));
+    assert!(!replacement.is_allied_to(&first));
 }
 
 #[test]
@@ -222,7 +232,7 @@ fn command_data_compare_nbt_contains_base_and_custom_data() {
 
 #[test]
 fn spawn_data_clamps_position_and_refreshes_old_transform() {
-    let entity = TypedTestEntity::new(1, &vanilla_entities::PIG);
+    let entity = Arc::new(TypedTestEntity::new(1, &vanilla_entities::PIG));
     let mut nbt = NbtCompound::new();
     nbt.insert(
         "Pos",
@@ -234,7 +244,7 @@ fn spawn_data_clamps_position_and_refreshes_old_transform() {
     nbt.write(&mut bytes);
     let borrowed =
         read_compound(&mut Cursor::new(bytes.as_slice())).expect("test spawn data should be valid");
-    entity.apply_spawn_data((&borrowed).into());
+    Arc::clone(&entity).apply_spawn_data((&borrowed).into());
 
     let expected_position = DVec3::new(
         ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
@@ -646,6 +656,76 @@ impl Entity for KnownMovementTestEntity {
     }
 }
 
+#[test]
+fn splash_effect_notifications_preserve_owner_and_ownerless_source() {
+    use crate::entity::entities::SplashPotionEntity;
+    use crate::entity::{AbstractThrownPotion, Projectile, ProjectileHit};
+    use steel_registry::data_components::{PotionContents, vanilla_components};
+
+    init_vanilla_registry();
+    init_behaviors();
+    let fixture = fresh_test_world("splash_effect_source");
+    let world = &fixture.world;
+    insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+    let target = Arc::new(LivingFluidTestEntity::new_in_world(0.0, 0.0, true, world));
+    target.try_set_position(DVec3::new(8.0, 65.0, 8.0)).unwrap();
+    world
+        .try_add_entity(Arc::clone(&target) as SharedEntity)
+        .unwrap();
+    let potion = Arc::new(SplashPotionEntity::new(
+        &vanilla_entities::SPLASH_POTION,
+        2,
+        target.position(),
+        Arc::downgrade(world),
+    ));
+    let owner = PushableTestEntity::shared(3, target.position());
+    owner.base().set_world(Arc::downgrade(world));
+    world.try_add_entity(Arc::clone(&owner)).unwrap();
+    let mut item = ItemStack::new(&vanilla_items::SPLASH_POTION);
+    let hit = ProjectileHit::Block {
+        location: target.position(),
+        hit: crate::world::ClipHitResult {
+            location: target.position(),
+            direction: Direction::Up,
+            block_pos: target.block_position(),
+            miss: false,
+            inside: false,
+            world_border_hit: false,
+        },
+    };
+    for (amplifier, with_owner) in [(0, false), (1, true), (0, true)] {
+        potion.set_owner_entity(with_owner.then_some(&owner));
+        item.set(
+            vanilla_components::POTION_CONTENTS,
+            PotionContents::new(
+                None,
+                None,
+                vec![steel_registry::MobEffectInstance::simple(
+                    vanilla_mob_effects::LUCK,
+                    200,
+                    amplifier,
+                )],
+                None,
+            ),
+        );
+        potion.on_hit_as_potion(world, &item, &hit);
+    }
+    assert_eq!(
+        *target.effect_notifications.lock(),
+        [(false, Some(2), 0), (true, Some(3), 1)]
+    );
+    target.remove_mob_effect(vanilla_mob_effects::LUCK);
+    target.add_mob_effect(MobEffectInstance::with_duration(
+        vanilla_mob_effects::LUCK,
+        200,
+        0,
+    ));
+    assert_eq!(
+        target.effect_notifications.lock().last(),
+        Some(&(false, None, 0))
+    );
+}
+
 struct LivingFluidTestEntity {
     base: EntityBase,
     living_base: LivingEntityBase,
@@ -653,6 +733,7 @@ struct LivingFluidTestEntity {
     health: SyncMutex<f32>,
     damage_types: SyncMutex<Vec<Identifier>>,
     damage_world_keys: SyncMutex<Vec<String>>,
+    effect_notifications: SyncMutex<Vec<(bool, Option<i32>, i32)>>,
     entity_type: EntityTypeRef,
     affected_by_fluids: bool,
     can_stand_on_fluid: bool,
@@ -661,6 +742,7 @@ struct LivingFluidTestEntity {
     in_wall_for_base_tick: bool,
     flying_player: bool,
     rejects_wither: bool,
+    omnidirectional_air_mover: bool,
 }
 
 impl LivingFluidTestEntity {
@@ -684,6 +766,7 @@ impl LivingFluidTestEntity {
             health: SyncMutex::new(20.0),
             damage_types: SyncMutex::new(Vec::new()),
             damage_world_keys: SyncMutex::new(Vec::new()),
+            effect_notifications: SyncMutex::new(Vec::new()),
             entity_type: &vanilla_entities::PLAYER,
             affected_by_fluids,
             can_stand_on_fluid: false,
@@ -692,6 +775,7 @@ impl LivingFluidTestEntity {
             in_wall_for_base_tick: false,
             flying_player: false,
             rejects_wither: false,
+            omnidirectional_air_mover: false,
         }
     }
 
@@ -736,6 +820,11 @@ impl LivingFluidTestEntity {
         self
     }
 
+    const fn with_omnidirectional_air_mover(mut self) -> Self {
+        self.omnidirectional_air_mover = true;
+        self
+    }
+
     const fn rejecting_wither(mut self) -> Self {
         self.rejects_wither = true;
         self
@@ -773,12 +862,20 @@ impl LivingFluidTestEntity {
 crate::entity::impl_test_downcast_type!(LivingFluidTestEntity);
 
 impl Entity for LivingFluidTestEntity {
+    fn omnidirectional_air_mover(&self) -> bool {
+        self.omnidirectional_air_mover
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }
 
     fn entity_type(&self) -> EntityTypeRef {
         self.entity_type
+    }
+
+    fn base_tick(&self) {
+        LivingEntity::base_tick_living_entity(self);
     }
 
     fn is_vehicle(&self) -> bool {
@@ -807,6 +904,18 @@ impl Entity for LivingFluidTestEntity {
 }
 
 impl LivingEntity for LivingFluidTestEntity {
+    fn on_mob_effect_added(&self, effect: &MobEffectInstance, source: Option<&dyn Entity>) {
+        self.effect_notifications
+            .lock()
+            .push((false, source.map(Entity::id), effect.amplifier()));
+    }
+
+    fn on_mob_effect_updated(&self, effect: &MobEffectInstance, source: Option<&dyn Entity>) {
+        self.effect_notifications
+            .lock()
+            .push((true, source.map(Entity::id), effect.amplifier()));
+    }
+
     fn living_base(&self) -> &LivingEntityBase {
         &self.living_base
     }
@@ -1181,8 +1290,10 @@ mod damage;
 mod death_loot;
 mod equipment_and_freezing;
 mod fall_and_fluids;
+mod ids;
 mod living_state;
 mod movement;
+mod multipart;
 mod portals;
 mod riding_and_leashes;
 mod travel;

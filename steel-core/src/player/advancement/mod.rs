@@ -4,6 +4,7 @@
 
 pub mod progress;
 pub mod rewards;
+pub mod triggers;
 mod visibility_evaluator;
 
 use crate::entity::Entity;
@@ -61,7 +62,6 @@ impl PlayerAdvancement {
         let progress = self.progress.get_mut_or_start_progress(advancement);
         let was_done = progress.is_done();
         if progress.grant_progress(criterion) {
-            //TODO: register advancement listener
             self.progress_changed.insert(advancement);
             result = true;
             if !was_done && progress.is_done() {
@@ -94,7 +94,6 @@ impl PlayerAdvancement {
         let progress = self.progress.get_mut_or_start_progress(advancement);
         let was_done = progress.is_done();
         if progress.revoke_progress(criterion) {
-            //TODO: unregister advancement listener
             self.progress_changed.insert(advancement);
             result = true;
         }

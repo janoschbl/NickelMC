@@ -147,11 +147,12 @@ fn unsupported_spawn_data_delays_and_reselects_without_inserting() {
 
     let spawner = load_spawner(&root);
 
-    let world = fresh_test_world("spawner_skips_unsupported_entity");
-    let player = TestPlayerBuilder::new(Arc::clone(&world), "SpawnerPlayer", 1).build();
+    let fixture = fresh_test_world("spawner_skips_unsupported_entity");
+    let world = &fixture.world;
+    let player = TestPlayerBuilder::new(Arc::clone(world), "SpawnerPlayer", 1).build();
     assert!(world.add_player(player, ResetReason::InitialJoin));
 
-    let result = spawner.server_tick(&world, BlockPos::ZERO);
+    let result = spawner.server_tick(world, BlockPos::ZERO);
 
     assert!(result.state_changed);
     assert!(result.next_spawn_data_changed);
@@ -270,4 +271,122 @@ fn set_entity_id_normalizes_the_active_spawn_data() {
         saved.compound("SpawnData"),
         Some(&spawn_data("minecraft:blaze").to_nbt())
     );
+}
+
+#[test]
+fn selected_potential_keeps_spawn_egg_edits_and_rejects_negative_weights() {
+    init_vanilla_registry();
+    let spawner = BaseSpawner::new();
+    spawner
+        .set_spawn_potentials(vec![WeightedSpawnData {
+            weight: 1,
+            data: spawn_data("minecraft:pig"),
+        }])
+        .expect("valid potential");
+    spawner.get_or_create_next_spawn_data();
+    spawner.set_entity_id(&vanilla_entities::COW);
+    assert_eq!(
+        spawner.spawn_potentials()[0].data,
+        spawn_data("minecraft:cow")
+    );
+    assert!(
+        spawner
+            .set_spawn_potentials(vec![WeightedSpawnData {
+                weight: -1,
+                data: spawn_data("minecraft:pig"),
+            }])
+            .is_err()
+    );
+    assert_eq!(spawner.spawn_potentials()[0].weight, 1);
+}
+
+#[test]
+fn malformed_reload_retains_active_data_and_partial_potentials() {
+    let spawner = BaseSpawner::new();
+    spawner.set_next_spawn_data(spawn_data("minecraft:cow"));
+    let root = parse_snbt_compound(
+        r#"{SpawnData:{entity:0},SpawnPotentials:[
+        {weight:-1,data:{entity:{id:"minecraft:pig"}}},
+        {weight:2,data:{entity:{id:"minecraft:sheep"}}}
+    ]}"#,
+    )
+    .expect("reload fixture");
+    let mut bytes = Vec::new();
+    root.write(&mut bytes);
+    let borrowed = read_compound(&mut Cursor::new(bytes.as_slice())).expect("reload NBT");
+    spawner.load(&borrowed);
+    assert_eq!(spawner.next_spawn_data(), Some(spawn_data("minecraft:cow")));
+    assert_eq!(spawner.spawn_potentials().len(), 1);
+    assert_eq!(
+        spawner.spawn_potentials()[0].data,
+        spawn_data("minecraft:sheep")
+    );
+}
+
+#[test]
+fn equipment_numeric_tags_preserve_spawn_entity() {
+    for chances in ["0", "0.25d", "{mainhand:1}", "{head:0.5d}"] {
+        let root = parse_snbt_compound(&format!(r#"{{SpawnData:{{entity:{{id:"minecraft:pig"}},
+            equipment:{{loot_table:"minecraft:chests/simple_dungeon",slot_drop_chances:{chances}}}}}}}"#))
+            .expect("numeric equipment fixture");
+        let data = load_spawner(&root)
+            .next_spawn_data()
+            .expect("valid entity retained");
+        assert_eq!(data.entity_to_spawn, entity("minecraft:pig"));
+        assert!(
+            !data
+                .equipment
+                .expect("equipment retained")
+                .slot_drop_chances
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn id_only_spawn_finalizes_mob_but_configured_spawn_does_not() {
+    init_vanilla_registry();
+    init_entities();
+    crate::behavior::init_behaviors();
+    for configured in [false, true] {
+        let fixture = fresh_test_world("spawner_finalizes_mob");
+        let world = &fixture.world;
+        crate::test_support::insert_ready_full_chunk(world, steel_utils::ChunkPos::new(0, 0));
+        let player = TestPlayerBuilder::new(Arc::clone(world), "SpawnerPlayer", 1).build();
+        assert!(world.add_player(player, ResetReason::InitialJoin));
+        let spawner = BaseSpawner::new();
+        spawner.set_spawn_delay(0);
+        spawner.set_config(BaseSpawnerConfig {
+            spawn_count: 1,
+            spawn_range: 0,
+            ..BaseSpawnerConfig::default()
+        });
+        let mut data = spawn_data("minecraft:pig");
+        if configured {
+            data.entity_to_spawn.insert("Silent", true);
+        }
+        data.custom_spawn_rules = Some(CustomSpawnRules {
+            block_light_limit: LightRange::DEFAULT,
+            sky_light_limit: LightRange::DEFAULT,
+        });
+        spawner.set_next_spawn_data(data);
+        spawner.server_tick(world, BlockPos::new(4, 0, 4));
+        let mobs = world.get_entities_in_aabb_matching(
+            &WorldAabb::new(-8.0, -4.0, -8.0, 12.0, 4.0, 8.0),
+            |entity| entity.as_mob().is_some(),
+        );
+        assert_eq!(mobs.len(), 1);
+        assert_eq!(
+            mobs[0]
+                .as_living_entity()
+                .expect("pig is living")
+                .attributes()
+                .lock()
+                .has_modifier(
+                    steel_registry::vanilla_attributes::FOLLOW_RANGE,
+                    &steel_utils::Identifier::vanilla_static("random_spawn_bonus"),
+                ),
+            !configured
+        );
+    }
 }

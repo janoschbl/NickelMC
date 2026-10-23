@@ -6,6 +6,7 @@ use glam::DVec3;
 use rand::{Rng, RngExt, rng};
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::{NbtCompound, NbtList};
+use steel_registry::data_components::components::EntityData;
 use steel_registry::entity_type::{EntityTypeRef, MobCategory};
 use steel_registry::loot_table::{LootContext, LootTableRef};
 use steel_registry::{
@@ -13,7 +14,7 @@ use steel_registry::{
 };
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
-use steel_utils::nbt::NbtNumeric;
+use steel_utils::nbt::{NbtNumeric, merge_nbt_compounds};
 use steel_utils::types::Difficulty;
 use steel_utils::{BlockPos, Identifier, WorldAabb};
 
@@ -72,6 +73,8 @@ struct SpawnerState {
     spawn_delay: i32,
     spawn_potentials: Vec<WeightedSpawnData>,
     next_spawn_data: Option<SpawnData>,
+    /// The selected potential shares its mutable entity data with the active entry.
+    selected_potential: Option<usize>,
     config: BaseSpawnerConfig,
 }
 
@@ -87,6 +90,7 @@ impl Default for SpawnerState {
             spawn_delay: DEFAULT_SPAWN_DELAY,
             spawn_potentials: Vec::new(),
             next_spawn_data: None,
+            selected_potential: None,
             config: BaseSpawnerConfig::default(),
         }
     }
@@ -121,9 +125,12 @@ impl BaseSpawner {
             .get("Delay")
             .and_then(|tag| tag.short_value())
             .map_or(DEFAULT_SPAWN_DELAY, i32::from);
-        state.next_spawn_data = nbt
+        if let Some(data) = nbt
             .compound("SpawnData")
-            .and_then(|data| SpawnData::from_nbt(&data));
+            .and_then(|data| SpawnData::from_nbt(&data))
+        {
+            state.next_spawn_data = Some(data);
+        }
         let loaded_spawn_potentials = nbt.list("SpawnPotentials").map(|entries| {
             entries
                 .compounds()
@@ -148,6 +155,7 @@ impl BaseSpawner {
                 data: state.next_spawn_data.clone().unwrap_or_default(),
             }]
         });
+        state.selected_potential = None;
         state.config.min_spawn_delay = nbt
             .get("MinSpawnDelay")
             .and_then(|tag| tag.int_value())
@@ -219,21 +227,47 @@ impl BaseSpawner {
             return (data.clone(), false);
         }
 
-        let data = choose_weighted(&state.spawn_potentials, random).unwrap_or_default();
+        let selected = choose_weighted_index(&state.spawn_potentials, random);
+        let data = selected
+            .map(|index| state.spawn_potentials[index].data.clone())
+            .unwrap_or_default();
+        state.selected_potential = selected;
         state.next_spawn_data = Some(data.clone());
         (data, true)
     }
 
     /// Configures the active spawn entity.
     pub fn set_entity_id(&self, entity_type: EntityTypeRef) {
+        self.set_entity_data_inner(entity_type, None);
+    }
+
+    /// Merges operator-provided spawn-egg data into the active entry.
+    pub fn set_entity_data(&self, data: &EntityData) {
+        self.set_entity_data_inner(data.entity_type(), Some(data));
+    }
+
+    fn set_entity_data_inner(&self, entity_type: EntityTypeRef, entity_data: Option<&EntityData>) {
         let mut random = rng();
         let mut state = self.state.lock();
         if state.next_spawn_data.is_none() {
-            state.next_spawn_data =
-                Some(choose_weighted(&state.spawn_potentials, &mut random).unwrap_or_default());
+            let selected = choose_weighted_index(&state.spawn_potentials, &mut random);
+            state.next_spawn_data = Some(
+                selected
+                    .map(|index| state.spawn_potentials[index].data.clone())
+                    .unwrap_or_default(),
+            );
+            state.selected_potential = selected;
         }
         if let Some(data) = state.next_spawn_data.as_mut() {
             replace_entity_id(&mut data.entity_to_spawn, entity_type);
+            if let Some(entity_data) = entity_data {
+                merge_nbt_compounds(&mut data.entity_to_spawn, &entity_data.data().copy_tag());
+            }
+        }
+        if let Some(index) = state.selected_potential
+            && let Some(data) = state.next_spawn_data.clone()
+        {
+            state.spawn_potentials[index].data = data;
         }
     }
 
@@ -278,8 +312,17 @@ impl BaseSpawner {
 
     /// Replaces the weighted entries the next spawn data is picked from. The active
     /// spawn data is kept until the next delay roll.
-    pub fn set_spawn_potentials(&self, potentials: Vec<WeightedSpawnData>) {
-        self.state.lock().spawn_potentials = potentials;
+    pub fn set_spawn_potentials(
+        &self,
+        potentials: Vec<WeightedSpawnData>,
+    ) -> Result<(), &'static str> {
+        if potentials.iter().any(|entry| entry.weight < 0) {
+            return Err("spawn potential weights must be nonnegative");
+        }
+        let mut state = self.state.lock();
+        state.spawn_potentials = potentials;
+        state.selected_potential = None;
+        Ok(())
     }
 
     /// Returns the active spawn data, if one has been selected.
@@ -290,7 +333,9 @@ impl BaseSpawner {
 
     /// Replaces the active spawn data.
     pub fn set_next_spawn_data(&self, data: SpawnData) {
-        self.state.lock().next_spawn_data = Some(data);
+        let mut state = self.state.lock();
+        state.next_spawn_data = Some(data);
+        state.selected_potential = None;
     }
 
     #[expect(
@@ -354,8 +399,8 @@ impl BaseSpawner {
                 spawn_position.x,
                 spawn_position.y,
                 spawn_position.z,
-                f64::from(dimensions.half_width()),
-                f64::from(dimensions.height),
+                f64::from(entity_type.spawn_dimensions_scale * dimensions.width / 2.0),
+                f64::from(dimensions.height * entity_type.spawn_dimensions_scale),
             );
             if has_collision(&WorldCollisionProvider::new(world), spawn_box) {
                 continue;
@@ -420,10 +465,11 @@ impl BaseSpawner {
                     continue;
                 }
 
-                // TODO: Vanilla calls `finalizeSpawn(SPAWNER)` here when the entity NBT holds
-                // only an `id`. Blocked on local difficulty (`DifficultyInstance`: world
-                // difficulty, overworld time, chunk InhabitedTime, moon brightness), which
-                // `Mob::finalize_spawn` does not take yet. Equipment applies either way.
+                if next_spawn_data.entity_to_spawn.len() == 1
+                    && next_spawn_data.entity_to_spawn.string("id").is_some()
+                {
+                    mob.finalize_spawn(world, EntitySpawnReason::Spawner, None);
+                }
                 if let Some(equipment) = &next_spawn_data.equipment {
                     equip_from_table(mob, equipment);
                 }
@@ -490,10 +536,9 @@ impl BaseSpawner {
             } else {
                 min_spawn_delay + random.random_range(0..delay)
             };
-            if let Some(next_spawn_data) = choose_weighted(&state.spawn_potentials, random)
-                && state.next_spawn_data.as_ref() != Some(&next_spawn_data)
-            {
-                state.next_spawn_data = Some(next_spawn_data);
+            if let Some(index) = choose_weighted_index(&state.spawn_potentials, random) {
+                state.next_spawn_data = Some(state.spawn_potentials[index].data.clone());
+                state.selected_potential = Some(index);
                 result.next_spawn_data_changed = true;
             }
         }
@@ -512,23 +557,31 @@ impl BaseSpawner {
     }
 }
 
+#[cfg(test)]
 pub(super) fn choose_weighted<R: Rng + ?Sized>(
     entries: &[WeightedSpawnData],
     random: &mut R,
 ) -> Option<SpawnData> {
+    choose_weighted_index(entries, random).map(|index| entries[index].data.clone())
+}
+
+fn choose_weighted_index<R: Rng + ?Sized>(
+    entries: &[WeightedSpawnData],
+    random: &mut R,
+) -> Option<usize> {
     let total_weight = entries
         .iter()
         .map(|entry| i64::from(entry.weight))
         .sum::<i64>();
-    if total_weight == 0 {
+    if total_weight <= 0 {
         return None;
     }
 
     let mut selection = random.random_range(0..total_weight);
-    for entry in entries {
+    for (index, entry) in entries.iter().enumerate() {
         let weight = i64::from(entry.weight);
         if selection < weight {
-            return Some(entry.data.clone());
+            return Some(index);
         }
         selection -= weight;
     }
@@ -576,7 +629,8 @@ fn equip_from_table(mob: &dyn Mob, equipment: &EquipmentTable) {
     };
 
     let mut random = rng();
-    let entity_ref = entity_loot_ref(mob.as_entity_event_source());
+    let equipment_snapshot = crate::entity::living_loot_equipment(mob);
+    let entity_ref = entity_loot_ref(mob.as_entity_event_source(), Some(&equipment_snapshot));
     let mut context = LootContext::new(&mut random)
         .with_origin(mob.position().x, mob.position().y, mob.position().z)
         .with_this_entity(entity_ref);

@@ -1,7 +1,7 @@
 //! Entity registry for creating entity instances.
 
 use std::ops::Deref;
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{OnceLock, Weak};
 
 use glam::DVec3;
 use simdnbt::borrow::{
@@ -10,15 +10,14 @@ use simdnbt::borrow::{
 use steel_registry::RegistryExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::{REGISTRY, RegistryEntry};
-use steel_utils::{BlockPos, Downcast};
+use steel_utils::BlockPos;
 use uuid::Uuid;
 
 use super::generated_entities::{register_entity_factories, register_spawn_rules};
 use super::{
-    EntityBaseLoad, EntityBaseSaveData, EntityFireFreezeState, EntityIdBlock, EntitySpawnReason, SharedEntity,
-    reserve_entity_ids,
+    EntityBaseLoad, EntityBaseSaveData, EntityFireFreezeState, EntityIdBlock, EntitySpawnReason,
+    SharedEntity, reserve_entity_ids,
 };
-use super::entities::RawEntity;
 use crate::world::{LevelReader, World};
 
 /// Factory function type for creating entities.
@@ -240,31 +239,12 @@ impl EntityRegistry {
         &self,
         request: EntityLoadRequest,
         nbt: &BorrowedNbtCompound<'_>,
-    ) -> SharedEntity {
+    ) -> Option<SharedEntity> {
         let nbt_view: BorrowedNbtCompoundView<'_, '_> = nbt.into();
-        self.create_and_load_or_raw_view(request, &nbt_view)
-    }
-
-    /// Creates an entity from an already borrowed NBT view.
-    #[must_use]
-    pub(crate) fn create_and_load_or_raw_view(
-        &self,
-        request: EntityLoadRequest,
-        nbt: &BorrowedNbtCompoundView<'_, '_>,
-    ) -> SharedEntity {
-        let entity_type = request.entity_type;
-        let id = entity_type.id();
-        let (entity_type, load) = request.into_base_load(self.reserve_id(entity_type).first());
-        if let Some(load_factory) = self.entries.get(id).and_then(|entry| entry.load_factory) {
-            let entity = load_factory(entity_type, load);
-            Self::finish_registered_load_view(&entity, nbt);
-            return entity;
+        let entity = self.create_and_load_for_spawn_view(request, &nbt_view);
+        if entity.is_none() {
+            log::warn!("Skipping unsupported entity while loading");
         }
-
-        let entity: SharedEntity = Arc::new(RawEntity::from_saved(load, entity_type));
-        entity.load_additional(*nbt);
-        entity.set_old_position_to_current();
-        entity.base().set_old_rotation_to_current();
         entity
     }
 
@@ -278,11 +258,9 @@ impl EntityRegistry {
         let id = request.entity_type.id();
         let entry = self.entries.get(id)?;
         let load_factory = entry.load_factory?;
-        let (entity_type, load) = request.into_base_load();
+        let entity_type = request.entity_type;
+        let (entity_type, load) = request.into_base_load(self.reserve_id(entity_type).first());
         let entity = load_factory(entity_type, load);
-        if entity.downcast_ref::<RawEntity>().is_some() {
-            return None;
-        }
 
         Self::finish_registered_load_view(&entity, nbt);
         Some(entity)
@@ -358,6 +336,7 @@ pub fn init_entities() {
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+    use std::sync::Arc;
 
     use simdnbt::borrow::read_compound as read_borrowed_compound;
     use simdnbt::owned::NbtCompound;

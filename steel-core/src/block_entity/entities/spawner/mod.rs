@@ -9,6 +9,7 @@ use std::sync::{Arc, Weak};
 
 use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
 use simdnbt::owned::NbtCompound;
+use steel_registry::data_components::components::EntityData;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::vanilla_block_entity_types;
 use steel_utils::{BlockPos, BlockStateId, DowncastType, DowncastTypeKey};
@@ -23,6 +24,8 @@ pub use spawn_data::{CustomSpawnRules, EquipmentTable, LightRange, SpawnData, We
 pub trait Spawner {
     /// Sets the next spawn entity type.
     fn set_entity_id(&self, entity_type: EntityTypeRef);
+    /// Applies operator-provided entity data to the next spawn.
+    fn set_entity_data(&self, data: &EntityData);
 
     /// Returns the ticks left until the next spawn cycle.
     fn spawn_delay(&self) -> i32;
@@ -40,7 +43,7 @@ pub trait Spawner {
     fn spawn_potentials(&self) -> Vec<WeightedSpawnData>;
 
     /// Replaces the weighted entries the next spawn data is picked from.
-    fn set_spawn_potentials(&self, potentials: Vec<WeightedSpawnData>);
+    fn set_spawn_potentials(&self, potentials: Vec<WeightedSpawnData>) -> Result<(), &'static str>;
 
     /// Returns the active spawn data, if one has been selected.
     fn next_spawn_data(&self) -> Option<SpawnData>;
@@ -79,6 +82,11 @@ impl SpawnerBlockEntity {
 }
 
 impl Spawner for SpawnerBlockEntity {
+    fn set_entity_data(&self, data: &EntityData) {
+        self.spawner.set_entity_data(data);
+        self.save_and_sync();
+    }
+
     fn set_entity_id(&self, entity_type: EntityTypeRef) {
         self.spawner.set_entity_id(entity_type);
         self.save_and_sync();
@@ -106,9 +114,10 @@ impl Spawner for SpawnerBlockEntity {
         self.spawner.spawn_potentials()
     }
 
-    fn set_spawn_potentials(&self, potentials: Vec<WeightedSpawnData>) {
-        self.spawner.set_spawn_potentials(potentials);
+    fn set_spawn_potentials(&self, potentials: Vec<WeightedSpawnData>) -> Result<(), &'static str> {
+        self.spawner.set_spawn_potentials(potentials)?;
         self.save_and_sync();
+        Ok(())
     }
 
     fn next_spawn_data(&self) -> Option<SpawnData> {

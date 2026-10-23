@@ -19,8 +19,8 @@ mod potent_sulfur;
 mod shulker_box;
 mod sign;
 mod skull;
-mod unimplemented;
 mod spawner;
+mod unimplemented;
 
 pub use abstract_furnace::{
     BlastFurnaceBlockEntity, FurnaceBlockEntity, FurnaceKind, SmokerBlockEntity,
@@ -46,8 +46,8 @@ pub use potent_sulfur::PotentSulfurBlockEntity;
 pub use shulker_box::{AnimationStatus, SHULKER_BOX_SLOTS, ShulkerBoxBlockEntity};
 pub use sign::{SIGN_LINES, SignBlockEntity, SignText};
 pub use skull::SkullBlockEntity;
-pub use unimplemented::UnimplementedBlockEntity;
 pub use spawner::{
     BaseSpawner, BaseSpawnerConfig, CustomSpawnRules, EquipmentTable, LightRange, SpawnData,
     Spawner, SpawnerBlockEntity, WeightedSpawnData,
 };
+pub use unimplemented::UnimplementedBlockEntity;

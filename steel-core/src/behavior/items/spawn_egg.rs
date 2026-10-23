@@ -164,12 +164,18 @@ impl ItemBehavior for SpawnEggItem {
                 return InteractionResult::Fail;
             }
 
-            spawner.set_entity_id(entity_type);
+            if context.player.is_operator()
+                && let Some(data) = stack.get(ENTITY_DATA)
+            {
+                spawner.set_entity_data(data);
+            } else {
+                spawner.set_entity_id(entity_type);
+            }
             context.inv.with_item(|item| item.shrink(1));
             context.world.game_event(
                 &vanilla_game_events::BLOCK_CHANGE,
                 clicked_pos,
-                &GameEventContext::new(Some(context.player), None),
+                &GameEventContext::new(Some(context.player.as_ref()), None),
             );
             return InteractionResult::Success;
         }

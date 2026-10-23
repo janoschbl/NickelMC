@@ -34,8 +34,8 @@ use crate::entity::{
 use crate::inventory::equipment::EquipmentSlot;
 use crate::player::ResetReason;
 use crate::test_support::{
-    TestWorld, fresh_test_world, fresh_test_world_with_dimension_type, insert_ready_full_chunk,
-    TestPlayerBuilder, test_world,
+    TestPlayerBuilder, TestWorld, fresh_test_world, fresh_test_world_with_dimension_type,
+    insert_ready_full_chunk, test_world,
 };
 use crate::world::{LevelReader, World};
 use steel_registry::vanilla_dimension_types;

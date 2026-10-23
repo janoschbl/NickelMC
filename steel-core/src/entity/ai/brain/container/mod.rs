@@ -10,6 +10,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use steel_registry::activity::ActivityRef;
+use steel_registry::environment_attribute::EnvironmentAttributeRef;
 
 pub use super::{Activities, ActivityData, ActivityRequirements};
 pub use provider::BrainProvider;
@@ -40,6 +41,7 @@ pub struct Brain {
     sensors: Vec<WrappedSensor>,
     behaviors_by_priority: BTreeMap<i32, Vec<ActivityBehaviors>>,
     activities: Activities,
+    schedule: Option<EnvironmentAttributeRef<ActivityRef>>,
 }
 
 impl Brain {
@@ -51,6 +53,7 @@ impl Brain {
             sensors: Vec::new(),
             behaviors_by_priority: BTreeMap::new(),
             activities: Activities::new(),
+            schedule: None,
         };
         brain.use_default_activity();
         brain
@@ -173,6 +176,24 @@ impl Brain {
     ) {
         self.activities
             .update_activity_from_schedule(&mut self.memories, game_time, scheduled);
+    }
+
+    /// Sets the environment attribute that supplies this brain's schedule.
+    pub const fn set_schedule(&mut self, schedule: EnvironmentAttributeRef<ActivityRef>) {
+        self.schedule = Some(schedule);
+    }
+
+    /// Samples the stored schedule at the body's position, at most once per
+    /// 21 game ticks. Without a schedule vanilla requests the idle activity.
+    pub fn update_schedule(&mut self, body: &dyn Entity, level: &World) {
+        let schedule = self.schedule;
+        self.update_activity_from_schedule(level.game_time(), || {
+            schedule.map_or(&steel_registry::vanilla_activities::IDLE, |schedule| {
+                level
+                    .environment_attributes()
+                    .get_value(schedule, body.position())
+            })
+        });
     }
 
     /// Whether `activity` is currently active.

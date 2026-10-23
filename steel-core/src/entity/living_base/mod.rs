@@ -28,6 +28,7 @@ use steel_utils::{BlockPos, Identifier};
 use uuid::Uuid;
 
 use crate::behavior::MOB_EFFECT_BEHAVIORS;
+use crate::entity::ai::brain::Brain;
 use crate::entity::attribute::{AttributeMap, AttributeModifier, AttributeModifierOperation};
 use crate::entity::synced_data::EntitySyncedData;
 use crate::entity::{LivingEntity, SharedEntity, WeakEntity};
@@ -703,6 +704,7 @@ impl LivingEntityState {
 /// death side effects. Health remains the source of truth for dead-or-dying
 /// checks such as client respawn requests.
 pub struct LivingEntityBase {
+    brain: SyncMutex<Brain>,
     state: SyncMutex<LivingEntityState>,
     attributes: SyncMutex<AttributeMap>,
     active_mob_effects: SyncMutex<FxHashMap<MobEffectRef, ActiveMobEffect>>,
@@ -750,6 +752,7 @@ impl LivingEntityBase {
         let speed = attributes.required_value(vanilla_attributes::MOVEMENT_SPEED) as f32;
 
         Self {
+            brain: SyncMutex::new(Brain::new()),
             state: SyncMutex::new(LivingEntityState::new(speed)),
             attributes: SyncMutex::new(attributes),
             active_mob_effects: SyncMutex::new(FxHashMap::default()),
@@ -765,6 +768,12 @@ impl LivingEntityBase {
     #[inline]
     pub const fn attributes(&self) -> &SyncMutex<AttributeMap> {
         &self.attributes
+    }
+
+    /// Returns the entity's brain. Callbacks use their context rather than
+    /// locking this again while a brain tick is running.
+    pub const fn brain(&self) -> &SyncMutex<Brain> {
+        &self.brain
     }
 
     /// Applies vanilla constructor-time synced-data mutations for living entities.

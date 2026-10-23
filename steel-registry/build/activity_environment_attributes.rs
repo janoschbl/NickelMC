@@ -22,7 +22,10 @@ struct Override {
 }
 
 pub(crate) fn activity_ref(key: &Identifier) -> TokenStream {
-    assert_eq!(key.namespace, "minecraft", "Unknown vanilla activity namespace");
+    assert_eq!(
+        key.namespace, "minecraft",
+        "Unknown vanilla activity namespace"
+    );
     let name = Ident::new(&key.path.to_shouty_snake_case(), Span::call_site());
     quote! { &crate::vanilla_activities::#name }
 }

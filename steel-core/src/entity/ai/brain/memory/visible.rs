@@ -30,7 +30,10 @@ impl fmt::Debug for NearestVisibleLivingEntities {
 impl NearestVisibleLivingEntities {
     /// The empty visibility result used before a mob's first sensor scan.
     pub fn empty() -> &'static Self {
-        static EMPTY: std::sync::LazyLock<NearestVisibleLivingEntities> = std::sync::LazyLock::new(|| NearestVisibleLivingEntities::new(RememberedEntities::default(), |_| false));
+        static EMPTY: std::sync::LazyLock<NearestVisibleLivingEntities> =
+            std::sync::LazyLock::new(|| {
+                NearestVisibleLivingEntities::new(RememberedEntities::default(), |_| false)
+            });
         &EMPTY
     }
     pub fn new(

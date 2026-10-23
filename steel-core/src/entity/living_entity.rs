@@ -5,6 +5,8 @@ use steel_registry::{DyeColor, vanilla_custom_stats};
 
 use super::*;
 use crate::behavior::{BLOCK_BEHAVIORS, InventoryTickContext, MOB_EFFECT_BEHAVIORS};
+use crate::entity::ai::brain::memory::{MEMORY_MODULE_TYPES, PackedMemories};
+use crate::entity::ai::brain::{Brain, BrainProvider};
 use crate::entity::consume_effect::apply_consume_effect;
 use crate::entity::damage::RecentDamageSource;
 
@@ -22,6 +24,32 @@ pub trait LivingEntity: Entity {
     /// living runtime state such as attributes, cached movement speed,
     /// damage cooldown, and death animation counters.
     fn living_base(&self) -> &LivingEntityBase;
+
+    /// Declares this species' memories, sensors and per-body activities.
+    /// Species with no brain AI use vanilla's empty brain.
+    fn brain_provider(&self) -> Option<&BrainProvider> {
+        None
+    }
+
+    /// Rebuilds fresh sensor/behavior instances around saved persistent memories.
+    /// Species can also call this after construction or a profession change.
+    fn rebuild_brain(&self, packed: &PackedMemories) {
+        let brain = self.brain_provider().map_or_else(Brain::new, |provider| {
+            provider.make_brain(self.as_entity_event_source(), packed)
+        });
+        *self.living_base().brain().lock() = brain;
+    }
+
+    /// Runs this species' brain in its custom server AI step. Goal-driven mobs
+    /// do not call this hook and retain their existing AI.
+    fn tick_brain(&self) {
+        if let Some(level) = self.level() {
+            self.living_base()
+                .brain()
+                .lock()
+                .tick(self.as_entity_event_source(), &level);
+        }
+    }
 
     /// Returns vanilla living body/head rotation state.
     fn living_rotation_state(&self) -> LivingRotationState {
@@ -193,11 +221,23 @@ pub trait LivingEntity: Entity {
     /// Saves the shared living state used by mob persistence.
     fn save_living(&self, nbt: &mut NbtCompound) {
         nbt.insert("HurtTime", self.living_base().hurt_time() as i16);
+        let mut brain = NbtCompound::new();
+        brain.insert(
+            "memories",
+            self.living_base().brain().lock().pack().to_nbt(),
+        );
+        nbt.insert("Brain", brain);
         self.save_equipment(nbt);
     }
 
     /// Loads shared living state, including spawn NBT.
     fn load_living(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        let packed = nbt
+            .compound("Brain")
+            .and_then(|brain| brain.compound("memories"))
+            .map(|memories| PackedMemories::from_nbt(&memories.to_owned(), &MEMORY_MODULE_TYPES))
+            .unwrap_or_default();
+        self.rebuild_brain(&packed);
         self.living_base()
             .set_hurt_time(nbt.short("HurtTime").unwrap_or(0));
         self.load_equipment(nbt);

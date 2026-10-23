@@ -1,11 +1,127 @@
 use std::str::FromStr as _;
 
+use glam::DVec3;
+use steel_registry::activity::ActivityRef;
 use steel_registry::dimension_type::DimensionTypeRef;
+use steel_registry::environment_attribute::EnvironmentAttributeRef;
 use steel_registry::timeline::{Ease, KeyframeValue, TimelineRef, Track};
 use steel_registry::{REGISTRY, RegistryExt as _, TaggedRegistryExt as _};
+use steel_utils::BlockPos;
 use steel_utils::Identifier;
 
+use super::World;
 use super::clock::WorldClockManager;
+
+/// The discrete, activity-valued environment layers used by brain schedules.
+///
+/// Values are sampled live: dimension constants, positional biome overrides,
+/// then the dimension's timelines using their persisted world clocks.
+pub struct EnvironmentAttributeSystem<'world> {
+    world: &'world World,
+}
+
+impl World {
+    /// Returns this world's live environment attribute sampler.
+    pub const fn environment_attributes(&self) -> EnvironmentAttributeSystem<'_> {
+        EnvironmentAttributeSystem { world: self }
+    }
+}
+
+impl EnvironmentAttributeSystem<'_> {
+    /// Samples an activity at a position, without loading missing chunks.
+    pub fn get_value(
+        &self,
+        attribute: EnvironmentAttributeRef<ActivityRef>,
+        position: DVec3,
+    ) -> ActivityRef {
+        let world = self.world;
+        let mut value = attribute.default_value;
+        if let Some((_, dimension_value)) = attribute
+            .dimensions
+            .iter()
+            .find(|(dimension, _)| std::ptr::eq(*dimension, world.dimension_type))
+        {
+            value = dimension_value;
+        }
+        if !attribute.biomes.is_empty() {
+            let pos = BlockPos::new(
+                position.x.floor() as i32,
+                position.y.floor() as i32,
+                position.z.floor() as i32,
+            );
+            let biome = if attribute.full_resolution_biomes {
+                world.biome_at(pos)
+            } else {
+                world
+                    .noise_biome_id(pos.x >> 2, pos.y >> 2, pos.z >> 2)
+                    .and_then(|id| REGISTRY.biomes.by_id(usize::from(id)))
+            };
+            if let Some(biome) = biome
+                && let Some((_, biome_value)) = attribute
+                    .biomes
+                    .iter()
+                    .find(|(candidate, _)| std::ptr::eq(*candidate, biome))
+            {
+                value = biome_value;
+            }
+        }
+        let level_data = world.level_data.read();
+        sample_activity(
+            attribute,
+            world.dimension_type,
+            level_data.world_clocks(),
+            value,
+        )
+    }
+}
+
+fn sample_activity(
+    attribute: EnvironmentAttributeRef<ActivityRef>,
+    dimension: DimensionTypeRef,
+    clocks: &WorldClockManager,
+    mut value: ActivityRef,
+) -> ActivityRef {
+    for_each_timeline(dimension, |timeline| {
+        let Some(track) = timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == attribute.key.to_string())
+        else {
+            return;
+        };
+        let Some(ticks) = clocks.total_ticks(timeline.clock) else {
+            return;
+        };
+        if let Some(activity) =
+            sample_activity_track(track, timeline.period_ticks.map(i64::from), ticks)
+        {
+            // Activity's modifier library only accepts override.
+            value = activity;
+        }
+    });
+    value
+}
+
+fn sample_activity_track(track: &Track, period: Option<i64>, ticks: i64) -> Option<ActivityRef> {
+    let first = track.keyframes.first()?;
+    let ticks = period.map_or(ticks, |period| ticks.rem_euclid(period));
+    let index = track
+        .keyframes
+        .partition_point(|keyframe| keyframe.ticks <= ticks);
+    let keyframe = if index == 0 {
+        if period.is_some() {
+            track.keyframes.last()?
+        } else {
+            first
+        }
+    } else {
+        &track.keyframes[index - 1]
+    };
+    match keyframe.value {
+        KeyframeValue::Activity(activity) => Some(activity),
+        _ => None,
+    }
+}
 
 const SKY_LIGHT_LEVEL_ATTRIBUTE: &str = "minecraft:gameplay/sky_light_level";
 const SUN_ANGLE_ATTRIBUTE: &str = "minecraft:visual/sun_angle";

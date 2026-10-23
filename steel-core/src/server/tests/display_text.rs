@@ -86,12 +86,18 @@ fn display_load_resolves_unpublished_self_scores_and_domain_storage() {
             ),
         );
         entity.with_view(|view| {
-            assert_eq!(view.text_ref().to_plain(&DisplayResolutor), "stored text")
+            assert_eq!(
+                view.text_ref().to_plain(&DisplayResolutor),
+                "\"stored text\""
+            )
         });
 
         load_text(&entity, TextComponent::entity("@e[", None));
         entity.with_view(|view| {
-            assert_eq!(view.text_ref().to_plain(&DisplayResolutor), "stored text")
+            assert_eq!(
+                view.text_ref().to_plain(&DisplayResolutor),
+                "\"stored text\""
+            )
         });
         assert!(
             world.get_entity_by_id(entity.id()).is_none(),

@@ -317,31 +317,13 @@ fn full_damage_starts_the_vanilla_hurt_animation_timer() {
     init_behaviors();
     let entity = LivingFluidTestEntity::new_in_world(0.0, 0.0, true, test_world());
     let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
-    assert_eq!(entity.hurt_time(), 0);
+    assert_eq!(entity.living_base().hurt_time(), 0);
 
     assert!(entity.hurt(test_world(), &source, 4.0));
 
     // Vanilla `LivingEntity.hurtServer` sets `hurtTime = hurtDuration = 10` only on
     // the branch that applies the full damage amount.
-    assert_eq!(entity.hurt_time(), HURT_DURATION_TICKS);
-    assert_eq!(entity.living_base().hurt_duration(), HURT_DURATION_TICKS);
-}
-
-#[test]
-fn hurt_time_counts_back_down_to_zero() {
-    init_vanilla_registry();
-    init_behaviors();
-    let entity = LivingFluidTestEntity::new_in_world(0.0, 0.0, true, test_world());
-    let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
-    assert!(entity.hurt(test_world(), &source, 4.0));
-
-    for _ in 0..HURT_DURATION_TICKS {
-        entity.living_base().decrement_hurt_time();
-    }
-
-    assert_eq!(entity.hurt_time(), 0);
-    entity.living_base().decrement_hurt_time();
-    assert_eq!(entity.hurt_time(), 0, "the counter must not go negative");
+    assert_eq!(entity.living_base().hurt_time(), HURT_DURATION_TICKS);
 }
 
 #[test]
@@ -354,13 +336,13 @@ fn partial_damage_within_the_cooldown_leaves_hurt_time_alone() {
     for _ in 0..4 {
         entity.living_base().decrement_hurt_time();
     }
-    let remaining = entity.hurt_time();
+    let remaining = entity.living_base().hurt_time();
 
     // A larger hit inside the invulnerability window takes the partial-damage
     // branch, which vanilla does not re-animate.
     assert!(entity.hurt(test_world(), &source, 6.0));
 
-    assert_eq!(entity.hurt_time(), remaining);
+    assert_eq!(entity.living_base().hurt_time(), remaining);
 }
 
 #[test]

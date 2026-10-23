@@ -5,13 +5,15 @@ use steel_registry::{
     data_components::vanilla_components::CUSTOM_NAME, init_vanilla_registry, item_stack::ItemStack,
     vanilla_damage_types, vanilla_entities, vanilla_items,
 };
-use text_components::{TextComponent, content::Content, interactivity::HoverEvent};
+use text_components::{
+    TextComponent, content::Content, interactivity::HoverEvent, translation::TranslatedMessage,
+};
 
 use super::*;
 use crate::behavior::init_behaviors;
-use crate::entity::{Entity, SharedEntity, entities::PigEntity};
+use crate::entity::{Entity, RemovalReason, SharedEntity, entities::PigEntity};
 use crate::inventory::equipment::EquipmentSlot;
-use crate::test_support::{TestPlayerBuilder, fresh_test_world};
+use crate::test_support::{TestEntity, TestPlayerBuilder, fresh_test_world};
 
 fn entry(source: DamageSource) -> CombatEntry {
     CombatEntry {
@@ -22,7 +24,7 @@ fn entry(source: DamageSource) -> CombatEntry {
     }
 }
 
-fn translation(message: &TextComponent) -> &text_components::translation::TranslatedMessage {
+fn translation(message: &TextComponent) -> &TranslatedMessage {
     let Content::Translate(translation) = &message.content else {
         panic!("expected a translated death message");
     };
@@ -92,10 +94,8 @@ fn removed_named_attacker_is_retained_and_assisted_fall_uses_its_weapon() {
     tracker.record_damage(entry(source), 0, true);
     weak.upgrade()
         .expect("retained attacker")
-        .set_removed(crate::entity::RemovalReason::Discarded);
-    let generic = tracker
-        .death_message(victim.as_ref())
-        .expect("named weapon death message");
+        .set_removed(RemovalReason::Discarded);
+    let generic = tracker.death_message(victim.as_ref());
     let args = translation(&generic).args.as_ref().expect("message args");
     assert_eq!(translation(&generic).key, "death.attack.player.item");
     assert_eq!(args.len(), 3);
@@ -107,9 +107,7 @@ fn removed_named_attacker_is_retained_and_assisted_fall_uses_its_weapon() {
     let mut fall = entry(DamageSource::environment(&vanilla_damage_types::FALL));
     fall.fall_distance = 6.0;
     tracker.record_damage(fall, 1, true);
-    let assisted = tracker
-        .death_message(victim.as_ref())
-        .expect("assisted fall message");
+    let assisted = tracker.death_message(victim.as_ref());
     assert_eq!(translation(&assisted).key, "death.fell.assist.item");
     assert_eq!(
         translation(&assisted).args.as_ref().expect("args")[1],
@@ -132,18 +130,13 @@ fn indirect_damage_names_the_causing_entity_instead_of_the_projectile() {
     let mut weapon = ItemStack::new(&vanilla_items::BOW);
     weapon.set(CUSTOM_NAME, TextComponent::const_plain("Named bow"));
     attacker.with_equipment_slot_mut(EquipmentSlot::MainHand, &mut |item| *item = weapon.clone());
-    let projectile = crate::test_support::TestEntity::shared(
-        3,
-        DVec3::ZERO,
-        Weak::new(),
-        &vanilla_entities::ARROW,
-    );
+    let projectile = TestEntity::shared(3, DVec3::ZERO, Weak::new(), &vanilla_entities::ARROW);
     let source = DamageSource::environment(&vanilla_damage_types::ARROW)
         .with_causing_entity(Arc::clone(&attacker) as SharedEntity)
         .with_direct_entity(projectile);
     let mut tracker = CombatTracker::default();
     tracker.record_damage(entry(source), 0, true);
-    let message = tracker.death_message(victim.as_ref()).expect("message");
+    let message = tracker.death_message(victim.as_ref());
     assert_eq!(translation(&message).key, "death.attack.arrow.item");
     assert_eq!(
         translation(&message).args.as_ref().expect("args")[1],
@@ -248,7 +241,14 @@ fn living_tick_rechecks_combat_every_twenty_entity_ticks_not_world_ticks() {
             .entries
             .is_empty()
     );
-    assert_eq!(victim.combat_duration(), 320);
+    assert_eq!(
+        victim
+            .base()
+            .damage_history()
+            .combat_tracker()
+            .duration(320),
+        320
+    );
 }
 
 #[test]
@@ -261,13 +261,13 @@ fn fall_selection_uses_strict_distance_threshold_and_largest_climbable_damage() 
     first.fall_distance = 5.0;
     tracker.record_damage(first, 0, true);
     assert_eq!(
-        translation(&tracker.death_message(victim.as_ref()).expect("message")).key,
+        translation(&tracker.death_message(victim.as_ref())).key,
         "death.attack.fall"
     );
     tracker.entries[0].fall_location = Some("ladder");
     tracker.entries[0].damage = 6.0;
     assert_eq!(
-        translation(&tracker.death_message(victim.as_ref()).expect("message")).key,
+        translation(&tracker.death_message(victim.as_ref())).key,
         "death.fell.accident.ladder"
     );
     let mut second = entry(DamageSource::environment(&vanilla_damage_types::FALL));
@@ -275,7 +275,7 @@ fn fall_selection_uses_strict_distance_threshold_and_largest_climbable_damage() 
     second.damage = 7.0;
     tracker.record_damage(second, 1, true);
     assert_eq!(
-        translation(&tracker.death_message(victim.as_ref()).expect("message")).key,
+        translation(&tracker.death_message(victim.as_ref())).key,
         "death.fell.accident.water"
     );
 }
@@ -293,7 +293,7 @@ fn intentional_game_design_message_carries_the_vanilla_link_and_hover() {
         0,
         true,
     );
-    let message = tracker.death_message(victim.as_ref()).expect("message");
+    let message = tracker.death_message(victim.as_ref());
     assert_eq!(
         translation(&message).key,
         "death.attack.badRespawnPoint.message"

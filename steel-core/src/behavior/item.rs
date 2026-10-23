@@ -1,7 +1,6 @@
 //! Item behavior trait and registry.
 
 use crate::player::player_inventory::Prediction;
-use std::io;
 use std::sync::Arc;
 
 use std::borrow::Cow;
@@ -437,7 +436,10 @@ impl ItemBehaviorRegistry {
     }
 
     /// Formats the bracketed item name, rarity and full item hover payload.
-    pub fn display_name(&self, stack: &ItemStack) -> io::Result<TextComponent> {
+    ///
+    /// A hover payload that fails to encode is logged and omitted, since vanilla cannot fail here.
+    #[must_use]
+    pub fn display_name(&self, stack: &ItemStack) -> TextComponent {
         use steel_registry::{
             ItemStackTemplate,
             data_components::vanilla_components::{CUSTOM_NAME, RARITY, Rarity},
@@ -459,11 +461,15 @@ impl ItemBehaviorRegistry {
                     Rarity::Rare | Rarity::Epic => Rarity::Epic,
                 };
             }
-            result = result
-                .color(rarity.color())
-                .hover_event(ItemStackTemplate::from_stack(stack)?.to_hover_event()?);
+            result = result.color(rarity.color());
+            match ItemStackTemplate::from_stack(stack).and_then(|item| item.to_hover_event()) {
+                Ok(hover) => result = result.hover_event(hover),
+                Err(error) => {
+                    tracing::error!("Failed to encode the item hover of {stack:?}: {error}");
+                }
+            }
         }
-        Ok(result)
+        result
     }
 
     /// Get all behaviors.

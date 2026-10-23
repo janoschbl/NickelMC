@@ -2,7 +2,7 @@
 
 # NickelMC Slop
 
-NickelMC is a fork of SteelMC, a Minecraft Java server written in Rust. I was bored, so I gave it to AI.
+NickelMC is a fork of [SteelMC](https://github.com/Steel-Foundation/SteelMC) by the Steel Foundation, a Minecraft Java server written in Rust. I was bored, so I gave it to AI.
 
 Agents write the code. Other agents review it. I read the commit messages, sometimes.
 
@@ -47,6 +47,6 @@ SteelMC limits pull requests to about 1,000 lines and three open at a time. This
 
 ## License
 
-SteelMC is AGPL-3.0-or-later, and so is this fork. I keep the license text and the copyright notices, and I date my changes. If you run a public server from this code, you must offer your players a visible link to the source.
+SteelMC is AGPL-3.0-or-later, and so is this fork. Upstream authors whose commits this fork carries are listed in [NOTICE](NOTICE). I keep the license text and the copyright notices, and I date my changes. If you run a public server from this code, you must offer your players a visible link to the source.
 
 Created in [T3 Code](https://t3.codes).

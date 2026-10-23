@@ -4,9 +4,9 @@ use super::{
     Arc, BLOCK_BEHAVIORS, BlockLootContext, BlockPos, BlockStateExt, BlockStateId, CLevelEvent,
     CLevelParticles, CSound, ChunkPos, ConnectionProtocol, DVec3, EncodedPacket, Entity,
     GLOBAL_SOUND_EVENTS, GameEventContext, ItemStack, LevelReader, LootContext, NetworkConnection,
-    ParticleData, Player, REGISTRY, RandomizationType, RegistryExt, SectionPos, SoundEventRef,
-    SoundSource, UpdateFlags, World, WorldEntityManager, entity_loot_ref, fluid_state_to_block,
-    level_events, vanilla_blocks, vanilla_game_events,
+    ParticleData, Player, RandomizationType, SectionPos, SoundEventRef, SoundSource, UpdateFlags,
+    World, WorldEntityManager, entity_loot_ref, fluid_state_to_block, level_events, vanilla_blocks,
+    vanilla_game_events,
 };
 use crate::entity::loot_equipment;
 use crate::inventory::lock::{ContainerLockGuard, ContainerRef};
@@ -415,9 +415,7 @@ impl World {
         context: &BlockLootContext<'_>,
     ) -> Vec<ItemStack> {
         let block = state.get_block();
-        let loot_key = steel_utils::Identifier::vanilla(format!("blocks/{}", block.key.path));
-
-        let Some(loot_table) = REGISTRY.loot_tables.by_key(&loot_key) else {
+        let Some(loot_table) = block.config.loot_table else {
             return Vec::new();
         };
 

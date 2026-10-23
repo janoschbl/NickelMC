@@ -1,6 +1,7 @@
 //! Item behavior trait and registry.
 
 use crate::player::player_inventory::Prediction;
+use std::io;
 use std::sync::Arc;
 
 use std::borrow::Cow;
@@ -446,6 +447,36 @@ impl ItemBehaviorRegistry {
         stack
             .custom_name()
             .unwrap_or_else(|| self.get_behavior(stack.item()).get_name(stack))
+    }
+
+    /// Formats the bracketed item name, rarity and full item hover payload.
+    pub fn display_name(&self, stack: &ItemStack) -> io::Result<TextComponent> {
+        use steel_registry::{
+            ItemStackTemplate,
+            data_components::vanilla_components::{CUSTOM_NAME, RARITY, Rarity},
+        };
+        use text_components::Modifier;
+
+        let mut name = TextComponent::new().add_child(self.hover_name(stack).into_owned());
+        if stack.has(CUSTOM_NAME) {
+            name = name.italic(true);
+        }
+        let mut result = TextComponent::const_plain("[")
+            .add_child(name)
+            .add_child("]");
+        if !stack.is_empty() {
+            let mut rarity = stack.get(RARITY).copied().unwrap_or_default();
+            if stack.is_enchanted() {
+                rarity = match rarity {
+                    Rarity::Common | Rarity::Uncommon => Rarity::Rare,
+                    Rarity::Rare | Rarity::Epic => Rarity::Epic,
+                };
+            }
+            result = result
+                .color(rarity.color())
+                .hover_event(ItemStackTemplate::from_stack(stack)?.to_hover_event()?);
+        }
+        Ok(result)
     }
 
     /// Get all behaviors.

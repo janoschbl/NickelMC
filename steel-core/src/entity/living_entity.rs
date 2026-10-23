@@ -1,3 +1,4 @@
+use std::io;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;
@@ -60,6 +61,17 @@ pub trait LivingEntity: Entity {
         self.living_base().tick_swing_state();
         self.entity_base_tick();
         self.tick_living_environmental_damage();
+        self.living_base().decrement_hurt_time();
+        if self.as_player().is_none() {
+            self.living_base().decrement_invulnerable_time();
+        }
+        if self.is_dead_or_dying() {
+            self.tick_death();
+        }
+        self.living_base().tick_last_hurt_by_player_memory();
+        self.living_base()
+            .tick_living_combat_memory(self.tick_count());
+        self.tick_mob_effects();
     }
 
     /// Returns vanilla arm-swing animation state.
@@ -179,6 +191,19 @@ pub trait LivingEntity: Entity {
         self.drain_dirty_living_equipment()
     }
 
+    /// Saves the shared living state used by mob persistence.
+    fn save_living(&self, nbt: &mut NbtCompound) {
+        nbt.insert("HurtTime", self.living_base().hurt_time() as i16);
+        self.save_equipment(nbt);
+    }
+
+    /// Loads shared living state, including spawn NBT.
+    fn load_living(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.living_base()
+            .set_hurt_time(nbt.short("HurtTime").unwrap_or(0));
+        self.load_equipment(nbt);
+    }
+
     /// Saves equipment slots to NBT.
     fn save_equipment(&self, nbt: &mut NbtCompound) {
         let mut equipment = NbtCompound::new();
@@ -215,6 +240,10 @@ pub trait LivingEntity: Entity {
     /// Appends vanilla-shaped living state used by command NBT predicates.
     fn save_command_nbt(&self, nbt: &mut NbtCompound) {
         nbt.insert("Health", self.get_health());
+        nbt.insert(
+            "HurtTime",
+            NbtTag::Short(self.living_base().hurt_time() as i16),
+        );
         nbt.insert(
             "DeathTime",
             NbtTag::Short(self.living_base().death_time() as i16),
@@ -512,6 +541,63 @@ pub trait LivingEntity: Entity {
         history.record(self.base(), source, &world.game_time);
     }
 
+    /// Records nonzero damage after mitigation and before health loss.
+    fn record_combat_damage(&self, source: &DamageSource, damage: f32) {
+        let Some(victim) = self.as_living_entity() else {
+            return;
+        };
+        let Some(world) = self.level() else {
+            panic!("recording combat requires the victim's level");
+        };
+        let Some(history) = world.damage_history.upgrade() else {
+            panic!("recording combat requires server damage history");
+        };
+        let changes = self.base().damage_history().record_combat(
+            &history,
+            self.generation(),
+            damage::combat::CombatEntry::new(victim, source, damage),
+            self.tick_count(),
+            Entity::is_alive(self),
+        );
+        changes.apply(victim);
+    }
+
+    /// Expires combat using the victim's entity tick count, not world time.
+    fn recheck_combat_status(&self) {
+        let Some(victim) = self.as_living_entity() else {
+            return;
+        };
+        let changes = self
+            .base()
+            .damage_history()
+            .recheck_combat(self.tick_count(), Entity::is_alive(self));
+        changes.apply(victim);
+    }
+
+    /// Returns the active combat duration or the duration of the last ended combat.
+    fn combat_duration(&self) -> i32 {
+        self.base()
+            .damage_history()
+            .combat_duration(self.tick_count())
+    }
+
+    /// Notifies the entity when damage from a living attacker starts combat.
+    fn on_enter_combat(&self) {}
+
+    /// Notifies the entity after combat ends, before its entries are released.
+    fn on_leave_combat(&self, _duration: i32) {}
+
+    /// Builds the death message while the exact historical sources are retained.
+    fn combat_death_message(&self) -> io::Result<TextComponent> {
+        let Some(victim) = self.as_living_entity() else {
+            panic!("living death messages require a living entity");
+        };
+        self.base()
+            .damage_history()
+            .combat_tracker()
+            .death_message(victim)
+    }
+
     /// Records the player that last hurt this entity.
     fn set_last_hurt_by_player(&self, player_uuid: Uuid, time_to_remember: i32) {
         self.living_base()
@@ -667,6 +753,11 @@ pub trait LivingEntity: Entity {
     /// `world` is the `ServerLevel` supplied by the vanilla caller. It may
     /// intentionally differ from the entity's attached world.
     fn hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
+        self.default_hurt_server(world, source, amount)
+    }
+
+    /// Runs the base `LivingEntity.hurtServer` body, for overrides that call `super.hurtServer`.
+    fn default_hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
         if self.is_invulnerable_to(world, source) {
             return false;
         }
@@ -711,6 +802,9 @@ pub trait LivingEntity: Entity {
 
         self.before_actually_hurt(source, effective_amount);
         self.actually_hurt(world, source, effective_amount);
+        if took_full_damage {
+            self.living_base().begin_hurt_animation();
+        }
         self.resolve_mob_responsible_for_damage(source);
         self.resolve_player_responsible_for_damage(source);
 
@@ -868,6 +962,7 @@ pub trait LivingEntity: Entity {
         }
 
         if damage != 0.0 {
+            self.record_combat_damage(source, damage);
             self.set_health(self.get_health() - damage);
             self.set_absorption_amount(self.get_absorption_amount() - damage);
             self.game_event(&vanilla_game_events::ENTITY_DAMAGE);
@@ -1033,6 +1128,8 @@ pub trait LivingEntity: Entity {
             return;
         }
 
+        self.handle_killing_blow();
+
         // Can't directly use &self for &dyn LivingEntity, as the compiler doesn't know if it's Sized.
         // Using a function meant for getting &dyn LivingEntity directly works well here.
         if let Some(world) = self.level()
@@ -1050,6 +1147,9 @@ pub trait LivingEntity: Entity {
         self.broadcast_entity_event(EntityStatus::Death);
         self.set_pose(EntityPose::Dying);
     }
+
+    /// Applies entity specific death behavior after death handling is claimed.
+    fn handle_killing_blow(&self) {}
 
     /// Returns whether this entity should drop loot on death: not a baby,
     /// and the mob-drops game rule allows it.
@@ -1972,12 +2072,10 @@ pub trait LivingEntity: Entity {
     /// The default `Entity::tick` dispatches living entities here.
     fn tick_living_entity(&self, entity: &SharedEntity) {
         self.default_tick();
-        self.living_base().decrement_invulnerable_time();
-        self.tick_mob_effects();
         self.detect_equipment_updates();
 
-        if self.is_dead_or_dying() {
-            self.tick_death();
+        if self.tick_count() % 20 == 0 {
+            self.recheck_combat_status();
         }
 
         if !self.is_removed() {
@@ -1996,9 +2094,6 @@ pub trait LivingEntity: Entity {
             .tick_fall_flying_state(self.is_fall_flying());
         self.refresh_dirty_attributes();
         self.living_base().tick_post_impulse_grace_time();
-        self.living_base().tick_last_hurt_by_player_memory();
-        self.living_base()
-            .tick_living_combat_memory(self.tick_count());
     }
 
     /// Returns whether the given item in the given slot allows elytra-style gliding.
@@ -2167,6 +2262,11 @@ pub trait LivingEntity: Entity {
     /// Decrements vanilla jump cooldown once per living AI step.
     fn tick_no_jump_delay(&self) {
         self.living_base().tick_no_jump_delay();
+    }
+
+    /// Returns the remaining hurt animation ticks.
+    fn hurt_time(&self) -> i32 {
+        self.living_base().hurt_time()
     }
 
     /// Returns whether this entity is immobile because it's dead or dying.

@@ -2,6 +2,33 @@ use super::*;
 use crate::entity::leash::{LeashAttachment, Leashable};
 
 #[test]
+fn hurt_time_survives_mob_save_load_and_spawn_nbt() {
+    init_vanilla_registry();
+    let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+    pig.living_base().begin_hurt_animation();
+    pig.living_base().decrement_hurt_time();
+    let mut nbt = NbtCompound::new();
+    pig.save_additional(&mut nbt);
+    assert_eq!(nbt.short("HurtTime"), Some(9));
+
+    let mut bytes = Vec::new();
+    nbt.write(&mut bytes);
+    let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes)).expect("saved mob NBT");
+    let loaded = PigEntity::new(&vanilla_entities::PIG, 2, DVec3::ZERO, Weak::new());
+    loaded.load_additional((&borrowed).into());
+    assert_eq!(loaded.hurt_time(), 9);
+    assert_eq!(loaded.living_base().hurt_duration(), 0);
+
+    let mut nbt = NbtCompound::new();
+    nbt.insert("HurtTime", -3_i16);
+    bytes.clear();
+    nbt.write(&mut bytes);
+    let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes)).expect("spawn mob NBT");
+    loaded.apply_spawn_data((&borrowed).into());
+    assert_eq!(loaded.hurt_time(), -3);
+}
+
+#[test]
 fn pig_saves_vanilla_mob_age_and_variant_data() {
     init_vanilla_registry();
 

@@ -1,9 +1,9 @@
 services:
-  steel:
-    image: ghcr.io/steel-foundation/steelmc:nightly
+  nickelmc:
+    image: ghcr.io/janoschbl/nickelmc:nightly
     stdin_open: true
     tty: true
-    container_name: steel-mc
+    container_name: nickelmc
     ports:
       - 25565:25565
     volumes:

@@ -17,14 +17,15 @@ fn default_entity_tick_dispatches_living_tick() {
 }
 
 #[test]
-fn living_tick_state_decrements_last_hurt_by_player_memory() {
+fn base_tick_decrements_last_hurt_by_player_memory() {
     init_vanilla_registry();
+    init_behaviors();
 
-    let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+    let entity = LivingFluidTestEntity::new_in_world(0.0, 0.0, true, test_world());
     let player_uuid = Uuid::from_u128(42);
     entity.set_last_hurt_by_player(player_uuid, 1);
 
-    entity.tick_living_state();
+    entity.base_tick_living_entity();
 
     assert_eq!(
         entity.living_base().last_hurt_by_player_uuid(),
@@ -32,10 +33,35 @@ fn living_tick_state_decrements_last_hurt_by_player_memory() {
     );
     assert_eq!(entity.last_hurt_by_player_memory_time(), 0);
 
-    entity.tick_living_state();
+    entity.base_tick_living_entity();
 
     assert!(entity.living_base().last_hurt_by_player_uuid().is_none());
     assert_eq!(entity.last_hurt_by_player_memory_time(), 0);
+}
+
+#[test]
+fn player_memory_expires_before_effects_can_kill() {
+    init_vanilla_registry();
+    init_behaviors();
+
+    let player_uuid = Uuid::from_u128(42);
+    for (remembered_ticks, expected) in [(0, None), (1, Some(player_uuid))] {
+        let entity = Arc::new(
+            LivingFluidTestEntity::new_in_world(0.0, 0.0, true, test_world()).with_health(1.0),
+        );
+        entity.set_last_hurt_by_player(player_uuid, remembered_ticks);
+        assert!(entity.add_mob_effect(MobEffectInstance::with_duration(
+            vanilla_mob_effects::WITHER,
+            40,
+            0,
+        )));
+        let shared: SharedEntity = Arc::<LivingFluidTestEntity>::clone(&entity);
+
+        entity.tick_living_entity(&shared);
+
+        assert!(entity.living_base().is_death_processed());
+        assert_eq!(entity.last_hurt_by_player_uuid(), expected);
+    }
 }
 
 #[test]

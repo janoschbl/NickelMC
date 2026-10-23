@@ -39,6 +39,10 @@ impl Drop for ReentrantSourceEntity {
             history.records.try_lock().is_some(),
             "release the records mutex before destroying a retained entity"
         );
+        assert!(
+            history.combat_records.try_lock().is_some(),
+            "release the combat records mutex before destroying a retained entity"
+        );
         history.clear_victim(self.generation());
         self.dropped.store(true, Ordering::Relaxed);
     }
@@ -130,4 +134,40 @@ fn victim_lifetime_expiry_unlocks_records_before_destroying_retained_entities() 
     drop(victim);
     history.expire();
     assert!(dropped.load(Ordering::Relaxed));
+}
+
+#[test]
+fn combat_expiry_and_ownership_sweep_release_sources_outside_locks() {
+    use super::CombatEntry;
+
+    for expire_by_age in [true, false] {
+        let history = Arc::new(DamageHistory::default());
+        let victim = TestEntity::shared(1, DVec3::ZERO, Weak::new(), &vanilla_entities::ITEM);
+        let owner = victim.base().damage_history().retain_owner();
+        let (source, dropped) = reentrant_source(&history);
+        let changes = victim.base().damage_history().record_combat(
+            &history,
+            victim.generation(),
+            CombatEntry {
+                source: DamageSource::direct(&vanilla_damage_types::GENERIC, source),
+                damage: 1.0,
+                fall_location: None,
+                fall_distance: 0.0,
+            },
+            0,
+            true,
+        );
+        drop(changes);
+        history.expire();
+        assert!(!dropped.load(Ordering::Relaxed));
+        if expire_by_age {
+            drop(victim.base().damage_history().recheck_combat(101, true));
+            assert!(dropped.load(Ordering::Relaxed));
+            drop(owner);
+        } else {
+            drop(owner);
+            history.expire();
+            assert!(dropped.load(Ordering::Relaxed));
+        }
+    }
 }

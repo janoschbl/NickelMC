@@ -42,6 +42,7 @@ fn sample_player_file(data_version: i32) -> PlayerDataFile {
         was_in_powder_snow: false,
         has_visual_fire: false,
         health: 20.0,
+        hurt_time: 7,
         game_mode: 2,
         prev_game_mode: Some(0),
         abilities: AbilitiesFile {
@@ -446,6 +447,7 @@ fn player_file_roundtrip_preserves_domain_world_data() {
     );
     assert_eq!(decoded.world, "lobby:void");
     assert_eq!(decoded.game_mode, 2);
+    assert_eq!(decoded.hurt_time, 7);
     assert_eq!(decoded.selected_slot, 4);
     assert_eq!(decoded.experience_level, 7);
     assert_eq!(decoded.experience_progress.to_bits(), 0.5_f32.to_bits());

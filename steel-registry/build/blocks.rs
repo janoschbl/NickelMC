@@ -351,37 +351,30 @@ fn generate_builder_calls(bp: &BlockConfig, default_props: &BlockConfig) -> Vec<
     builder_calls
 }
 
-fn generate_loot_table_builder_call(loot_table: Option<&str>) -> TokenStream {
-    let Some(key) = loot_table else {
+fn generate_loot_table_builder_call(key: Option<&str>) -> TokenStream {
+    let Some(key) = key else {
         return quote! {};
     };
     let Some(path) = key.strip_prefix("minecraft:") else {
-        panic!("Unsupported block loot table key {key}: expected the minecraft namespace");
+        panic!("Unsupported extracted block loot table namespace: {key}");
     };
-    if path.is_empty()
-        || path
-            .split('/')
-            .any(|part| part.is_empty() || part == "." || part == "..")
-    {
-        panic!("Invalid block loot table key {key}");
-    }
-
-    let table_path =
-        Path::new("../steel-utils/build_assets/builtin_datapacks/minecraft/loot_table")
-            .join(format!("{path}.json"));
     assert!(
-        table_path.is_file(),
-        "Block loot table {key} does not exist at {}",
-        table_path.display()
+        !path.is_empty()
+            && path
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != ".."),
+        "Invalid block loot table key {key}"
     );
-
-    let const_ident = Ident::new(
-        &path.replace('/', "_").to_shouty_snake_case(),
-        Span::call_site(),
+    assert!(
+        Path::new("../steel-utils/build_assets/builtin_datapacks/minecraft/loot_table")
+            .join(format!("{path}.json"))
+            .is_file(),
+        "Missing extracted block loot table {key}"
     );
-    quote! {
-        .loot_table(Some(&crate::vanilla_loot_tables::#const_ident))
-    }
+    quote! { .loot_table({
+        static LOOT_KEY: Identifier = Identifier::vanilla_static(#path);
+        Some(&LOOT_KEY)
+    }) }
 }
 
 /// Generates the default state initialization for blocks with properties

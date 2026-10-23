@@ -16,6 +16,7 @@ struct EntityTypeEntry {
     name: String,
     width: f32,
     height: f32,
+    spawn_dimensions_scale: f32,
     eye_height: f32,
     fixed: bool,
     attachments: AttachmentsEntry,
@@ -167,6 +168,7 @@ pub(crate) fn build() -> TokenStream {
         // Dimensions
         let width = Literal::f32_suffixed(entity_type.width);
         let height = Literal::f32_suffixed(entity_type.height);
+        let spawn_dimensions_scale = Literal::f32_suffixed(entity_type.spawn_dimensions_scale);
         let eye_height = Literal::f32_suffixed(entity_type.eye_height);
         let fixed = entity_type.fixed;
         let passenger_attachments = attachment_points(&entity_type.attachments.passenger);
@@ -257,6 +259,7 @@ pub(crate) fn build() -> TokenStream {
                     ),
                 ),
                 fixed: #fixed,
+                spawn_dimensions_scale: #spawn_dimensions_scale,
                 mob_category: #mob_category,
                 fire_immune: #fire_immune,
                 summonable: #summonable,

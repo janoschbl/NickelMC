@@ -33,6 +33,8 @@ use std::{env, fs, path::Path};
 #[path = "../src/structure/processor/data.rs"]
 mod structure_processor_data;
 
+mod activities;
+mod activity_environment_attributes;
 mod attributes;
 mod banner_patterns;
 mod biomes;
@@ -98,6 +100,7 @@ mod shared_structs;
 mod tags;
 
 const ADVANCEMENTS: &str = "advancements";
+const ACTIVITIES: &str = "activities";
 const ATTRIBUTES: &str = "attributes";
 const BLOCKS: &str = "blocks";
 const BLOCK_TAGS: &str = "block_tags";
@@ -191,6 +194,11 @@ pub fn main() {
     }
 
     let vanilla_builds = [
+        (activities::build(), ACTIVITIES),
+        (
+            activity_environment_attributes::build(),
+            "environment_attributes",
+        ),
         (attributes::build(), ATTRIBUTES),
         (blocks::build(), BLOCKS),
         (tags::block(), BLOCK_TAGS),

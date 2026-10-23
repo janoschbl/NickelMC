@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use steel_registry::item_stack::ItemStack;
 use steel_utils::{DowncastType, DowncastTypeKey};
 
@@ -41,12 +42,12 @@ impl SimpleContainer {
 }
 
 impl Container for SimpleContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn set_changed(&mut self) {

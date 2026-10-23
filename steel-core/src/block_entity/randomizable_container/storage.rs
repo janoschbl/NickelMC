@@ -6,17 +6,18 @@ use std::{
 use simdnbt::ToNbtTag;
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
+use steel_registry::block_entity_type::BlockEntityTypeRef;
 use steel_registry::data_components::vanilla_components::{
     CONTAINER, CONTAINER_LOOT, SeededContainerLoot,
 };
 use steel_registry::item_stack::ItemStack;
-use steel_registry::{RegistryExt, block_entity_type::BlockEntityTypeRef};
 use steel_utils::{BlockPos, BlockStateId, DowncastType, DowncastTypeKey, locks::SyncMutex};
 
 use crate::block_entity::{BlockEntityBase, RandomizableContainer};
 use crate::entity::{LivingEntity, entity_loot_ref, living_loot_equipment};
 use crate::inventory::container::Container;
 use crate::inventory::lock::{ContainerRef, SharedContainer};
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use crate::loot::generation_guard::LootGenerationGuard;
 use crate::loot::{LOOT_TABLES, LootContext, LootError, LootResult};
 use crate::player::Player;
@@ -266,9 +267,7 @@ impl RandomizableContainerStorage {
         };
         let equipment = player.map(|player| living_loot_equipment(player));
         let result = (|| {
-            let table = LOOT_TABLES
-                .by_key(loot.loot_table())
-                .ok_or_else(|| LootError::MissingTable(loot.loot_table().clone()))?;
+            let table = LOOT_TABLES.by_key_or_empty(loot.loot_table());
             let pos = base.pos();
             world.with_loot_random(table, loot.seed(), |random| {
                 let mut context = LootContext::new(random).with_world(&world).with_origin(
@@ -300,12 +299,12 @@ impl RandomizableContainerStorage {
 }
 
 impl Container for RandomizableContainerInventory {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn set_item(&mut self, slot: usize, mut stack: ItemStack) {

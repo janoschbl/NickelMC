@@ -7,6 +7,7 @@ use steel_utils::{DowncastType, DowncastTypeKey};
 use crate::inventory::{
     container::Container,
     equipment::{EntityEquipment, EquipmentSlot},
+    stack_reference::{StackItems, StackRead, StackReference, StackWrite},
 };
 
 use super::container::InvalidHotbarSlot;
@@ -17,7 +18,7 @@ use super::container::InvalidHotbarSlot;
 /// (armor, offhand, etc.) accessed through the Container trait.
 pub struct PlayerInventory {
     /// All 43 logical inventory slots in vanilla container order.
-    pub(super) items: [ItemStack; Self::CONTAINER_SIZE],
+    pub(super) items: [StackReference; Self::CONTAINER_SIZE],
     /// Currently selected hotbar slot (0-8).
     pub(super) selected: u8,
     /// Counter incremented on every change.
@@ -69,7 +70,7 @@ impl PlayerInventory {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            items: array::from_fn(|_| ItemStack::empty()),
+            items: array::from_fn(|_| StackReference::new(ItemStack::empty())),
             selected: 0,
             times_changed: 0,
         }
@@ -79,10 +80,7 @@ impl PlayerInventory {
     #[must_use]
     pub(crate) fn replacement_copy(&self) -> Self {
         Self {
-            items: array::from_fn(|slot| {
-                let item = &self.items[slot];
-                item.copy_with_count(item.count())
-            }),
+            items: array::from_fn(|slot| StackReference::new(self.items[slot].snapshot())),
             selected: self.selected,
             times_changed: 0,
         }
@@ -107,6 +105,7 @@ impl PlayerInventory {
             .iter()
             .enumerate()
             .filter_map(|(slot, item)| {
+                let item = item.read();
                 if item.is_empty() {
                     return None;
                 }
@@ -156,17 +155,17 @@ impl PlayerInventory {
 
     /// Executes a function with a reference to the currently selected item.
     pub fn with_selected_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
-        f(&self.items[self.selected as usize])
+        f(&self.items[self.selected as usize].read())
     }
 
     /// Returns a mutable reference to the currently selected item (main hand).
     #[must_use]
-    pub const fn get_selected_item(&self) -> &ItemStack {
-        &self.items[self.selected as usize]
+    pub fn get_selected_item(&self) -> StackRead<'_> {
+        self.items[self.selected as usize].read()
     }
 
     /// Returns the currently selected item (main hand).
-    pub fn get_selected_item_mut(&mut self) -> &mut ItemStack {
+    pub fn get_selected_item_mut(&mut self) -> StackWrite<'_> {
         EntityEquipment::get_mut(self, EquipmentSlot::MainHand)
     }
 
@@ -177,12 +176,12 @@ impl PlayerInventory {
 
     /// Returns the offhand item.
     #[must_use]
-    pub fn get_offhand_item(&self) -> &ItemStack {
+    pub fn get_offhand_item(&self) -> StackRead<'_> {
         EntityEquipment::get_ref(self, EquipmentSlot::OffHand)
     }
 
     /// Returns a mutable reference to the offhand item.
-    pub fn get_offhand_item_mut(&mut self) -> &mut ItemStack {
+    pub fn get_offhand_item_mut(&mut self) -> StackWrite<'_> {
         EntityEquipment::get_mut(self, EquipmentSlot::OffHand)
     }
 
@@ -209,12 +208,21 @@ impl PlayerInventory {
         index: usize,
         f: impl FnOnce(&mut ItemStack) -> R,
     ) -> R {
-        let previous = self.items[index].clone();
-        let result = f(&mut self.items[index]);
-        if !ItemStack::matches(&self.items[index], &previous) {
+        let previous = self.items[index].snapshot();
+        let result = f(&mut self.items[index].write());
+        if !ItemStack::matches(&self.items[index].read(), &previous) {
             Container::set_changed(self);
         }
         result
+    }
+
+    /// Records live callback mutations only while this inventory still owns the object.
+    pub(crate) fn record_stack_change(&mut self, stack: &StackReference, before: &ItemStack) {
+        let changed = self.items.iter().any(|current| current.is_same(stack))
+            && !ItemStack::matches(&stack.read(), before);
+        if changed {
+            self.set_changed();
+        }
     }
 
     /// Returns the number of times this inventory has been modified.
@@ -225,18 +233,15 @@ impl PlayerInventory {
 
     /// Returns the non-equipment items (main 36 slots).
     #[must_use]
-    pub fn get_items(&self) -> &[ItemStack; Self::INVENTORY_SIZE] {
-        let Some(items) = self.items.first_chunk::<{ Self::INVENTORY_SIZE }>() else {
-            unreachable!("the player inventory always contains its 36 main slots");
-        };
-        items
+    pub fn get_items(&self) -> StackItems<'_> {
+        StackItems::Shared(&self.items[..Self::INVENTORY_SIZE])
     }
 
     /// Finds the first empty slot in the inventory, or `None` if full.
     #[must_use]
     pub fn get_free_slot(&self) -> Option<u8> {
         (0..Self::INVENTORY_SIZE)
-            .find(|&i| self.items[i].is_empty())
+            .find(|&i| self.items[i].read().is_empty())
             .map(|i| i as u8)
     }
 
@@ -249,14 +254,14 @@ impl PlayerInventory {
     pub fn get_suitable_hotbar_slot(&self) -> u8 {
         for slot in 0..Self::SELECTION_SIZE {
             let index = (self.selected + slot) % Self::SELECTION_SIZE;
-            if self.items[usize::from(index)].is_empty() {
+            if self.items[usize::from(index)].read().is_empty() {
                 return index;
             }
         }
 
         for slot in 0..Self::SELECTION_SIZE {
             let index = (self.selected + slot) % Self::SELECTION_SIZE;
-            if !self.items[usize::from(index)].is_enchanted() {
+            if !self.items[usize::from(index)].read().is_enchanted() {
                 return index;
             }
         }
@@ -268,7 +273,10 @@ impl PlayerInventory {
     #[must_use]
     pub fn find_slot_matching_item(&self, stack: &ItemStack) -> Option<u8> {
         (0..Self::INVENTORY_SIZE)
-            .find(|&i| !self.items[i].is_empty() && ItemStack::is_same_item(&self.items[i], stack))
+            .find(|&i| {
+                !self.items[i].read().is_empty()
+                    && ItemStack::is_same_item(&self.items[i].read(), stack)
+            })
             .map(|i| i as u8)
     }
 
@@ -277,8 +285,8 @@ impl PlayerInventory {
     pub fn find_slot_matching_item_with_same_components(&self, stack: &ItemStack) -> Option<u8> {
         (0..Self::INVENTORY_SIZE)
             .find(|&i| {
-                !self.items[i].is_empty()
-                    && ItemStack::is_same_item_same_components(&self.items[i], stack)
+                !self.items[i].read().is_empty()
+                    && ItemStack::is_same_item_same_components(&self.items[i].read(), stack)
             })
             .map(|i| i as u8)
     }
@@ -290,6 +298,7 @@ impl PlayerInventory {
         if slot >= Self::INVENTORY_SIZE {
             return;
         }
+        self.set_selected_slot(self.get_suitable_hotbar_slot());
         let selected = self.selected as usize;
         self.items.swap(selected, slot);
         self.set_changed();
@@ -298,18 +307,14 @@ impl PlayerInventory {
     /// Adds an item to the hotbar (for creative pick block) and selects it.
     /// Returns true if successful.
     pub fn add_and_pick_item(&mut self, stack: ItemStack) -> bool {
-        // Find first empty hotbar slot
-        for i in 0..Self::SELECTION_SIZE {
-            let j = usize::from(i);
-            if self.items[j].is_empty() {
-                self.items[j] = stack;
-                self.selected = i;
-                self.set_changed();
-                return true;
-            }
+        self.set_selected_slot(self.get_suitable_hotbar_slot());
+        let selected = usize::from(self.selected);
+        if !self.items[selected].read().is_empty()
+            && let Some(free_slot) = self.get_free_slot()
+        {
+            self.items.swap(selected, usize::from(free_slot));
         }
-        // No empty slot, replace current slot
-        self.items[self.selected as usize] = stack;
+        self.items[selected] = StackReference::new(stack);
         self.set_changed();
         true
     }

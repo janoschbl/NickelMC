@@ -11,8 +11,8 @@ use steel_math::wrap_degrees;
 use steel_protocol::packets::game::{
     CBlockChangedAck, CBlockUpdate, CChangeDifficulty, CGameEvent, COpenSignEditor,
     CPlayerInfoUpdate, CSetCamera, CSetEntityMotion, CSetHeldSlot, GameEventType, PlayerAction,
-    SAttack, SInteract, SPickItemFromBlock, SPlayerAction, SSignUpdate, SSpectatorAction, SUseItem,
-    SUseItemOn,
+    SAttack, SInteract, SPickItemFromBlock, SPickItemFromEntity, SPlayerAction, SSignUpdate,
+    SSpectatorAction, SUseItem, SUseItemOn,
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
@@ -46,7 +46,7 @@ use crate::player::player_inventory::PlayerInventory;
 use crate::world::{ClipBlockShape, ClipFluid, World};
 use steel_utils::axis::Axis;
 
-mod adventure_mode;
+pub(crate) mod adventure_mode;
 pub mod block_breaking;
 mod block_interaction;
 mod entity_interaction;

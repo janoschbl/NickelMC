@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
-use super::{LootContext, LootOutput, LootResult, LootTableRef, vanilla};
+use super::{EMPTY_LOOT_TABLE, LootContext, LootOutput, LootResult, LootTableRef, vanilla};
 
 /// A compiled table function, also implementable by handwritten Rust code.
 pub type LootTableFunction = fn(&mut LootContext<'_>, &mut LootOutput<'_>) -> LootResult<()>;
@@ -29,6 +29,7 @@ impl LootTableBehaviorRegistry {
             functions: FxHashMap::default(),
         };
         vanilla::register(&mut registry);
+        registry.register(&EMPTY_LOOT_TABLE, |_, _| Ok(()));
         registry
     }
 

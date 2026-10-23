@@ -1079,7 +1079,7 @@ mod tests {
             let equipment = self.living_base.equipment().try_lock().expect(
                 "entity effects must release equipment locks before inspecting source weapons",
             );
-            visitor(Some(equipment.get_ref(EquipmentSlot::MainHand)));
+            visitor(Some(&equipment.get_ref(EquipmentSlot::MainHand)));
         }
     }
 

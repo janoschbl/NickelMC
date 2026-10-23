@@ -1,4 +1,5 @@
 //! Anvil menu.
+use crate::inventory::stack_reference::StackItems;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicI32, Ordering},
@@ -150,7 +151,7 @@ impl AnvilKind {
             panic!("failed to lock input and/or result containers to create anvil result")
         };
 
-        let [first, second] = input_container.items() else {
+        let StackItems::Owned([first, second]) = input_container.items() else {
             panic!("input_container in anvil menu does not fit expected shape")
         };
 

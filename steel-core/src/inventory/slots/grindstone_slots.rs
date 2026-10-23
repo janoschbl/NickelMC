@@ -49,8 +49,8 @@ impl GrindstoneResultHandler {
             return 0;
         };
 
-        let amount = Self::get_experience_from_item(input.get_item(0))
-            + Self::get_experience_from_item(input.get_item(1));
+        let amount = Self::get_experience_from_item(&input.get_item(0))
+            + Self::get_experience_from_item(&input.get_item(1));
 
         if amount > 0 {
             // Ceiling division; `amount` is positive here so truncation cannot bite.

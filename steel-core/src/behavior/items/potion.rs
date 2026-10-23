@@ -1,8 +1,9 @@
+use crate::inventory::stack_reference::StackReference;
 use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::behavior::item::finish_consuming_stack;
-use crate::behavior::{InteractionResult, ItemBehavior, UseOnContext};
+use crate::behavior::{FinishUseResult, InteractionResult, ItemBehavior, UseOnContext};
 use crate::entity::{LivingEntityRef, apply_potion_contents};
 use crate::world::World;
 use crate::world::game_event::GameEventContext;
@@ -37,13 +38,16 @@ impl ItemBehavior for PotionItem {
 
     fn finish_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         world: &Arc<World>,
         user: LivingEntityRef<'_>,
-    ) -> ItemStack {
-        let contents =
-            stack.get_or_default(vanilla_components::POTION_CONTENTS, PotionContents::empty());
-        let duration_scale = stack.get_or_default(vanilla_components::POTION_DURATION_SCALE, 1.0);
+    ) -> FinishUseResult {
+        let contents = stack
+            .read()
+            .get_or_default(vanilla_components::POTION_CONTENTS, PotionContents::empty());
+        let duration_scale = stack
+            .read()
+            .get_or_default(vanilla_components::POTION_DURATION_SCALE, 1.0);
         apply_potion_contents(&contents, world, user, duration_scale);
         finish_consuming_stack(stack, world, user.living())
     }

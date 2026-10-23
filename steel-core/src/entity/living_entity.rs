@@ -6,6 +6,8 @@ use steel_registry::{DyeColor, vanilla_custom_stats};
 
 use super::*;
 use crate::behavior::{BLOCK_BEHAVIORS, InventoryTickContext, MOB_EFFECT_BEHAVIORS};
+use crate::entity::ai::brain::memory::{MEMORY_MODULE_TYPES, PackedMemories};
+use crate::entity::ai::brain::{Brain, BrainProvider};
 use crate::entity::consume_effect::apply_consume_effect;
 use crate::entity::damage::RecentDamageSource;
 
@@ -19,10 +21,81 @@ const BED_SLEEP_POSITION_OFFSET: f64 = 0.125;
 /// **Note:** All methods take `&self` (not `&mut self`) because living entities
 /// are shared via `Arc` and use interior mutability (`SyncMutex`, etc.).
 pub trait LivingEntity: Entity {
+    /// Returns the preferred poses to try when leaving a vehicle.
+    fn dismount_poses(&self) -> &'static [EntityPose] {
+        &[EntityPose::Standing]
+    }
+
+    /// Places a detached passenger at the vehicle's safe exit or collision-safe fallback.
+    fn dismount_vehicle(&self, vehicle: &dyn Entity) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        let target = if self.is_removed() {
+            self.position()
+        } else if !vehicle.is_removed()
+            && !world
+                .get_block_state(vehicle.block_position())
+                .get_block()
+                .has_tag(&steel_registry::vanilla_block_tags::BlockTag::PORTALS)
+        {
+            let Some(passenger) = self.as_living_entity() else {
+                return;
+            };
+            vehicle.dismount_location_for_passenger(passenger)
+        } else {
+            let mut target = self.position();
+            target.y = target.y.max(vehicle.position().y);
+            let dimensions = self.dimensions_for_pose(self.pose());
+            if dimensions.width <= 4.0 && dimensions.height <= 4.0 {
+                let width = f64::from(dimensions.width);
+                let height = f64::from(dimensions.height);
+                let center = target + DVec3::Y * (height / 2.0);
+                let allowed = [WorldAabb::of_size(center, width, height, width)];
+                if let Some(free) =
+                    WorldCollisionProvider::for_entity(&world, self.as_entity_event_source())
+                        .find_free_position(&allowed, center, width, height, width)
+                {
+                    target = free - DVec3::Y * (height / 2.0);
+                }
+            }
+            target
+        };
+        if let Err(error) = self.teleport_to(target) {
+            log::warn!("Failed to dismount entity {}: {error}", self.id());
+        }
+    }
+
     /// Returns a reference to the shared [`LivingEntityBase`] that holds
     /// living runtime state such as attributes, cached movement speed,
     /// damage cooldown, and death animation counters.
     fn living_base(&self) -> &LivingEntityBase;
+
+    /// Declares this species' memories, sensors and per-body activities.
+    /// Species with no brain AI use vanilla's empty brain.
+    fn brain_provider(&self) -> Option<&BrainProvider> {
+        None
+    }
+
+    /// Rebuilds fresh sensor/behavior instances around saved persistent memories.
+    /// Species can also call this after construction or a profession change.
+    fn rebuild_brain(&self, packed: &PackedMemories) {
+        let brain = self.brain_provider().map_or_else(Brain::new, |provider| {
+            provider.make_brain(self.as_entity_event_source(), packed)
+        });
+        *self.living_base().brain().lock() = brain;
+    }
+
+    /// Runs this species' brain in its custom server AI step. Goal-driven mobs
+    /// do not call this hook and retain their existing AI.
+    fn tick_brain(&self) {
+        if let Some(level) = self.level() {
+            self.living_base()
+                .brain()
+                .lock()
+                .tick(self.as_entity_event_source(), &level);
+        }
+    }
 
     /// Returns vanilla living body/head rotation state.
     fn living_rotation_state(&self) -> LivingRotationState {
@@ -194,11 +267,23 @@ pub trait LivingEntity: Entity {
     /// Saves the shared living state used by mob persistence.
     fn save_living(&self, nbt: &mut NbtCompound) {
         nbt.insert("HurtTime", self.living_base().hurt_time() as i16);
+        let mut brain = NbtCompound::new();
+        brain.insert(
+            "memories",
+            self.living_base().brain().lock().pack().to_nbt(),
+        );
+        nbt.insert("Brain", brain);
         self.save_equipment(nbt);
     }
 
     /// Loads shared living state, including spawn NBT.
     fn load_living(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        let packed = nbt
+            .compound("Brain")
+            .and_then(|brain| brain.compound("memories"))
+            .map(|memories| PackedMemories::from_nbt(&memories.to_owned(), &MEMORY_MODULE_TYPES))
+            .unwrap_or_default();
+        self.rebuild_brain(&packed);
         self.living_base()
             .set_hurt_time(nbt.short("HurtTime").unwrap_or(0));
         self.load_equipment(nbt);
@@ -1733,7 +1818,7 @@ pub trait LivingEntity: Entity {
     /// Visits the item in a vanilla living-entity equipment slot.
     fn with_equipment_slot(&self, slot: EquipmentSlot, visitor: &mut dyn FnMut(&ItemStack)) {
         let equipment = self.living_base().equipment().lock();
-        visitor(equipment.get_ref(slot));
+        visitor(&equipment.get_ref(slot));
     }
 
     /// Returns whether the item in this entity's main hand matches `predicate`.
@@ -1767,7 +1852,7 @@ pub trait LivingEntity: Entity {
         visitor: &mut dyn FnMut(&mut ItemStack),
     ) {
         let mut equipment = self.living_base().equipment().lock();
-        visitor(equipment.get_mut(slot));
+        visitor(&mut equipment.get_mut(slot));
     }
 
     /// Returns whether this entity currently has an item in `slot`.
@@ -1861,7 +1946,7 @@ pub trait LivingEntity: Entity {
             }
 
             let mut inventory = player.inventory.lock();
-            if !self.is_equippable_in_slot(inventory.get_item_in_hand(hand), slot) {
+            if !self.is_equippable_in_slot(&inventory.get_item_in_hand(hand), slot) {
                 return InteractionResult::Pass;
             }
 

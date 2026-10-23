@@ -143,6 +143,10 @@ fn quote_time_marker(name: &str, v: &Value) -> TokenStream {
 }
 
 pub(crate) fn build() -> TokenStream {
+    let activity_attributes: Vec<crate::activity_environment_attributes::ActivityAttributeEntry> =
+        crate::generator_functions::read_json_asset(
+            "build_assets/activity_environment_attributes.json",
+        );
     let timeline_dir = "../steel-utils/build_assets/builtin_datapacks/minecraft/timeline";
     println!("cargo:rerun-if-changed={timeline_dir}");
     let mut timelines: Vec<(String, TimelineJson)> = Vec::new();
@@ -212,7 +216,22 @@ pub(crate) fn build() -> TokenStream {
                     .iter()
                     .map(|kf| {
                         let ticks = kf.ticks;
-                        let value_ts = quote_keyframe_value(&kf.value);
+                        let value_ts = if activity_attributes
+                            .iter()
+                            .any(|attribute| attribute.key.to_string() == *track_name)
+                        {
+                            let key = kf
+                                .value
+                                .as_str()
+                                .expect("activity keyframe must be an identifier")
+                                .parse()
+                                .expect("invalid activity identifier");
+                            let activity =
+                                crate::activity_environment_attributes::activity_ref(&key);
+                            quote! { KeyframeValue::Activity(#activity) }
+                        } else {
+                            quote_keyframe_value(&kf.value)
+                        };
                         quote! {
                             Keyframe {
                                 ticks: #ticks,

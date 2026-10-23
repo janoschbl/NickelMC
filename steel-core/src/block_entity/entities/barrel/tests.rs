@@ -2,7 +2,6 @@ use steel_registry::{init_vanilla_registry, vanilla_blocks, vanilla_items};
 
 use super::*;
 use crate::inventory::container::Container as _;
-use crate::loot::LootError;
 use crate::{
     behavior::{BLOCK_BEHAVIORS, init_behaviors},
     block_entity::init_block_entities,
@@ -162,21 +161,20 @@ fn concurrent_first_loot_access_generates_and_fills_exactly_once() {
 }
 
 #[test]
-fn failed_generation_keeps_pending_loot_and_aborts_before_locking_any_inventory() {
-    let fixture = fresh_test_world("failed_barrel_loot");
+fn unregistered_loot_table_unpacks_as_empty_like_vanilla() {
+    let fixture = fresh_test_world("unregistered_barrel_loot");
     let barrel = BarrelBlockEntity::new(
         Arc::downgrade(&fixture.world),
         BlockPos::new(1, 64, 1),
         vanilla_blocks::BARREL.default_state(),
     );
-    let missing = SeededContainerLoot::new(Identifier::new_static("example", "missing_table"), 12);
-    barrel.set_loot_table(Some(missing.clone()));
+    barrel.set_loot_table(Some(SeededContainerLoot::new(
+        Identifier::new_static("example", "missing_table"),
+        12,
+    )));
     let container = barrel.container_ref().expect("container");
-    assert!(matches!(
-        ContainerLockGuard::lock_all(&[&container]),
-        Err(LootError::MissingTable(_))
-    ));
-    assert_eq!(barrel.loot_table(), Some(missing));
+    drop(ContainerLockGuard::lock_all(&[&container]).expect("empty table generates nothing"));
+    assert!(barrel.loot_table().is_none());
     assert!(
         barrel
             .storage
@@ -185,9 +183,6 @@ fn failed_generation_keeps_pending_loot_and_aborts_before_locking_any_inventory(
             .expect("no retained lock")
             .is_empty()
     );
-    barrel.set_loot_table(Some(pending(12)));
-    drop(ContainerLockGuard::lock_all(&[&container]).expect("retry valid loot"));
-    assert!(barrel.loot_table().is_none());
 }
 
 #[test]
@@ -331,5 +326,5 @@ fn pre_remove_preserves_slots_for_existing_menu_references() {
 
     let container = barrel.storage.container.lock();
     assert_eq!(container.items().len(), BARREL_SLOTS);
-    assert!(container.items().iter().all(ItemStack::is_empty));
+    assert!(container.items().iter().all(|stack| stack.is_empty()));
 }

@@ -1,5 +1,6 @@
 //! Crafting containers and related types.
 
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use steel_registry::{
     item_stack::ItemStack,
     recipe::{CraftingInput, PositionedCraftingInput},
@@ -67,12 +68,12 @@ impl CraftingContainer {
 }
 
 impl Container for CraftingContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn set_changed(&mut self) {

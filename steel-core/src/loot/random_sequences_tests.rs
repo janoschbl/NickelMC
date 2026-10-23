@@ -235,8 +235,15 @@ fn zero_seed_barrels_share_the_named_stream_for_generation_and_placement() {
                 guard
                     .get(storage.container_id())
                     .expect("locked storage")
-                    .items(),
-                expected_items.items()
+                    .items()
+                    .iter()
+                    .map(|stack| stack.clone())
+                    .collect::<Vec<_>>(),
+                expected_items
+                    .items()
+                    .iter()
+                    .map(|stack| stack.clone())
+                    .collect::<Vec<_>>()
             );
             drop(guard);
         }
@@ -295,7 +302,20 @@ fn advancement_rewards_continue_the_named_loot_stream() {
             })
             .expect("expected reward");
         grant_reward(&player, &reward);
-        assert_eq!(player.inventory.lock().items(), inventory.items());
+        assert_eq!(
+            player
+                .inventory
+                .lock()
+                .items()
+                .iter()
+                .map(|stack| stack.clone())
+                .collect::<Vec<_>>(),
+            inventory
+                .items()
+                .iter()
+                .map(|stack| stack.clone())
+                .collect::<Vec<_>>()
+        );
     }
     let actual = world
         .random_sequences

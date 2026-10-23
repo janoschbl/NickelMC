@@ -13,6 +13,7 @@ pub use simple::SimpleContainer;
 
 use std::{io, mem};
 
+use super::stack_reference::{StackItems, StackItemsMut, StackRead, StackWrite};
 use steel_registry::blocks::properties::Direction;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{
@@ -50,16 +51,16 @@ pub trait Container: ErasedType + Send + Sync {
                 if item.is_empty() {
                     Ok(None)
                 } else {
-                    ItemStackTemplate::from_stack(item).map(Some)
+                    ItemStackTemplate::from_stack(&item).map(Some)
                 }
             })
             .collect::<io::Result<Vec<_>>>()?;
         ItemContainerContents::new(slots)
     }
     /// Returns the items in this container
-    fn items(&self) -> &[ItemStack];
+    fn items(&self) -> StackItems<'_>;
     /// Returns mutable references to the items in this container.
-    fn items_mut(&mut self) -> &mut [ItemStack];
+    fn items_mut(&mut self) -> StackItemsMut<'_>;
 
     /// Returns the number of slots in this container.
     fn get_container_size(&self) -> usize {
@@ -77,31 +78,31 @@ pub trait Container: ErasedType + Send + Sync {
     }
 
     /// Returns a reference to the item in the specified slot.
-    fn get_item(&self, slot: usize) -> &ItemStack {
-        &self.items()[slot]
+    fn get_item(&self, slot: usize) -> StackRead<'_> {
+        self.items().get(slot)
     }
 
     /// Returns true if this container has a non-empty stack with the same item and components.
     fn contains_stack(&self, search_stack: &ItemStack) -> bool {
         (0..self.get_container_size()).any(|slot| {
             let item = self.get_item(slot);
-            !item.is_empty() && ItemStack::is_same_item_same_components(item, search_stack)
+            !item.is_empty() && ItemStack::is_same_item_same_components(&item, search_stack)
         })
     }
 
     /// Returns a mutable reference to the item in the specified slot.
-    fn get_item_mut(&mut self, slot: usize) -> &mut ItemStack {
-        &mut self.items_mut()[slot]
+    fn get_item_mut(&mut self, slot: usize) -> StackWrite<'_> {
+        self.items_mut().get(slot)
     }
 
     /// Sets the item in the specified slot.
     fn set_item(&mut self, slot: usize, stack: ItemStack) {
-        self.items_mut()[slot] = stack;
+        self.items_mut().set(slot, stack);
     }
 
     /// Removes up to `count` items from the specified slot and returns them.
     fn remove_item(&mut self, slot: usize, count: i32) -> ItemStack {
-        let item = self.get_item_mut(slot);
+        let mut item = self.get_item_mut(slot);
         if item.is_empty() || count <= 0 {
             return ItemStack::empty();
         }
@@ -110,7 +111,7 @@ pub trait Container: ErasedType + Send + Sync {
 
     /// Removes the item from the specified slot without triggering updates.
     fn remove_item_no_update(&mut self, slot: usize) -> ItemStack {
-        mem::take(self.get_item_mut(slot))
+        mem::take(&mut *self.get_item_mut(slot))
     }
 
     /// Returns the maximum stack size for this container.
@@ -178,7 +179,7 @@ pub trait Container: ErasedType + Send + Sync {
     /// Clears all items from this container.
     fn clear_content(&mut self) -> i32 {
         let mut count = 0;
-        for item in self.items_mut() {
+        for mut item in self.items_mut().iter_mut() {
             count += item.count();
             *item = ItemStack::empty();
         }
@@ -191,8 +192,8 @@ pub trait Container: ErasedType + Send + Sync {
     /// Clears all items from this container.
     fn clear_content_matching(&mut self, predicate: &mut dyn FnMut(&mut ItemStack) -> bool) -> i32 {
         let mut count = 0;
-        for item in self.items_mut() {
-            if predicate(item) {
+        for mut item in self.items_mut().iter_mut() {
+            if predicate(&mut item) {
                 count += item.count();
                 *item = ItemStack::empty();
             }
@@ -214,7 +215,7 @@ pub trait Container: ErasedType + Send + Sync {
         for slot in 0..self.get_container_size() {
             let stack_count = self.get_item(slot).count();
             let amount_removed = matching_item_count(
-                self.get_item(slot),
+                &self.get_item(slot),
                 predicate,
                 amount_to_remove - count,
                 counting_only,
@@ -239,26 +240,11 @@ pub trait Container: ErasedType + Send + Sync {
     /// # Panics
     ///
     /// Panics if any index is out of bounds or if any two indices are equal.
-    fn with_indices<const N: usize>(&mut self, indices: [usize; N]) -> [&mut ItemStack; N]
+    fn with_indices<const N: usize>(&mut self, indices: [usize; N]) -> [StackWrite<'_>; N]
     where
         Self: Sized,
     {
-        let items = self.items_mut();
-        let size = items.len();
-        for (position, index) in indices.iter().copied().enumerate() {
-            assert!(
-                index < size,
-                "with_indices: index {index} out of bounds (container size {size})",
-            );
-            assert!(
-                !indices[..position].contains(&index),
-                "with_indices: duplicate index {index}",
-            );
-        }
-        let Ok(items) = items.get_disjoint_mut(indices) else {
-            unreachable!("with_indices validated distinct in-bounds indices");
-        };
-        items
+        self.items_mut().with_indices(indices)
     }
 
     /// Tries to add an item to the container.
@@ -289,8 +275,8 @@ pub trait Container: ErasedType + Send + Sync {
                 if !self.can_place_item(slot, stack) {
                     continue;
                 }
-                let existing = self.get_item_mut(slot);
-                if !existing.is_empty() && ItemStack::is_same_item_same_components(existing, stack)
+                let mut existing = self.get_item_mut(slot);
+                if !existing.is_empty() && ItemStack::is_same_item_same_components(&existing, stack)
                 {
                     let space = max_size - existing.count();
                     if space > 0 {
@@ -325,13 +311,13 @@ pub trait Container: ErasedType + Send + Sync {
     }
 
     /// Returns a boxed iterator to the items in this container
-    fn iter(&self) -> Box<dyn Iterator<Item = &ItemStack> + '_> {
-        Box::new(self.items().iter())
+    fn iter(&self) -> Box<dyn Iterator<Item = StackRead<'_>> + '_> {
+        self.items().iter()
     }
 
     /// Returns a boxed iterator to mutable references of the items in this container
-    fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut ItemStack> + '_> {
-        Box::new(self.items_mut().iter_mut())
+    fn iter_mut(&mut self) -> Box<dyn Iterator<Item = StackWrite<'_>> + '_> {
+        self.items_mut().iter_mut()
     }
 }
 
@@ -383,7 +369,7 @@ pub fn calculate_redstone_signal_from_containers<'a>(
     for container in containers {
         let max_stack = *first_limit.get_or_insert_with(|| container.get_max_stack_size());
         size += container.get_container_size();
-        for item in container.items() {
+        for item in container.items().iter() {
             if !item.is_empty() {
                 total_percent += item.count() as f32 / max_stack.min(item.max_stack_size()) as f32;
             }
@@ -398,6 +384,7 @@ pub fn calculate_redstone_signal_from_containers<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::inventory::stack_reference::{StackItems, StackItemsMut};
     use std::{array, iter};
 
     use steel_registry::{init_vanilla_registry, vanilla_items};
@@ -425,12 +412,12 @@ mod tests {
     }
 
     impl Container for TestContainer {
-        fn items(&self) -> &[ItemStack] {
-            &self.items
+        fn items(&self) -> StackItems<'_> {
+            StackItems::Owned(&self.items)
         }
 
-        fn items_mut(&mut self) -> &mut [ItemStack] {
-            &mut self.items
+        fn items_mut(&mut self) -> StackItemsMut<'_> {
+            StackItemsMut::Owned(&mut self.items)
         }
 
         fn get_container_size(&self) -> usize {
@@ -455,16 +442,16 @@ mod tests {
     }
 
     impl Container for RedirectingContainer {
-        fn items(&self) -> &[ItemStack] {
-            &self.items
+        fn items(&self) -> StackItems<'_> {
+            StackItems::Owned(&self.items)
         }
 
-        fn items_mut(&mut self) -> &mut [ItemStack] {
-            &mut self.items
+        fn items_mut(&mut self) -> StackItemsMut<'_> {
+            StackItemsMut::Owned(&mut self.items)
         }
 
-        fn get_item_mut(&mut self, _slot: usize) -> &mut ItemStack {
-            &mut self.items[0]
+        fn get_item_mut(&mut self, _slot: usize) -> StackWrite<'_> {
+            StackWrite::Borrowed(&mut self.items[0])
         }
 
         fn set_changed(&mut self) {}
@@ -473,7 +460,7 @@ mod tests {
     #[test]
     fn test_with_indices_disjoint() {
         let mut container = TestContainer::new(4);
-        let [a, b] = container.with_indices([1, 3]);
+        let [mut a, mut b] = container.with_indices([1, 3]);
         a.count = 10;
         b.count = 20;
         assert_eq!(container.items[1].count, 10);
@@ -486,7 +473,7 @@ mod tests {
     #[test]
     fn test_with_indices_single() {
         let mut container = TestContainer::new(4);
-        let [a] = container.with_indices([2]);
+        let [mut a] = container.with_indices([2]);
         a.count = 42;
         assert_eq!(container.items[2].count, 42);
     }
@@ -503,7 +490,7 @@ mod tests {
             items: array::from_fn(|_| ItemStack::empty()),
         };
 
-        let [first, second] = container.with_indices([0, 1]);
+        let [mut first, mut second] = container.with_indices([0, 1]);
         first.count = 1;
         second.count = 2;
 
@@ -605,14 +592,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "duplicate index")]
+    #[should_panic(expected = "distinct and in bounds")]
     fn test_with_indices_duplicate_panics() {
         let mut container = TestContainer::new(4);
         let _ = container.with_indices([1, 1]);
     }
 
     #[test]
-    #[should_panic(expected = "out of bounds")]
+    #[should_panic(expected = "distinct and in bounds")]
     fn test_with_indices_out_of_bounds_panics() {
         let mut container = TestContainer::new(4);
         let _ = container.with_indices([5]);

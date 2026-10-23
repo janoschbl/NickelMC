@@ -1,4 +1,3 @@
-use std::io;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;
@@ -577,7 +576,7 @@ pub trait LivingEntity: Entity {
     fn on_leave_combat(&self, _duration: i32) {}
 
     /// Builds the death message while the exact historical sources are retained.
-    fn combat_death_message(&self) -> io::Result<TextComponent> {
+    fn combat_death_message(&self) -> TextComponent {
         let Some(victim) = self.as_living_entity() else {
             panic!("living death messages require a living entity");
         };

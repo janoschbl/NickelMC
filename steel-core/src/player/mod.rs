@@ -883,27 +883,21 @@ impl Player {
             None,
         );
 
-        let show_death_messages = world.get_game_rule(&SHOW_DEATH_MESSAGES);
-
-        let death_message = match self.combat_death_message() {
-            Ok(message) => message,
-            Err(error) => panic!("Failed to encode death message: {error}"),
-        };
-
-        self.send_packet(CPlayerCombatKill {
-            player_id: self.id(),
-            message: if show_death_messages {
-                death_message.clone()
-            } else {
-                TextComponent::const_plain("")
-            },
-        });
-
-        // TODO: team death message visibility (ALWAYS / HIDE_FOR_OTHER_TEAMS / HIDE_FOR_OWN_TEAM)
-        if show_death_messages {
+        if world.get_game_rule(&SHOW_DEATH_MESSAGES) {
+            let death_message = self.combat_death_message();
+            self.send_packet(CPlayerCombatKill {
+                player_id: self.id(),
+                message: death_message.clone(),
+            });
+            // TODO: team death message visibility (ALWAYS / HIDE_FOR_OTHER_TEAMS / HIDE_FOR_OWN_TEAM)
             world.broadcast_system_chat(CSystemChat {
                 content: death_message,
                 overlay: false,
+            });
+        } else {
+            self.send_packet(CPlayerCombatKill {
+                player_id: self.id(),
+                message: TextComponent::const_plain(""),
             });
         }
 

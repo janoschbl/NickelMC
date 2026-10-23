@@ -1,4 +1,7 @@
-use std::{ptr, sync::Weak};
+use std::{
+    ptr,
+    sync::{Arc, Weak},
+};
 
 use glam::DVec3;
 use simdnbt::owned::{NbtCompound, NbtTag};
@@ -12,9 +15,88 @@ use crate::{
         brigadier::{CommandSyntaxError, StringReader, Suggestion, SuggestionsBuilder},
         execution::{CommandArgumentSource, CommandResultCallback, ExecutionCommandSource},
     },
-    entity::{Entity, EntityBase},
+    entity::{Entity, EntityBase, PartEntity, PartEntityBase, SharedEntity, reserve_entity_ids},
     scoreboard::{ScoreHolder, Scoreboard},
 };
+
+struct SelectorMultipartEntity {
+    base: EntityBase,
+    parts: Vec<Arc<dyn PartEntity>>,
+}
+
+crate::entity::impl_test_downcast_type!(SelectorMultipartEntity);
+
+impl Entity for SelectorMultipartEntity {
+    fn base(&self) -> &EntityBase {
+        &self.base
+    }
+    fn entity_type(&self) -> EntityTypeRef {
+        &vanilla_entities::ITEM
+    }
+    fn parts(&self) -> &[Arc<dyn PartEntity>] {
+        &self.parts
+    }
+}
+
+struct SelectorPartEntity {
+    base: EntityBase,
+    part_base: PartEntityBase,
+}
+
+crate::entity::impl_test_downcast_type!(SelectorPartEntity);
+
+impl Entity for SelectorPartEntity {
+    fn base(&self) -> &EntityBase {
+        &self.base
+    }
+    fn entity_type(&self) -> EntityTypeRef {
+        &vanilla_entities::ITEM
+    }
+}
+
+impl PartEntity for SelectorPartEntity {
+    fn part_base(&self) -> &PartEntityBase {
+        &self.part_base
+    }
+}
+
+#[test]
+fn multipart_selector_candidates_expand_only_parents_in_the_box() {
+    use crate::test_support::{fresh_test_world, insert_ready_full_chunk};
+    use steel_utils::{ChunkPos, WorldAabb};
+
+    init_vanilla_registry();
+    let fixture = fresh_test_world("multipart_selector_candidates");
+    let world = &fixture.world;
+    insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+    let ids = reserve_entity_ids(2);
+    let parent_position = DVec3::new(2.0, 64.0, 2.0);
+    let part_position = DVec3::new(8.0, 64.0, 8.0);
+    let size = vanilla_entities::ITEM.dimensions;
+    let part: Arc<dyn PartEntity> = Arc::new(SelectorPartEntity {
+        base: EntityBase::new(ids.part(0), part_position, size, Arc::downgrade(world)),
+        part_base: PartEntityBase::new("part", size),
+    });
+    let entity: SharedEntity = Arc::new(SelectorMultipartEntity {
+        base: EntityBase::new(ids.first(), parent_position, size, Arc::downgrade(world)),
+        parts: vec![part],
+    });
+    world
+        .try_add_entity(Arc::clone(&entity))
+        .expect("parent should attach");
+
+    let box_at = |position| WorldAabb::from_min_max(position - DVec3::ONE, position + DVec3::ONE);
+    // Unlike the predicate query, a typed query cannot discover a part on its own.
+    assert!(super::model::world_candidates(world, Some(box_at(part_position))).is_empty());
+    let ids_in_parent_box = super::model::world_candidates(world, Some(box_at(parent_position)))
+        .iter()
+        .map(|entity| entity.id())
+        .collect::<Vec<_>>();
+    assert_eq!(ids_in_parent_box, vec![ids.first(), ids.part(0)]);
+    let unbounded = super::model::world_candidates(world, None);
+    assert_eq!(unbounded.len(), 1);
+    assert_eq!(unbounded[0].id(), ids.first());
+}
 
 use super::model::{
     entity_name_filter_matches, entity_nbt_filter_matches, game_mode_filter_matches,

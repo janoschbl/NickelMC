@@ -180,7 +180,7 @@ pub(crate) fn apply_item_stack_components(
     merged.write(&mut bytes);
     let mut cursor = Cursor::new(bytes.as_slice());
     let borrowed = read_compound(&mut cursor).map_err(|_| EntitySpawnError::InvalidEntityData)?;
-    entity.apply_spawn_data((&borrowed).into());
+    Arc::clone(entity).apply_spawn_data((&borrowed).into());
     Ok(())
 }
 

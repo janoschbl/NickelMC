@@ -125,7 +125,20 @@ impl Entity for ItemDisplayEntity {
         });
     }
 
-    // TODO: Add `getItemStack` and `setItemStack` overrides.
+    fn get_slot(&self, slot: i32) -> Option<&dyn crate::entity::SlotAccess> {
+        (slot == 0).then_some(self)
+    }
+}
+
+impl crate::entity::SlotAccess for ItemDisplayEntity {
+    fn get(&self) -> ItemStack {
+        self.entity_data.lock().item_stack.get().clone()
+    }
+
+    fn set(&self, stack: ItemStack) -> bool {
+        self.with_view(|mut view| view.set_item_stack(stack));
+        true
+    }
 }
 
 impl Display for ItemDisplayEntity {

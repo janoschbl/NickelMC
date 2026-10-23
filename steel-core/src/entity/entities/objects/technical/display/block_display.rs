@@ -107,7 +107,7 @@ impl Entity for BlockDisplayEntity {
             <Self as Display>::load_display(&mut view, nbt);
 
             view.set_block_state(
-                nbt.compound("block_state")
+                nbt.get("block_state")
                     .and_then(block_state_nbt::load)
                     .unwrap_or(vanilla_blocks::AIR.default_state()),
             );

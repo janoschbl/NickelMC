@@ -856,6 +856,8 @@ mod item_frame;
 mod leash;
 mod living_base;
 mod living_entity;
+mod slot_access;
+pub use slot_access::SlotAccess;
 mod living_reference;
 mod manager;
 mod mob;

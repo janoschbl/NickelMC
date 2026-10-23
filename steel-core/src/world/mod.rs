@@ -241,6 +241,7 @@ pub struct WorldConfig {
 
 /// A struct that represents a world.
 pub struct World {
+    server: SyncRwLock<Weak<crate::server::Server>>,
     pub(crate) damage_history: Weak<DamageHistory>,
     /// The chunk map of the world.
     pub chunk_map: Arc<ChunkMap>,
@@ -323,6 +324,14 @@ pub struct World {
 }
 
 impl World {
+    pub(crate) fn set_server(&self, server: Weak<crate::server::Server>) {
+        *self.server.write() = server;
+    }
+
+    pub(crate) fn server(&self) -> Option<Arc<crate::server::Server>> {
+        self.server.read().upgrade()
+    }
+
     /// Creates a new world with custom configuration.
     ///
     /// This allows specifying storage backend (disk or RAM-only) and other options.
@@ -434,6 +443,7 @@ impl World {
             chunk_map.start_generation_refill_loop();
 
             Self {
+                server: SyncRwLock::new(Weak::new()),
                 damage_history: Arc::downgrade(&config.damage_history),
                 chunk_map,
                 players: PlayerMap::new(),

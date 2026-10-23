@@ -2,14 +2,17 @@
 
 use std::str::FromStr;
 
-use simdnbt::borrow::NbtCompound as BorrowedNbtCompound;
-use simdnbt::owned::NbtCompound;
+use simdnbt::borrow::NbtTag as BorrowedNbtTag;
+use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::{REGISTRY, RegistryExt as _};
 use steel_utils::{BlockStateId, Identifier};
 
 #[must_use]
-pub(crate) fn save(state: BlockStateId) -> NbtCompound {
+pub(crate) fn save(state: BlockStateId) -> NbtTag {
+    if state == state.get_block().default_state() {
+        return NbtTag::String(state.get_block().key.to_string().into());
+    }
     let mut encoded = NbtCompound::new();
     encoded.insert("id", state.get_block().key.to_string());
 
@@ -22,17 +25,22 @@ pub(crate) fn save(state: BlockStateId) -> NbtCompound {
         encoded.insert("properties", properties);
     }
 
-    encoded
+    NbtTag::Compound(encoded)
 }
 
 #[must_use]
-pub(crate) fn load(encoded: BorrowedNbtCompound<'_, '_>) -> Option<BlockStateId> {
-    let name = encoded.string("id")?;
+pub(crate) fn load(encoded: BorrowedNbtTag<'_, '_>) -> Option<BlockStateId> {
+    let name = encoded
+        .string()
+        .or_else(|| encoded.compound()?.string("id"))?;
     let identifier = Identifier::from_str(name.to_str().as_ref()).ok()?;
     let block = REGISTRY.blocks.by_key(&identifier)?;
 
     let mut state = block.default_state();
-    if let Some(encoded_properties) = encoded.compound("properties") {
+    if let Some(encoded_properties) = encoded
+        .compound()
+        .and_then(|value| value.compound("properties"))
+    {
         for (name, value) in encoded_properties.iter() {
             let Some(value) = value.string() else {
                 continue;
@@ -71,7 +79,11 @@ mod tests {
             .set_value(&BlockStateProperties::PISTON_TYPE, PistonType::Sticky)
             .set_value(&BlockStateProperties::SHORT, true);
 
-        let encoded = save(state);
+        let mut root = NbtCompound::new();
+        root.insert("state", save(state));
+        let encoded = root
+            .compound("state")
+            .expect("nondefault state is a compound");
         assert_eq!(
             encoded.string("id").map(|name| name.to_str()),
             Some("minecraft:piston_head".into())
@@ -82,11 +94,31 @@ mod tests {
         ));
 
         let mut bytes = Vec::new();
-        encoded.write(&mut bytes);
+        root.write(&mut bytes);
         let borrowed = read_borrowed_compound(&mut Cursor::new(bytes.as_slice()))
             .expect("test NBT should reborrow");
-        let view = BorrowedNbtCompound::from(&borrowed);
+        let view = simdnbt::borrow::NbtCompound::from(&borrowed);
+        assert_eq!(load(view.get("state").unwrap()), Some(state));
+    }
 
-        assert_eq!(load(view), Some(state));
+    #[test]
+    fn default_states_use_string_form_including_propertyful_blocks() {
+        init_vanilla_registry();
+        for block in [&vanilla_blocks::STONE, &vanilla_blocks::PISTON] {
+            let mut root = NbtCompound::new();
+            root.insert("state", save(block.default_state()));
+            assert_eq!(
+                root.string("state").unwrap().to_str(),
+                block.key.to_string()
+            );
+            let mut bytes = Vec::new();
+            root.write(&mut bytes);
+            let borrowed = read_borrowed_compound(&mut Cursor::new(bytes.as_slice())).unwrap();
+            let view = simdnbt::borrow::NbtCompound::from(&borrowed);
+            assert_eq!(
+                load(view.get("state").unwrap()),
+                Some(block.default_state())
+            );
+        }
     }
 }

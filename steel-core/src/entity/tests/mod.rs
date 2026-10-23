@@ -222,7 +222,7 @@ fn command_data_compare_nbt_contains_base_and_custom_data() {
 
 #[test]
 fn spawn_data_clamps_position_and_refreshes_old_transform() {
-    let entity = TypedTestEntity::new(1, &vanilla_entities::PIG);
+    let entity = Arc::new(TypedTestEntity::new(1, &vanilla_entities::PIG));
     let mut nbt = NbtCompound::new();
     nbt.insert(
         "Pos",
@@ -234,7 +234,7 @@ fn spawn_data_clamps_position_and_refreshes_old_transform() {
     nbt.write(&mut bytes);
     let borrowed =
         read_compound(&mut Cursor::new(bytes.as_slice())).expect("test spawn data should be valid");
-    entity.apply_spawn_data((&borrowed).into());
+    Arc::clone(&entity).apply_spawn_data((&borrowed).into());
 
     let expected_position = DVec3::new(
         ENTITY_LOAD_MAX_HORIZONTAL_POSITION,

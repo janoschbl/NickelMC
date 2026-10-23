@@ -23,7 +23,8 @@ fn hurt_time_survives_mob_save_load_and_spawn_nbt() {
     bytes.clear();
     nbt.write(&mut bytes);
     let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes)).expect("spawn mob NBT");
-    loaded.apply_spawn_data((&borrowed).into());
+    let loaded = Arc::new(loaded);
+    Arc::clone(&loaded).apply_spawn_data((&borrowed).into());
     assert_eq!(loaded.living_base().hurt_time(), -3);
 }
 

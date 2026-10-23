@@ -235,7 +235,7 @@ pub async fn test_server_with_worlds_and_config(
         return Err("test worlds must share the server's history owner".to_owned());
     }
 
-    Ok(Arc::new(Server {
+    let server = Arc::new(Server {
         damage_history,
         config,
         permission_groups,
@@ -268,7 +268,9 @@ pub async fn test_server_with_worlds_and_config(
         pending_world_changes: SyncMutex::new(Vec::new()),
         pending_domain_switches: SyncMutex::new(Vec::new()),
         player_idle_timeout: AtomicI32::new(0),
-    }))
+    });
+    server.bind_world_context();
+    Ok(server)
 }
 
 #[derive(Clone, Copy)]

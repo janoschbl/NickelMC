@@ -3669,6 +3669,16 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// are already restored; this handles type-specific data.
     fn load_additional(&self, _nbt: BorrowedNbtCompoundView<'_, '_>) {}
 
+    /// Loads fields that may need this unpublished entity as a command-resolution source.
+    fn load_additional_with_context(self: Arc<Self>, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.load_additional(nbt);
+    }
+
+    /// Returns a command-accessible slot, or `None` for unsupported slot IDs.
+    fn get_slot(&self, _slot: i32) -> Option<&dyn super::SlotAccess> {
+        None
+    }
+
     /// Applies entity-specific implicit components carried by an item stack.
     ///
     /// Mirrors the overridable part of vanilla's `Entity.applyImplicitComponents`.
@@ -3677,7 +3687,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// Spawn-item data is merged into the entity's current save state before it
     /// is loaded. Keeping that merge at the entity boundary preserves defaults
     /// and entity-specific state when the component only overrides one field.
-    fn apply_spawn_data(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+    fn apply_spawn_data(self: Arc<Self>, nbt: BorrowedNbtCompoundView<'_, '_>) {
         let read_int = |key: &str| {
             nbt.int(key)
                 .or_else(|| nbt.short(key).map(i32::from))
@@ -3764,7 +3774,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
             self.base().set_visual_fire(has_visual_fire != 0);
         }
 
-        self.load_additional(nbt);
+        Arc::clone(&self).load_additional_with_context(nbt);
         self.set_old_position_to_current();
         self.base().set_old_rotation_to_current();
         self.sync_base_entity_data();

@@ -21,6 +21,22 @@ fn reload(entity: &impl Entity, encoded: &NbtCompound) {
 }
 
 #[test]
+fn display_item_slot_zero_updates_metadata_and_rejects_other_slots() {
+    init_vanilla_registry();
+    let entity =
+        ItemDisplayEntity::new(&vanilla_entities::ITEM_DISPLAY, 1, DVec3::ZERO, Weak::new());
+    let slot = entity.get_slot(0).unwrap();
+    assert!(slot.get().is_empty());
+    assert!(slot.set(ItemStack::new(&vanilla_items::DIAMOND)));
+    assert_eq!(slot.get().item(), &*vanilla_items::DIAMOND);
+    entity.with_view(|view| assert_eq!(view.item_stack_ref().item(), &*vanilla_items::DIAMOND));
+    assert!(entity.get_slot(1).is_none());
+    assert!(entity.get_slot(-1).is_none());
+    assert!(slot.set(ItemStack::empty()));
+    assert!(slot.get().is_empty());
+}
+
+#[test]
 fn display_block_round_trip_preserves_transform_brightness_and_state() {
     init_vanilla_registry();
     let entity = BlockDisplayEntity::new(

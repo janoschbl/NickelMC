@@ -155,6 +155,7 @@ mod tests {
 
     #[test]
     fn glam_nbt_accepts_numeric_arrays_and_oversized_partial_values() {
+        // ValueInput accepts Util.fixedSize's partial result for oversized lists.
         with_tag(NbtTag::IntArray(vec![1, 2, 3, 4]), |tag| {
             assert_eq!(vec3_from_nbt_tag(tag), Some(Vec3::new(1.0, 2.0, 3.0)));
         });

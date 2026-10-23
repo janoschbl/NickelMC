@@ -366,6 +366,7 @@ mod tests {
     fn compose_and_decompose() {
         // The matrices given are the Matrix4fs taken from Minecraft
         // after converting a Transformation to its matrix in Java.
+        // Reproducer: test_assets/DisplayTransformationOracle.java (26.3 classpath).
 
         check_transformation(
             Transformation::IDENTITY,

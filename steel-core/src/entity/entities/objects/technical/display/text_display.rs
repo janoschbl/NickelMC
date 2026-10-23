@@ -1,5 +1,6 @@
 //! Vanilla's text display implementation.
 
+use crate::command::execution::{CommandSource, CommandTextResolver};
 use crate::entity::damage::DamageSource;
 use crate::entity::entities::objects::technical::display::{
     Display, DisplayView, PrivateDisplayView, modify_display_entity_base,
@@ -80,6 +81,37 @@ impl TextDisplayEntity {
             entity_data: SyncMutex::new(TextDisplayEntityData::new()),
         }
     }
+    fn load_fields(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.with_view(|mut view| {
+            <Self as Display>::load_display(&mut view, nbt);
+            let int = |name| nbt.get(name).and_then(super::read_int);
+            let boolean = |name| {
+                nbt.get(name)
+                    .and_then(super::read_byte)
+                    .is_some_and(|value| value != 0)
+            };
+            view.set_line_width(int("line_width").unwrap_or(DEFAULT_LINE_WIDTH));
+            view.set_text_opacity(
+                nbt.get("text_opacity")
+                    .and_then(super::read_byte)
+                    .unwrap_or(DEFAULT_TEXT_OPACITY) as u8,
+            );
+            view.set_background_color(int("background").unwrap_or(DEFAULT_BACKGROUND_COLOR));
+            let mut flags = TextDisplayFlags::empty();
+            flags.set(TextDisplayFlags::SHADOW, boolean("shadow"));
+            flags.set(TextDisplayFlags::SEE_THROUGH, boolean("see_through"));
+            flags.set(
+                TextDisplayFlags::USE_DEFAULT_BACKGROUND,
+                boolean("default_background"),
+            );
+            match nbt.get("alignment").and_then(Alignment::from_nbt_tag) {
+                Some(Alignment::Left) => flags.insert(TextDisplayFlags::ALIGN_LEFT),
+                Some(Alignment::Right) => flags.insert(TextDisplayFlags::ALIGN_RIGHT),
+                _ => {}
+            }
+            view.set_flags(flags);
+        });
+    }
 }
 
 impl Entity for TextDisplayEntity {
@@ -133,46 +165,35 @@ impl Entity for TextDisplayEntity {
     }
 
     fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
-        self.with_view(|mut view| {
-            <Self as Display>::load_display(&mut view, nbt);
+        self.load_fields(nbt);
+        if let Some(text) = nbt.get("text").and_then(TextComponent::from_nbt_tag) {
+            self.with_view(|mut view| view.set_text(text));
+        }
+    }
 
-            let int = |name| nbt.get(name).and_then(super::read_int);
-            let boolean = |name| {
-                nbt.get(name)
-                    .and_then(super::read_byte)
-                    .is_some_and(|value| value != 0)
-            };
-            view.set_line_width(int("line_width").unwrap_or(DEFAULT_LINE_WIDTH));
-            view.set_text_opacity(
-                nbt.get("text_opacity")
-                    .and_then(super::read_byte)
-                    .unwrap_or(DEFAULT_TEXT_OPACITY) as u8,
-            );
-            view.set_background_color(int("background").unwrap_or(DEFAULT_BACKGROUND_COLOR));
-
-            let mut flags = TextDisplayFlags::empty();
-            if boolean("shadow") {
-                flags.insert(TextDisplayFlags::SHADOW);
+    fn load_additional_with_context(self: Arc<Self>, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.load_fields(nbt);
+        let Some(text) = nbt.get("text").and_then(TextComponent::from_nbt_tag) else {
+            return;
+        };
+        let resolved = if let Some(world) = self.level()
+            && let Some(server) = world.server()
+        {
+            let entity: crate::entity::SharedEntity = Arc::<Self>::clone(&self);
+            let source = CommandSource::for_name_resolution(entity, world, server);
+            text.try_resolve(&CommandTextResolver::with_entity_override(
+                &source,
+                self.as_ref(),
+            ))
+        } else {
+            Ok(TextComponent::new())
+        };
+        match resolved {
+            Ok(text) => self.with_view(|mut view| view.set_text(text)),
+            Err(error) => {
+                log::warn!("Failed to parse display entity text {text:?}: {error}");
             }
-            if boolean("see_through") {
-                flags.insert(TextDisplayFlags::SEE_THROUGH);
-            }
-            if boolean("default_background") {
-                flags.insert(TextDisplayFlags::USE_DEFAULT_BACKGROUND);
-            }
-            view.set_flags(flags);
-
-            let alignment = nbt.get("alignment").and_then(Alignment::from_nbt_tag);
-            if let Some(alignment) = alignment {
-                view.set_alignment(alignment);
-            }
-
-            // TODO: Resolve the text component with this display entity's world.
-            let text = nbt.get("text").and_then(TextComponent::from_nbt_tag);
-            if let Some(text) = text {
-                view.set_text(text);
-            }
-        });
+        }
     }
 }
 

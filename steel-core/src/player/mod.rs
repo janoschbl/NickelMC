@@ -1357,6 +1357,7 @@ impl Entity for Player {
             return;
         };
 
+        self.dismount_vehicle(old_vehicle.as_ref());
         self.remove_active_effects_for_vehicle(old_vehicle.as_ref());
         self.send_packet(CSetPassengers::new(
             old_vehicle.id(),
@@ -1686,6 +1687,14 @@ const fn protocol_look_at_anchor(anchor: EntityAnchor) -> LookAtAnchor {
 }
 
 impl LivingEntity for Player {
+    fn dismount_poses(&self) -> &'static [EntityPose] {
+        &[
+            EntityPose::Standing,
+            EntityPose::Sneaking,
+            EntityPose::Swimming,
+        ]
+    }
+
     fn tick_death(&self) {
         let death_time = self.living_base.increment_death_time();
         if death_time >= DEATH_DURATION && !self.is_removed() {

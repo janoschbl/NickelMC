@@ -19,6 +19,51 @@ const BED_SLEEP_POSITION_OFFSET: f64 = 0.125;
 /// **Note:** All methods take `&self` (not `&mut self`) because living entities
 /// are shared via `Arc` and use interior mutability (`SyncMutex`, etc.).
 pub trait LivingEntity: Entity {
+    /// Returns the preferred poses to try when leaving a vehicle.
+    fn dismount_poses(&self) -> &'static [EntityPose] {
+        &[EntityPose::Standing]
+    }
+
+    /// Places a detached passenger at the vehicle's safe exit or collision-safe fallback.
+    fn dismount_vehicle(&self, vehicle: &dyn Entity) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        let target = if self.is_removed() {
+            self.position()
+        } else if !vehicle.is_removed()
+            && !world
+                .get_block_state(vehicle.block_position())
+                .get_block()
+                .has_tag(&steel_registry::vanilla_block_tags::BlockTag::PORTALS)
+        {
+            let Some(passenger) = self.as_living_entity() else {
+                return;
+            };
+            vehicle.dismount_location_for_passenger(passenger)
+        } else {
+            let mut target = self.position();
+            target.y = target.y.max(vehicle.position().y);
+            let dimensions = self.dimensions_for_pose(self.pose());
+            if dimensions.width <= 4.0 && dimensions.height <= 4.0 {
+                let width = f64::from(dimensions.width);
+                let height = f64::from(dimensions.height);
+                let center = target + DVec3::Y * (height / 2.0);
+                let allowed = [WorldAabb::of_size(center, width, height, width)];
+                if let Some(free) =
+                    WorldCollisionProvider::for_entity(&world, self.as_entity_event_source())
+                        .find_free_position(&allowed, center, width, height, width)
+                {
+                    target = free - DVec3::Y * (height / 2.0);
+                }
+            }
+            target
+        };
+        if let Err(error) = self.teleport_to(target) {
+            log::warn!("Failed to dismount entity {}: {error}", self.id());
+        }
+    }
+
     /// Returns a reference to the shared [`LivingEntityBase`] that holds
     /// living runtime state such as attributes, cached movement speed,
     /// damage cooldown, and death animation counters.

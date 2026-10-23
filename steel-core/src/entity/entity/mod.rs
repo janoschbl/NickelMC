@@ -148,6 +148,22 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         self.uuid().to_string()
     }
 
+    /// Resolves this entity's team from its current level's domain scoreboard.
+    fn team(&self) -> Option<crate::scoreboard::ScoreboardTeam> {
+        self.level()?
+            .scoreboard()
+            .holder_team(&crate::scoreboard::ScoreHolder::new(self.scoreboard_name()))
+    }
+
+    /// Returns whether the source team's friendly-fire policy allows damage.
+    fn do_teams_allow_damage(&self, other: &dyn Entity) -> bool {
+        let Some(team) = self.team() else {
+            return true;
+        };
+        !other.team().is_some_and(|other| team.is_allied_to(&other))
+            || team.is_allow_friendly_fire()
+    }
+
     /// Returns this entity's vanilla name component before team decoration.
     fn name(&self) -> TextComponent {
         self.custom_name().map_or_else(
@@ -552,8 +568,16 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 
     /// Returns whether this entity is allied to `other`.
-    fn is_allied_to(&self, _other: &dyn Entity) -> bool {
-        false
+    fn is_allied_to(&self, other: &dyn Entity) -> bool {
+        self.is_same_entity(other)
+            || self.considers_entity_as_ally(other)
+            || other.considers_entity_as_ally(self.as_entity_event_source())
+    }
+
+    /// Extensible alliance policy, queried in both directions by `is_allied_to`.
+    fn considers_entity_as_ally(&self, other: &dyn Entity) -> bool {
+        self.team()
+            .is_some_and(|team| other.team().is_some_and(|other| team.is_allied_to(&other)))
     }
 
     /// Returns whether this entity is a marker armor stand.

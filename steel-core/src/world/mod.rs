@@ -248,6 +248,8 @@ pub struct WorldConfig {
 /// A struct that represents a world.
 pub struct World {
     pub(crate) damage_history: Weak<DamageHistory>,
+    /// Gameplay and command users share one scoreboard across each domain.
+    scoreboard: SyncRwLock<Arc<crate::scoreboard::Scoreboard>>,
     /// The chunk map of the world.
     pub chunk_map: Arc<ChunkMap>,
     /// All players in the world with dual indexing by UUID and entity ID.
@@ -441,6 +443,7 @@ impl World {
 
             Self {
                 damage_history: Arc::downgrade(&config.damage_history),
+                scoreboard: SyncRwLock::new(Arc::new(crate::scoreboard::Scoreboard::new())),
                 chunk_map,
                 players: PlayerMap::new(),
                 player_area_map: PlayerAreaMap::new(),
@@ -513,6 +516,15 @@ impl World {
     #[must_use]
     pub fn domain(&self) -> &str {
         self.key.namespace.as_ref()
+    }
+
+    /// Returns this domain's shared scoreboard.
+    pub fn scoreboard(&self) -> Arc<crate::scoreboard::Scoreboard> {
+        Arc::clone(&self.scoreboard.read())
+    }
+
+    pub(crate) fn set_scoreboard(&self, scoreboard: Arc<crate::scoreboard::Scoreboard>) {
+        *self.scoreboard.write() = scoreboard;
     }
 
     pub(crate) fn set_domain_entity_directory(&self, directory: Arc<DomainEntityDirectory>) {

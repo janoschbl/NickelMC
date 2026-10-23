@@ -91,7 +91,12 @@ impl ServerExplosion<'_> {
                     .calculate_cached_with(&mut exposure_raycast, self.center)
             };
 
-            if should_damage {
+            if should_damage
+                && self
+                    .source
+                    .as_ref()
+                    .is_none_or(|source| source.do_teams_allow_damage(entity.as_ref()))
+            {
                 let amount =
                     self.damage_calculator
                         .entity_damage_amount(self, entity.as_ref(), exposure);

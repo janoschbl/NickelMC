@@ -768,6 +768,23 @@ impl Player {
             return false;
         }
 
+        if let Some(entity) = source.causing_entity() {
+            if entity
+                .as_player()
+                .is_some_and(|attacker| !self.can_harm_player(attacker))
+            {
+                return false;
+            }
+            if entity.is_abstract_arrow()
+                && let Some(owner) = entity.as_projectile().and_then(|arrow| arrow.get_owner())
+                && owner
+                    .as_player()
+                    .is_some_and(|attacker| !self.can_harm_player(attacker))
+            {
+                return false;
+            }
+        }
+
         {
             let abilities = self.abilities.lock();
             if abilities.invulnerable && !source.bypasses_invulnerability() {
@@ -803,6 +820,13 @@ impl Player {
         }
 
         LivingEntity::hurt_server(self, world, source, amount)
+    }
+
+    /// Returns whether PvP and this player's team allow harming `target`.
+    pub fn can_harm_player(&self, target: &Player) -> bool {
+        self.level()
+            .is_some_and(|world| world.get_game_rule(&steel_registry::vanilla_game_rules::PVP))
+            && self.do_teams_allow_damage(target)
     }
 
     fn disabled_damage_game_rule(source: &DamageSource) -> Option<GameRuleRef<bool>> {

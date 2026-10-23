@@ -9,6 +9,121 @@ use super::*;
 use crate::entity::LivingEntity as _;
 use crate::entity::entities::EndCrystalEntity;
 use crate::inventory::lock::{ContainerLockGuard, ContainerRef};
+use crate::scoreboard::ScoreHolder;
+
+#[test]
+fn team_protection_skips_blast_damage_but_not_knockback() {
+    for allow_friendly_fire in [false, true] {
+        let fixture = ready_world("explosion_source_team");
+        let world = &fixture.world;
+        let source = add_entity(
+            world,
+            PrimedTntEntity::new(
+                &vanilla_entities::TNT,
+                next_entity_id(),
+                TEST_BLOCK_BOTTOM_CENTER,
+                Arc::downgrade(world),
+            ),
+        );
+        let target = add_entity(
+            world,
+            PigEntity::new(
+                &vanilla_entities::PIG,
+                next_entity_id(),
+                TEST_BLOCK_BOTTOM_CENTER + DVec3::X * 3.0,
+                Arc::downgrade(world),
+            ),
+        );
+        let scoreboard = world.scoreboard();
+        let team = scoreboard.add_team("red").expect("team");
+        scoreboard
+            .set_allow_friendly_fire(&team, allow_friendly_fire)
+            .expect("policy");
+        for entity in [source.as_ref() as &dyn Entity, target.as_ref()] {
+            scoreboard
+                .add_holder_to_team(&ScoreHolder::new(entity.scoreboard_name()), &team)
+                .expect("membership");
+        }
+        let before = target.get_health();
+        let mut explosion = ServerExplosion::new(
+            world,
+            Some(source),
+            None,
+            None,
+            None,
+            TEST_BLOCK_BOTTOM_CENTER,
+            4.0,
+            false,
+            BlockInteraction::Keep,
+        );
+        explosion.hurt_entities();
+        assert_eq!(target.get_health() < before, allow_friendly_fire);
+        assert!(target.velocity().x > 0.0);
+    }
+}
+
+#[test]
+fn player_owned_tnt_respects_player_team_and_pvp_damage_gates() {
+    for (same_team, pvp) in [(true, true), (false, false), (false, true)] {
+        let fixture = ready_world("explosion_owner_team");
+        let world = &fixture.world;
+        world.set_game_rule(&steel_registry::vanilla_game_rules::PVP, pvp);
+        let player = |name, offset| {
+            let player = TestPlayerBuilder::new(Arc::clone(world), name, next_entity_id()).build();
+            player
+                .base()
+                .set_position_local(TEST_BLOCK_BOTTOM_CENTER + DVec3::X * offset);
+            player.restore_game_modes(GameType::Survival, None);
+            player
+                .abilities
+                .lock()
+                .update_for_game_mode(GameType::Survival);
+            player.set_client_loaded(true);
+            assert!(world.add_player(Arc::clone(&player), ResetReason::InitialJoin));
+            player
+        };
+        let owner = player("Owner", 6.0);
+        let target = player("Target", 3.0);
+        if same_team {
+            let scoreboard = world.scoreboard();
+            let team = scoreboard.add_team("red").expect("team");
+            scoreboard
+                .set_allow_friendly_fire(&team, false)
+                .expect("policy");
+            for player in [&owner, &target] {
+                scoreboard
+                    .add_holder_to_team(&ScoreHolder::new(player.scoreboard_name()), &team)
+                    .expect("membership");
+            }
+        }
+        let source = add_entity(
+            world,
+            PrimedTntEntity::primed(
+                &vanilla_entities::TNT,
+                next_entity_id(),
+                TEST_BLOCK_BOTTOM_CENTER,
+                world,
+                Some(owner.as_ref()),
+            ),
+        );
+        let before = target.get_health();
+        let mut explosion = ServerExplosion::new(
+            world,
+            Some(source),
+            None,
+            None,
+            None,
+            TEST_BLOCK_BOTTOM_CENTER,
+            4.0,
+            false,
+            BlockInteraction::Keep,
+        );
+        explosion.hurt_entities();
+        assert_eq!(target.get_health() < before, !same_team && pvp);
+        assert!(target.velocity().x > 0.0);
+        assert!(explosion.hit_players.contains_key(&target.id()));
+    }
+}
 
 // rand's f32 sampler uses the high 24 bits, just like LegacyRandom.next_f32.
 struct JavaLootRandom(LegacyRandom);

@@ -248,7 +248,14 @@ fn living_tick_rechecks_combat_every_twenty_entity_ticks_not_world_ticks() {
             .entries
             .is_empty()
     );
-    assert_eq!(victim.combat_duration(), 320);
+    assert_eq!(
+        victim
+            .base()
+            .damage_history()
+            .combat_tracker()
+            .duration(320),
+        320
+    );
 }
 
 #[test]

@@ -570,13 +570,6 @@ pub trait LivingEntity: Entity {
         changes.apply(victim);
     }
 
-    /// Returns the active combat duration or the duration of the last ended combat.
-    fn combat_duration(&self) -> i32 {
-        self.base()
-            .damage_history()
-            .combat_duration(self.tick_count())
-    }
-
     /// Notifies the entity when damage from a living attacker starts combat.
     fn on_enter_combat(&self) {}
 
@@ -2257,11 +2250,6 @@ pub trait LivingEntity: Entity {
     /// Decrements vanilla jump cooldown once per living AI step.
     fn tick_no_jump_delay(&self) {
         self.living_base().tick_no_jump_delay();
-    }
-
-    /// Returns the remaining hurt animation ticks.
-    fn hurt_time(&self) -> i32 {
-        self.living_base().hurt_time()
     }
 
     /// Returns whether this entity is immobile because it's dead or dying.

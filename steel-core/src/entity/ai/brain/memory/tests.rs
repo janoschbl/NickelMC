@@ -304,3 +304,60 @@ fn persistent_memories_round_trip_with_their_remaining_lifetime() {
     );
     assert_eq!(restored.get(&COOLDOWN), None);
 }
+
+#[test]
+fn extracted_persistent_memories_round_trip_typed_values_and_ttl() {
+    use super::{
+        Boolean, EntityUuid, GlobalPosition, GlobalPositionSet, Long, Unit,
+        vanilla_memories as vanilla,
+    };
+    use steel_utils::{BlockPos, GlobalPos};
+    init_globals();
+    let mut memories = Memories::new();
+    for memory in super::MEMORY_MODULE_TYPES.iter() {
+        memories.register(memory);
+    }
+    let position = GlobalPos::new(
+        Identifier::vanilla_static("overworld"),
+        BlockPos::new(-1, 64, 8),
+    );
+    memories.set(&vanilla::HOME, GlobalPosition(position.clone()));
+    memories.set(
+        &vanilla::VISITED_BLOCK_POSITIONS,
+        GlobalPositionSet(vec![position]),
+    );
+    memories.set(&vanilla::LAST_SLEPT, Long(i64::MAX - 3));
+    memories.set(&vanilla::IS_PANICKING, Boolean(true));
+    memories.set(&vanilla::ANGRY_AT, EntityUuid(uuid::Uuid::from_u128(42)));
+    memories.set_with_expiry(&vanilla::IS_IN_WATER, Unit(()), 2);
+    let encoded = memories.pack().to_nbt();
+    memories.clear();
+    memories.restore(&PackedMemories::from_nbt(
+        &encoded,
+        &super::MEMORY_MODULE_TYPES,
+    ));
+    assert_eq!(memories.pack().to_nbt(), encoded);
+    assert_eq!(
+        memories.get(&vanilla::LAST_SLEPT).expect("saved long").0,
+        i64::MAX - 3
+    );
+    memories.forget_outdated();
+    memories.forget_outdated();
+    assert!(memories.has_value(vanilla::IS_IN_WATER.entry()));
+    memories.forget_outdated();
+    assert!(!memories.has_value(vanilla::IS_IN_WATER.entry()));
+}
+
+#[test]
+fn released_entity_retains_identity_without_ownership() {
+    let entity = spawn_entity();
+    let remembered = RememberedEntity::new(&entity);
+    let id = entity.id();
+    let uuid = entity.uuid();
+    let before = Arc::strong_count(&entity);
+    let copy = remembered.clone();
+    assert_eq!(Arc::strong_count(&entity), before);
+    drop(entity);
+    assert!(copy.resolve().is_none());
+    assert_eq!((copy.id, copy.uuid), (id, uuid));
+}

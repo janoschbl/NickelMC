@@ -252,15 +252,27 @@ pub static MEMORY_MODULE_TYPES: MemoryModuleTypeRegistryLock =
 /// Initializes the global memory module type registry, once the main registry is
 /// frozen.
 pub(in crate::entity::ai::brain) fn init_memory_module_types() {
+    init_memory_module_types_with(|_| {});
+}
+
+pub(in crate::entity::ai::brain) fn init_memory_module_types_with(
+    register: impl FnOnce(&mut MemoryModuleTypeRegistry),
+) -> bool {
+    let mut initialized = false;
     MEMORY_MODULE_TYPES.get_or_init(|| {
         let mut registry = MemoryModuleTypeRegistry::new();
         register_memory_module_types(&mut registry);
+        register(&mut registry);
         registry.freeze();
+        initialized = true;
         registry
     });
+    initialized
 }
 
 /// Registers every memory module type, before the registry freezes.
 ///
 /// New memories are added here, next to the behaviors and sensors that use them.
-const fn register_memory_module_types(_registry: &mut MemoryModuleTypeRegistry) {}
+fn register_memory_module_types(registry: &mut MemoryModuleTypeRegistry) {
+    super::vanilla_memories::register(registry);
+}

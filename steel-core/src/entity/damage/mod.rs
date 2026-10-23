@@ -1,5 +1,6 @@
 //! Exact damage attribution and server-owned recent damage history.
 
+pub(crate) mod combat;
 mod history;
 mod source;
 

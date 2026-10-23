@@ -17,7 +17,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_DESCRIPTION: Steel is a lightweight Rust implementation of the Minecraft server. It focuses on clean code, performance, extensibility, and ease of use.
+  IMAGE_DESCRIPTION: NickelMC (a SteelMC fork) is a lightweight Rust implementation of the Minecraft server. It focuses on clean code, performance, extensibility, and ease of use.
 
 jobs:
   docker:

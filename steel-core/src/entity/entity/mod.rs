@@ -3245,18 +3245,26 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         }
     }
 
-    /// get the air drag value of the entity
-    fn get_air_drag(&self) -> f64 {
+    /// Whether this entity moves through the air in all directions, so vertical air
+    /// drag equals horizontal air drag (bees, parrots, sulfur cubes holding an item).
+    fn omnidirectional_air_mover(&self) -> bool {
+        false
+    }
+
+    /// The air drag of the entity, kept as `f32` like vanilla's `getAirDrag()` so callers
+    /// widen the float result rather than a double constant.
+    fn get_air_drag(&self) -> f32 {
         let Some(entity) = self.as_living_entity() else {
             return DEFAULT_AIR_DRAG;
         };
-        f64::from(compute_modified_friction(
-            DEFAULT_AIR_DRAG as f32,
-            entity
-                .attributes()
-                .lock()
-                .required_value(vanilla_attributes::AIR_DRAG_MODIFIER) as f32,
-        ))
+        compute_modified_friction(
+            if self.omnidirectional_air_mover() {
+                BASE_HORIZONTAL_AIR_DRAG
+            } else {
+                BASE_VERTICAL_AIR_DRAG
+            },
+            entity.air_drag_modifier(),
+        )
     }
 
     /// Applies gravity to the entity's velocity.
@@ -3402,7 +3410,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
                 self.is_suppressing_bounce(),
                 self.as_living_entity()
                     .map_or_else(|| self.get_gravity(), LivingEntity::get_effective_gravity),
-                self.get_air_drag(),
+                f64::from(self.get_air_drag()),
             );
 
             let next_velocity =
@@ -3830,7 +3838,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 }
 
-fn compute_modified_friction(friction: f32, modifier: f32) -> f32 {
+pub(crate) fn compute_modified_friction(friction: f32, modifier: f32) -> f32 {
     (1.0 - (1.0 - friction) * modifier).clamp(0.0, 1.0)
 }
 

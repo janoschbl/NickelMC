@@ -8,6 +8,7 @@ use crate::entity::{EntityBase, EntityGeneration};
 use crate::level_data::GameTime;
 
 use super::DamageSource;
+use super::combat::{CombatChanges, CombatEntry, CombatTracker};
 
 mod binding;
 mod source;
@@ -30,6 +31,12 @@ struct DamageRecord {
     clock: Arc<GameTime>,
 }
 
+struct CombatRecord {
+    victim_lifetime: Weak<DamageHistoryVictim>,
+    owner: Weak<()>,
+    tracker: CombatTracker,
+}
+
 impl DamageRecord {
     fn is_expired(&self) -> bool {
         self.victim_lifetime.strong_count() == 0
@@ -46,6 +53,7 @@ impl DamageRecord {
 #[derive(Default)]
 pub struct DamageHistory {
     records: SyncMutex<FxHashMap<EntityGeneration, DamageRecord>>,
+    combat_records: SyncMutex<FxHashMap<EntityGeneration, CombatRecord>>,
 }
 
 impl DamageHistory {
@@ -81,7 +89,8 @@ impl DamageHistory {
 
     pub(crate) fn clear_victim(&self, victim: EntityGeneration) {
         let removed = self.records.lock().remove(&victim);
-        drop(removed);
+        let combat = self.combat_records.lock().remove(&victim);
+        drop((removed, combat));
     }
 
     /// Releases expired records and strong sources with no gameplay owner.
@@ -102,12 +111,22 @@ impl DamageHistory {
             (expired, released)
         };
         drop((expired, released));
+        let combat: Vec<_> = self
+            .combat_records
+            .lock()
+            .extract_if(|_, record| {
+                record.victim_lifetime.strong_count() == 0 || record.owner.strong_count() == 0
+            })
+            .map(|(_, record)| record)
+            .collect();
+        drop(combat);
     }
 
     /// Releases history ownership after gameplay work has stopped.
     pub(crate) fn clear(&self) {
         let records = mem::take(&mut *self.records.lock());
-        drop(records);
+        let combat = mem::take(&mut *self.combat_records.lock());
+        drop((records, combat));
     }
 }
 

@@ -391,8 +391,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 
     /// Returns whether vanilla fluid currents can push this entity.
+    ///
+    /// The extractor flattens vanilla's per-subclass overrides into one flag.
+    /// Entities with extra conditions still override, as `Player` does.
     fn is_pushed_by_fluid(&self) -> bool {
-        true
+        self.entity_type().flags.is_pushed_by_fluid
     }
 
     /// Applies bubble-column surface push velocity, dispatching to the
@@ -1458,6 +1461,31 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// Returns this entity as an item frame when it has item-frame behavior.
     fn as_item_frame(&self) -> Option<&dyn ItemFrame> {
         try_as_dyn::<Self, dyn ItemFrame>(self)
+    }
+
+    /// Returns this entity as a multipart sub-entity when it is one.
+    ///
+    /// Mirrors vanilla's `instanceof EnderDragonPart` branches, routed through
+    /// [`PartEntity`] so engine code supports any multipart mob.
+    fn as_part_entity(&self) -> Option<&dyn PartEntity> {
+        try_as_dyn::<Self, dyn PartEntity>(self)
+    }
+
+    /// Returns this entity's multipart sub-entities, or an empty slice.
+    ///
+    /// Mirrors vanilla `EnderDragon.getSubEntities`, hoisted onto `Entity` (as
+    /// `NeoForge` does with `Entity.getParts`) because this vanilla version has no
+    /// shared multipart base for engine code to match on.
+    fn parts(&self) -> &[Arc<dyn PartEntity>] {
+        &[]
+    }
+
+    /// Returns whether `other` is this entity.
+    ///
+    /// Mirrors vanilla `Entity.is`: identity, except that a multipart sub-entity
+    /// also reports its parent as itself.
+    fn is_same_entity(&self, other: &dyn Entity) -> bool {
+        self.id() == other.id()
     }
 
     /// Returns this entity as a player when it is the concrete server player.
@@ -3218,13 +3246,13 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         let Some(entity) = self.as_living_entity() else {
             return DEFAULT_AIR_DRAG;
         };
-        compute_modified_friction(
-            DEFAULT_AIR_DRAG,
+        f64::from(compute_modified_friction(
+            DEFAULT_AIR_DRAG as f32,
             entity
                 .attributes()
                 .lock()
-                .required_value(vanilla_attributes::AIR_DRAG_MODIFIER),
-        )
+                .required_value(vanilla_attributes::AIR_DRAG_MODIFIER) as f32,
+        ))
     }
 
     /// Applies gravity to the entity's velocity.
@@ -3798,7 +3826,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 }
 
-fn compute_modified_friction(friction: f64, modifier: f64) -> f64 {
+fn compute_modified_friction(friction: f32, modifier: f32) -> f32 {
     (1.0 - (1.0 - friction) * modifier).clamp(0.0, 1.0)
 }
 

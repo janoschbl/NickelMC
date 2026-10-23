@@ -19,7 +19,7 @@ impl LookAtTargetSink {
 }
 impl Behavior for LookAtTargetSink {
     fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
-        &[(memories::LOOK_TARGET.entry(), MemoryStatus::ValuePresent)]
+        const { &[(memories::LOOK_TARGET.entry(), MemoryStatus::ValuePresent)] }
     }
     fn duration(&self) -> BehaviorDuration {
         self.duration

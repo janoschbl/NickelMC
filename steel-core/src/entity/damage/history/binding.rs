@@ -166,17 +166,6 @@ impl DamageHistoryBinding {
             .map_or_else(CombatTracker::default, |record| record.tracker.clone())
     }
 
-    pub(crate) fn combat_duration(&self, tick: i32) -> i32 {
-        let Some((history, victim)) = self.bound_history() else {
-            return 0;
-        };
-        history
-            .combat_records
-            .lock()
-            .get(&victim)
-            .map_or(0, |record| record.tracker.duration(tick))
-    }
-
     /// Clears transient history when a target domain's state is restored.
     pub(crate) fn clear(&self) {
         if let Some((history, victim)) = self.bound_history() {

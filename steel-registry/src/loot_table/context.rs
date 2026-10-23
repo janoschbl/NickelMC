@@ -1,4 +1,4 @@
-use super::{BlockStateId, DyeColor, Identifier, ItemStack, REGISTRY, RegistryExt, RngExt};
+use super::{BlockStateId, DyeColor, Identifier, ItemStack, REGISTRY, RegistryExt};
 use crate::equipment::EquipmentSlot;
 
 /// Entity target for loot context lookups.
@@ -80,14 +80,24 @@ pub enum ScoreboardTarget {
 
 impl NumberProvider {
     /// Get a value from this provider using the given RNG.
-    pub fn get<R: rand::Rng>(&self, rng: &mut R, ctx: Option<&LootContextRef<'_>>) -> f32 {
+    pub fn get<R: crate::loot_table::LootRng>(
+        &self,
+        rng: &mut R,
+        ctx: Option<&LootContextRef<'_>>,
+    ) -> f32 {
         match self {
             Self::Constant(v) => *v,
-            Self::Uniform { min, max } => rng.random_range(*min..=*max),
+            Self::Uniform { min, max } => {
+                if min >= max {
+                    *min
+                } else {
+                    rng.next_float() * (*max - *min) + *min
+                }
+            }
             Self::Binomial { n, p } => {
                 let mut count = 0;
                 for _ in 0..*n {
-                    if rng.random::<f32>() < *p {
+                    if rng.next_float() < *p {
                         count += 1;
                     }
                 }
@@ -110,20 +120,26 @@ impl NumberProvider {
     }
 
     /// Get a value using the loot context's RNG and parameters.
-    pub fn get_float<R: rand::Rng>(&self, ctx: &mut LootContext<'_, R>) -> f32 {
+    pub fn get_float<R: crate::loot_table::LootRng>(&self, ctx: &mut LootContext<'_, R>) -> f32 {
         let ctx_ref = LootContextRef { tool: ctx.tool };
         self.get(ctx.rng, Some(&ctx_ref))
     }
 
     /// Get a value without context (for backwards compatibility).
-    pub fn get_simple(&self, rng: &mut impl rand::Rng) -> f32 {
+    pub fn get_simple(&self, rng: &mut impl crate::loot_table::LootRng) -> f32 {
         match self {
             Self::Constant(v) => *v,
-            Self::Uniform { min, max } => rng.random_range(*min..=*max),
+            Self::Uniform { min, max } => {
+                if min >= max {
+                    *min
+                } else {
+                    rng.next_float() * (*max - *min) + *min
+                }
+            }
             Self::Binomial { n, p } => {
                 let mut count = 0;
                 for _ in 0..*n {
-                    if rng.random::<f32>() < *p {
+                    if rng.next_float() < *p {
                         count += 1;
                     }
                 }
@@ -135,7 +151,7 @@ impl NumberProvider {
     }
 
     /// Get the value as an integer.
-    pub fn get_int(&self, rng: &mut impl rand::Rng) -> i32 {
+    pub fn get_int(&self, rng: &mut impl crate::loot_table::LootRng) -> i32 {
         match self {
             Self::Uniform { min, max } => uniform_int(rng, math_round(*min), math_round(*max)),
             other => math_round(other.get_simple(rng)),
@@ -143,7 +159,7 @@ impl NumberProvider {
     }
 
     /// Get the value as an integer with context.
-    pub fn get_int_with_ctx<R: rand::Rng>(
+    pub fn get_int_with_ctx<R: crate::loot_table::LootRng>(
         &self,
         rng: &mut R,
         ctx: Option<&LootContextRef<'_>>,
@@ -162,11 +178,12 @@ pub(crate) fn math_round(value: f32) -> i32 {
 
 /// Vanilla `Mth.nextInt(random, min, max)` is inclusive and clamps to `min`
 /// when `min >= max`.
-fn uniform_int(rng: &mut impl rand::Rng, min: i32, max: i32) -> i32 {
+fn uniform_int(rng: &mut impl crate::loot_table::LootRng, min: i32, max: i32) -> i32 {
     if min >= max {
         min
     } else {
-        rng.random_range(min..=max)
+        rng.next_int(max.wrapping_sub(min).wrapping_add(1))
+            .wrapping_add(min)
     }
 }
 
@@ -179,7 +196,7 @@ pub struct NumberProviderRange {
 
 impl NumberProviderRange {
     /// Check if a value is within this range.
-    pub fn test(&self, value: f32, rng: &mut impl rand::Rng) -> bool {
+    pub fn test(&self, value: f32, rng: &mut impl crate::loot_table::LootRng) -> bool {
         if let Some(min) = &self.min
             && value < min.get_simple(rng)
         {
@@ -240,7 +257,7 @@ pub struct LootContextRef<'a> {
 /// Context for loot table evaluation, containing all relevant game state.
 ///
 /// This mirrors vanilla's `LootContext` / `LootParams` system.
-pub struct LootContext<'a, R: rand::Rng> {
+pub struct LootContext<'a, R: crate::loot_table::LootRng> {
     /// Random number generator.
     pub rng: &'a mut R,
     /// Luck value (e.g., from Luck of the Sea enchantment).
@@ -374,7 +391,7 @@ pub struct BlockEntityRef<'a> {
     pub inventory: Option<&'a [ItemStack]>,
 }
 
-impl<'a, R: rand::Rng> LootContext<'a, R> {
+impl<'a, R: crate::loot_table::LootRng> LootContext<'a, R> {
     /// Create a new loot context with just an RNG.
     pub const fn new(rng: &'a mut R) -> Self {
         Self {

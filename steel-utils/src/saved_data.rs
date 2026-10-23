@@ -27,6 +27,9 @@ pub mod names {
     pub const SCOREBOARD: SavedDataName = SavedDataName::trusted("scoreboard");
     /// Domain command storage, persisted through the domain default world.
     pub const COMMAND_STORAGE: SavedDataName = SavedDataName::trusted("command_storage");
+    /// Loot random-sequence state owned by this world.
+    pub const LOOT_RANDOM_SEQUENCES: SavedDataName =
+        SavedDataName::trusted("loot_random_sequences");
 }
 
 /// Name of a per-world saved data entry.

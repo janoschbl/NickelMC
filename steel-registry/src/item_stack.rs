@@ -704,7 +704,7 @@ impl ItemStack {
     }
 
     /// Enchants this item randomly with enchantments from the given options.
-    pub const fn enchant_randomly<R: rand::Rng>(
+    pub const fn enchant_randomly<R: crate::loot_table::LootRng>(
         &mut self,
         _options: &crate::loot_table::EnchantmentOptions,
         _rng: &mut R,
@@ -718,7 +718,7 @@ impl ItemStack {
     }
 
     /// Enchants this item as if using an enchanting table at the given level.
-    pub const fn enchant_with_levels<R: rand::Rng>(
+    pub const fn enchant_with_levels<R: crate::loot_table::LootRng>(
         &mut self,
         _level: i32,
         _options: &crate::loot_table::EnchantmentOptions,
@@ -733,7 +733,7 @@ impl ItemStack {
     }
 
     /// Copies components from a source (block entity, attacker, etc.) to this item.
-    pub const fn copy_components<R: rand::Rng>(
+    pub const fn copy_components<R: crate::loot_table::LootRng>(
         &mut self,
         _source: crate::loot_table::CopySource,
         _include: &[Identifier],
@@ -745,7 +745,7 @@ impl ItemStack {
     }
 
     /// Copies block state properties to this item (for blocks like `note_block`).
-    pub const fn copy_block_state<R: rand::Rng>(
+    pub const fn copy_block_state<R: crate::loot_table::LootRng>(
         &mut self,
         _block: &Identifier,
         _properties: &[&str],
@@ -831,7 +831,7 @@ impl ItemStack {
     }
 
     /// Sets the suspicious stew effects for this item.
-    pub const fn set_stew_effects<R: rand::Rng>(
+    pub const fn set_stew_effects<R: crate::loot_table::LootRng>(
         &mut self,
         _effects: &[crate::loot_table::StewEffect],
         _rng: &mut R,
@@ -878,7 +878,7 @@ impl ItemStack {
     }
 
     /// Copies the name from a source entity/block to this item.
-    pub const fn copy_name<R: rand::Rng>(
+    pub const fn copy_name<R: crate::loot_table::LootRng>(
         &mut self,
         _source: crate::loot_table::CopySource,
         _ctx: &crate::loot_table::LootContext<'_, R>,
@@ -896,7 +896,7 @@ impl ItemStack {
     }
 
     /// Sets container inventory contents.
-    pub const fn set_contents<R: rand::Rng>(
+    pub const fn set_contents<R: crate::loot_table::LootRng>(
         &mut self,
         _entries: &[crate::loot_table::LootEntry],
         _component_type: &Identifier,
@@ -907,7 +907,7 @@ impl ItemStack {
     }
 
     /// Modifies existing container contents.
-    pub const fn modify_contents<R: rand::Rng>(
+    pub const fn modify_contents<R: crate::loot_table::LootRng>(
         &mut self,
         _modifier: &[crate::loot_table::ConditionalLootFunction],
         _component_type: &Identifier,
@@ -924,7 +924,7 @@ impl ItemStack {
     }
 
     /// Sets attribute modifiers on this item.
-    pub const fn set_attributes<R: rand::Rng>(
+    pub const fn set_attributes<R: crate::loot_table::LootRng>(
         &mut self,
         _modifiers: &[crate::loot_table::AttributeModifier],
         _replace: bool,
@@ -935,7 +935,7 @@ impl ItemStack {
     }
 
     /// Fills a player head with texture from an entity.
-    pub const fn fill_player_head<R: rand::Rng>(
+    pub const fn fill_player_head<R: crate::loot_table::LootRng>(
         &mut self,
         _entity: crate::loot_table::LootContextEntity,
         _ctx: &crate::loot_table::LootContext<'_, R>,
@@ -945,7 +945,7 @@ impl ItemStack {
     }
 
     /// Copies custom NBT data from a source.
-    pub const fn copy_custom_data<R: rand::Rng>(
+    pub const fn copy_custom_data<R: crate::loot_table::LootRng>(
         &mut self,
         _source: crate::loot_table::CopySource,
         _operations: &[crate::loot_table::CopyDataOperation],

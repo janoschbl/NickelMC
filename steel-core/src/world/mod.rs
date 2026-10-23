@@ -123,6 +123,7 @@ pub mod explosion;
 pub mod game_event;
 mod level_effects;
 mod level_reader;
+mod loot_random;
 mod player_index;
 pub(crate) mod player_spawn_finder;
 mod portals;
@@ -269,6 +270,9 @@ pub struct World {
     pub(crate) game_time: Arc<GameTime>,
     /// Per-world saved data storage.
     pub(crate) saved_data: SavedDataManager,
+    /// Named sequences shared across the domain; the primary world persists them.
+    loot_random_sequences: SyncRwLock<Arc<SyncMutex<loot_random::LootRandomSequences>>>,
+    level_random: SyncMutex<LegacyRandom>,
     /// Runtime world border state.
     world_border: SyncMutex<WorldBorder>,
     /// Vanilla sleeping player counts for night-skip checks.
@@ -393,6 +397,9 @@ impl World {
 
         let path = config.level_data_path.as_deref().map(Path::new);
         let saved_data = SavedDataManager::new(path);
+        let persisted_loot_sequences = saved_data
+            .load_or_default(saved_data_names::LOOT_RANDOM_SEQUENCES)
+            .await?;
         let mut level_data = LevelDataManager::new(
             path,
             seed,
@@ -452,6 +459,10 @@ impl World {
                 game_time: level_data.game_time_handle(),
                 level_data: SyncRwLock::new(level_data),
                 saved_data,
+                loot_random_sequences: SyncRwLock::new(Arc::new(SyncMutex::new(
+                    loot_random::LootRandomSequences::new(seed, persisted_loot_sequences),
+                ))),
+                level_random: SyncMutex::new(LegacyRandom::from_seed(rand::random::<u64>())),
                 world_border: SyncMutex::new(world_border),
                 sleep_status: SyncMutex::new(sleep_status::SleepStatus::default()),
                 view_distance,
@@ -494,6 +505,10 @@ impl World {
         match self.level_data.write().save().await {
             Ok(()) => log::info!("World {} level data saved successfully", self.key),
             Err(e) => log::error!("Failed to save world level data: {e}"),
+        }
+
+        if let Err(error) = self.save_loot_random_sequences().await {
+            log::error!("Failed to save world loot random sequences: {error}");
         }
 
         let chunk_tickets = self.chunk_map.persistent_chunk_tickets();

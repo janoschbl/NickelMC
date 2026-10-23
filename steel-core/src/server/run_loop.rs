@@ -325,6 +325,13 @@ impl Server {
 
     async fn autosave_command_data(&self) {
         tracing::debug!("Command data autosave started");
+        for domain in self.worlds.domain_names() {
+            if let Some(primary) = self.worlds.default_world(domain)
+                && let Err(error) = primary.save_loot_random_sequences().await
+            {
+                tracing::error!(%error, domain, "Loot random-sequence autosave failed");
+            }
+        }
         let results = self.save_command_data().await;
         match results.scoreboards {
             Ok(saved) => tracing::debug!(saved, "Domain scoreboard autosave completed"),

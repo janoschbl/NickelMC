@@ -41,6 +41,40 @@ impl Xoroshiro {
         Self::new(lo, hi)
     }
 
+    /// Creates a source from vanilla's persisted Xoroshiro128++ state words.
+    #[must_use]
+    pub const fn from_state(seed_lo: u64, seed_hi: u64) -> Self {
+        Self::new(seed_lo, seed_hi)
+    }
+
+    /// Returns vanilla's persisted Xoroshiro128++ state words.
+    #[must_use]
+    pub const fn state(&self) -> (u64, u64) {
+        (self.seed_lo, self.seed_hi)
+    }
+
+    /// Creates a loot random sequence from a world seed and sequence name.
+    ///
+    /// Vanilla upgrades the legacy seed without mixing, XORs the MD5 hash of
+    /// the UTF-8 identifier (read as two big-endian longs), then applies
+    /// Stafford's variant 13 mixer to both words.
+    #[must_use]
+    pub fn from_sequence_seed(seed: i64, key: &str) -> Self {
+        let (low, high) = Self::upgrade_seed_to_128_bit(seed as u64);
+        let hash = md5::compute(key.as_bytes());
+        let hash_low = u64::from_be_bytes([
+            hash.0[0], hash.0[1], hash.0[2], hash.0[3], hash.0[4], hash.0[5], hash.0[6], hash.0[7],
+        ]);
+        let hash_high = u64::from_be_bytes([
+            hash.0[8], hash.0[9], hash.0[10], hash.0[11], hash.0[12], hash.0[13], hash.0[14],
+            hash.0[15],
+        ]);
+        Self::new(
+            mix_stafford_13(low ^ hash_low),
+            mix_stafford_13(high ^ hash_high),
+        )
+    }
+
     const fn new(lo: u64, hi: u64) -> Self {
         let (lo, hi) = if (lo | hi) == 0 {
             (GOLDEN_RATIO_64, SILVER_RATIO_64)

@@ -109,6 +109,14 @@ impl WorldMap {
             .or_insert_with(|| Arc::new(DomainEntityDirectory::new()));
         directory.add_world(&world);
         world.set_domain_entity_directory(Arc::clone(directory));
+        if let Some(primary) = self.default_world(world.domain()) {
+            for loaded in self
+                .values()
+                .filter(|loaded| loaded.domain() == world.domain() && loaded.key != primary.key)
+            {
+                loaded.share_loot_random_sequences(primary);
+            }
+        }
     }
 
     /// Returns a world by loaded world identifier.

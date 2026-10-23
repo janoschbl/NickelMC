@@ -2,12 +2,12 @@
 
 mod attack_target;
 mod control;
-mod move_to_target_sink;
 mod look_at_target_sink;
-pub use look_at_target_sink::LookAtTargetSink;
+mod move_to_target_sink;
 pub use attack_target::{
     SetWalkTargetFromAttackTargetIfTargetOutOfReach, StartAttacking, StopAttackingIfTargetInvalid,
 };
+pub use look_at_target_sink::LookAtTargetSink;
 pub use move_to_target_sink::MoveToTargetSink;
 
 #[cfg(test)]

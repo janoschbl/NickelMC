@@ -94,7 +94,8 @@ impl Behavior for StopAttackingIfTargetInvalid {
             .and_then(RememberedEntity::resolve)
             .is_some_and(|target| {
                 target.as_living_entity().is_some_and(|living| {
-                    living.is_alive() && crate::entity::Mob::can_attack(body, living)
+                    crate::entity::LivingEntity::is_alive(living)
+                        && crate::entity::Mob::can_attack(body, living)
                 }) && target
                     .level()
                     .is_some_and(|level| Arc::ptr_eq(&level, context.level))
@@ -153,7 +154,7 @@ impl Behavior for SetWalkTargetFromAttackTargetIfTargetOutOfReach {
         if context
             .memories
             .get(&memories::NEAREST_VISIBLE_LIVING_ENTITIES)
-            .is_some_and(|visible| visible.contains(&target))
+            .is_some_and(|visible| visible.contains(&target, context.memories))
             && (self.in_attack_range)(context, &target)
         {
             context.memories.erase(memories::WALK_TARGET.entry());

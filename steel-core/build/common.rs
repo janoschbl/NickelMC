@@ -1,12 +1,12 @@
-//! Shared types and helpers for block/item behavior code generation.
+//! Shared types and helpers for block/item/entity behavior code generation.
 //!
-//! Used by both `blocks.rs` and `items.rs` build scripts to parse `#[json_arg]`
-//! attributes and generate constructor arguments from `classes.json`.
+//! Used by the `blocks.rs`, `items.rs` and `entities.rs` build scripts to parse
+//! `#[json_arg]` attributes and generate constructor arguments from `classes.json`.
 
 use heck::ToPascalCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::{env, fs};
 
 use crate::{to_block_ident, to_item_ident};
@@ -48,6 +48,63 @@ pub(crate) struct JsonArgField {
     pub optional_sentinel: Option<String>,
 }
 
+/// Imports a generated registration file needs for its `#[json_arg]` constructor arguments.
+#[derive(Default)]
+pub(crate) struct GeneratedImports {
+    enums: BTreeMap<String, String>,
+    registry_modules: BTreeSet<String>,
+}
+
+impl GeneratedImports {
+    /// Records the imports needed by the constructor arguments of `fields`.
+    pub(crate) fn add_fields(&mut self, fields: &[JsonArgField]) {
+        for field in fields {
+            match &field.kind {
+                JsonArgKind::Enum {
+                    type_name,
+                    module_path,
+                } => {
+                    if let Some(path) = module_path {
+                        self.enums.insert(type_name.clone(), path.clone());
+                    }
+                }
+                JsonArgKind::Registry(module) => {
+                    self.registry_modules.insert(module.clone());
+                }
+                JsonArgKind::Value | JsonArgKind::IntProvider => {}
+            }
+        }
+    }
+
+    /// `use path::Enum;` for every recorded enum.
+    pub(crate) fn enum_import_tokens(&self) -> Vec<TokenStream> {
+        self.enums
+            .iter()
+            .map(|(type_name, module_path)| {
+                let type_ident = Ident::new(type_name, Span::call_site());
+                let path: syn::Path = syn::parse_str(module_path).unwrap_or_else(|_| {
+                    panic!("Invalid module path '{module_path}' for enum '{type_name}'")
+                });
+                quote! { use #path::#type_ident; }
+            })
+            .collect()
+    }
+
+    /// `, module` entries for the generated `use steel_registry::{...}` list.
+    ///
+    /// `own_module` is skipped because the template already imports it.
+    pub(crate) fn registry_import_tokens(&self, own_module: &str) -> Vec<TokenStream> {
+        self.registry_modules
+            .iter()
+            .filter(|module| module.as_str() != own_module)
+            .map(|module| {
+                let module_ident = Ident::new(module, Span::call_site());
+                quote! { , #module_ident }
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct DiscoveredObject {
     pub(crate) struct_name: String,
@@ -59,6 +116,7 @@ pub(crate) struct DiscoveredObject {
     /// (how many part fields the struct holds), not extracted vanilla data, so it is
     /// declared at the struct rather than in `classes.json`.
     pub(crate) part_count: u32,
+    pub(crate) spawn_rule: bool,
 }
 
 pub(crate) fn parse_object_behavior(
@@ -86,6 +144,7 @@ pub(crate) fn parse_object_behavior(
         class_name,
         fields,
         part_count: parsed.part_count,
+        spawn_rule: parsed.spawn_rule,
     })
 }
 
@@ -360,6 +419,7 @@ struct BehaviorAttribute {
     class_name: Option<String>,
     /// How many sub-entities the type owns, from `parts = N`.
     part_count: u32,
+    spawn_rule: bool,
 }
 
 /// Reads the recognized keys out of a behavior attribute in a single pass.
@@ -370,6 +430,7 @@ fn parse_behavior_attribute(attr: &syn::Attribute, attribute_name: &str) -> Beha
     let mut parsed = BehaviorAttribute {
         class_name: None,
         part_count: 0,
+        spawn_rule: false,
     };
 
     let syn::Meta::List(meta) = &attr.meta else {
@@ -385,13 +446,14 @@ fn parse_behavior_attribute(attr: &syn::Attribute, attribute_name: &str) -> Beha
                 .parse::<syn::LitInt>()?
                 .base10_parse()
                 .unwrap_or_else(|e| panic!("Failed to parse {attribute_name} parts count: {e}"));
+        } else if meta.path.is_ident("spawn_rule") {
+            parsed.spawn_rule = true;
         } else if let Ok(value) = meta.value() {
             let _: syn::Expr = value.parse()?;
         }
         Ok(())
     })
     .unwrap_or_else(|e| panic!("Failed to parse {attribute_name} attribute: {e}"));
-
     parsed
 }
 

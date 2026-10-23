@@ -24,7 +24,10 @@
 //! ```
 
 pub(crate) mod block_state_nbt;
+mod container_openers_counter;
+mod container_properties;
 pub mod entities;
+mod randomizable_container;
 mod registry;
 mod storage;
 
@@ -36,7 +39,7 @@ use simdnbt::borrow::{
 use simdnbt::owned::NbtCompound;
 use smallvec::SmallVec;
 use std::{
-    io::Cursor,
+    io::{self, Cursor},
     ptr,
     sync::{
         Arc, Weak,
@@ -53,13 +56,17 @@ use steel_utils::{
     locks::{SyncMutex, SyncRwLock},
 };
 
+pub use randomizable_container::RandomizableContainer;
 pub use registry::{BLOCK_ENTITIES, BlockEntityFactory, BlockEntityRegistry, init_block_entities};
 pub(crate) use storage::{
     BlockEntityInsert, BlockEntityLookup, BlockEntityStorage, ClearedBlockEntities,
     DetachedBlockEntity, LifecycleDispatchers,
 };
 
+use crate::block_entity::entities::Spawner;
+use crate::entity::ContainerUser;
 use crate::inventory::lock::ContainerRef;
+use crate::nameable::Nameable;
 use crate::player::Player;
 
 use crate::world::World;
@@ -397,6 +404,11 @@ pub trait BlockEntity: ErasedType + Send + Sync {
         false
     }
 
+    /// Returns this block entity as a spawner.
+    fn as_spawner(&self) -> Option<&dyn Spawner> {
+        None
+    }
+
     /// Called before the block entity is removed to handle side effects.
     ///
     /// For example, containers should drop their contents here.
@@ -499,6 +511,27 @@ pub trait BlockEntity: ErasedType + Send + Sync {
         None
     }
 
+    /// Owner-side open notification, called after inventory locks are released.
+    fn start_open(&self, _user: &dyn ContainerUser) {}
+
+    /// Owner-side close notification, called without inventory locks.
+    fn stop_open(&self, _user: &dyn ContainerUser) {}
+
+    /// Returns the lazy loot capability when this entity owns a randomizable container.
+    fn as_randomizable_container(&self) -> Option<&dyn RandomizableContainer> {
+        None
+    }
+
+    /// Name capability used by block loot and container titles.
+    fn as_nameable(&self) -> Option<&dyn Nameable> {
+        None
+    }
+
+    /// Adds live components that are represented by concrete gameplay state.
+    fn collect_implicit_components(&self, _components: &mut DataComponentMap) -> io::Result<()> {
+        Ok(())
+    }
+
     /// Returns this entity's fixed game-event listener, if it provides one.
     ///
     /// Mirrors Vanilla `GameEventListener.Provider.getListener`. The owning block behavior keeps
@@ -521,6 +554,19 @@ pub trait BlockEntity: ErasedType + Send + Sync {
 /// Custom behavior belongs in the corresponding `BlockEntity::on_*` hook, which runs after the
 /// update without storage or section locks.
 pub trait BlockEntityLifecycleExt: BlockEntity {
+    /// Collects stored and live components for item picking and loot functions.
+    fn collect_components(&self) -> io::Result<DataComponentMap> {
+        let mut components = self.base().stored_components();
+        if let Some(nameable) = self.as_nameable() {
+            components.set(
+                steel_registry::data_components::vanilla_components::CUSTOM_NAME,
+                nameable.custom_name(),
+            );
+        }
+        self.collect_implicit_components(&mut components)?;
+        Ok(components)
+    }
+
     /// Returns whether this block entity has been marked for removal.
     fn is_removed(&self) -> bool {
         self.base().is_removed()

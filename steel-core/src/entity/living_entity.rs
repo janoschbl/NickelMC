@@ -1,3 +1,4 @@
+use crate::loot::LOOT_TABLES;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;
@@ -18,6 +19,51 @@ const BED_SLEEP_POSITION_OFFSET: f64 = 0.125;
 /// **Note:** All methods take `&self` (not `&mut self`) because living entities
 /// are shared via `Arc` and use interior mutability (`SyncMutex`, etc.).
 pub trait LivingEntity: Entity {
+    /// Returns the preferred poses to try when leaving a vehicle.
+    fn dismount_poses(&self) -> &'static [EntityPose] {
+        &[EntityPose::Standing]
+    }
+
+    /// Places a detached passenger at the vehicle's safe exit or collision-safe fallback.
+    fn dismount_vehicle(&self, vehicle: &dyn Entity) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        let target = if self.is_removed() {
+            self.position()
+        } else if !vehicle.is_removed()
+            && !world
+                .get_block_state(vehicle.block_position())
+                .get_block()
+                .has_tag(&steel_registry::vanilla_block_tags::BlockTag::PORTALS)
+        {
+            let Some(passenger) = self.as_living_entity() else {
+                return;
+            };
+            vehicle.dismount_location_for_passenger(passenger)
+        } else {
+            let mut target = self.position();
+            target.y = target.y.max(vehicle.position().y);
+            let dimensions = self.dimensions_for_pose(self.pose());
+            if dimensions.width <= 4.0 && dimensions.height <= 4.0 {
+                let width = f64::from(dimensions.width);
+                let height = f64::from(dimensions.height);
+                let center = target + DVec3::Y * (height / 2.0);
+                let allowed = [WorldAabb::of_size(center, width, height, width)];
+                if let Some(free) =
+                    WorldCollisionProvider::for_entity(&world, self.as_entity_event_source())
+                        .find_free_position(&allowed, center, width, height, width)
+                {
+                    target = free - DVec3::Y * (height / 2.0);
+                }
+            }
+            target
+        };
+        if let Err(error) = self.teleport_to(target) {
+            log::warn!("Failed to dismount entity {}: {error}", self.id());
+        }
+    }
+
     /// Returns a reference to the shared [`LivingEntityBase`] that holds
     /// living runtime state such as attributes, cached movement speed,
     /// damage cooldown, and death animation counters.
@@ -1232,7 +1278,7 @@ pub trait LivingEntity: Entity {
 
         let entity_type = self.entity_type();
         let loot_key = Identifier::vanilla(format!("entities/{}", entity_type.key.path));
-        REGISTRY.loot_tables.by_key(&loot_key)
+        LOOT_TABLES.by_key(&loot_key)
     }
 
     /// Returns the loot-table seed for this entity's death loot, if it's a mob.
@@ -1256,26 +1302,22 @@ pub trait LivingEntity: Entity {
         };
 
         let seed = self.death_loot_table_seed();
-        let drops = if seed == 0 {
-            let mut rng = rand::rng();
-            death_loot_items_with_rng(
+        let drops = world.with_loot_random(loot_table, seed, |rng| {
+            Ok(death_loot_items_with_rng(
                 self,
                 loot_table,
                 world.as_ref(),
                 source,
                 killed_by_player,
-                &mut rng,
-            )
-        } else {
-            let mut rng = StdRng::seed_from_u64(seed as u64);
-            death_loot_items_with_rng(
-                self,
-                loot_table,
-                world.as_ref(),
-                source,
-                killed_by_player,
-                &mut rng,
-            )
+                rng,
+            ))
+        });
+        let drops = match drops {
+            Ok(drops) => drops,
+            Err(error) => {
+                log::error!("Failed to generate death loot {}: {error}", loot_table.key);
+                return;
+            }
         };
 
         if has_custom_death_loot_table && let Some(mob) = self.as_mob() {
@@ -3271,13 +3313,13 @@ fn random_teleport_ground_y(world: &Arc<World>, x: f64, y: f64, z: f64) -> Optio
     None
 }
 
-fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
+fn death_loot_items_with_rng<E: LivingEntity + ?Sized>(
     entity: &E,
     loot_table: LootTableRef,
     world: &World,
     source: &DamageSource,
     killed_by_player: bool,
-    rng: &mut R,
+    rng: &mut RandomSource,
 ) -> Vec<ItemStack> {
     let causing_entity = source.causing_entity().map(AsRef::as_ref);
     let direct_entity = source.direct_entity().map(AsRef::as_ref);
@@ -3291,6 +3333,10 @@ fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
     let this_equipment = living_loot_equipment(entity);
     let causing_equipment = causing_entity.and_then(loot_equipment);
     let direct_equipment = direct_entity.and_then(loot_equipment);
+    let luck = last_damage_player
+        .as_deref()
+        .and_then(Entity::as_living_entity)
+        .map_or(0.0, LivingEntity::get_luck);
     let last_damage_player_equipment = last_damage_player.as_deref().and_then(loot_equipment);
     let this_entity = entity_loot_ref(entity.as_entity_event_source(), Some(&this_equipment));
     let causing_entity =
@@ -3307,6 +3353,8 @@ fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
     };
 
     let mut context = LootContext::new(rng)
+        .with_luck(luck)
+        .with_world(world)
         .with_origin(position.x, position.y, position.z)
         .with_game_time(world.game_time())
         .with_killed_by_player(killed_by_player)
@@ -3322,16 +3370,44 @@ fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
         context = context.with_last_damage_player(entity);
     }
 
-    loot_table.get_random_items(&mut context)
+    match loot_table.get_random_items(&mut context) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!("Failed to generate loot {}: {error}", loot_table.key);
+            Vec::new()
+        }
+    }
 }
 
 /// Runs vanilla `LivingEntity.dropFromShearingLootTable` for `loot_table`, returning the
 /// drops resolved with the vanilla shearing loot params (origin, entity, tool).
-pub(crate) fn shearing_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
+pub(crate) fn shearing_loot_items<E: LivingEntity + ?Sized>(
     entity: &E,
     loot_table: LootTableRef,
     tool: &ItemStack,
-    rng: &mut R,
+) -> Vec<ItemStack> {
+    let Some(world) = entity.level() else {
+        return Vec::new();
+    };
+    match world.with_loot_random(loot_table, 0, |rng| {
+        Ok(shearing_loot_items_with_rng(entity, loot_table, tool, rng))
+    }) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!(
+                "Failed to generate shearing loot {}: {error}",
+                loot_table.key
+            );
+            Vec::new()
+        }
+    }
+}
+
+pub(crate) fn shearing_loot_items_with_rng<E: LivingEntity + ?Sized>(
+    entity: &E,
+    loot_table: LootTableRef,
+    tool: &ItemStack,
+    rng: &mut RandomSource,
 ) -> Vec<ItemStack> {
     let position = entity.position();
     let equipment = living_loot_equipment(entity);
@@ -3342,8 +3418,15 @@ pub(crate) fn shearing_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Size
             Some(&equipment),
         ))
         .with_tool(tool);
-    if let Some(level) = entity.level() {
-        context = context.with_game_time(level.game_time());
+    let level = entity.level();
+    if let Some(level) = level.as_deref() {
+        context = context.with_world(level).with_game_time(level.game_time());
     }
-    loot_table.get_random_items(&mut context)
+    match loot_table.get_random_items(&mut context) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!("Failed to generate loot {}: {error}", loot_table.key);
+            Vec::new()
+        }
+    }
 }

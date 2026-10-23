@@ -16,9 +16,9 @@ use steel_protocol::packets::game::{
     SChatCommand, SChatSessionUpdate, SChunkBatchReceived, SClientCommand, SClientTickEnd,
     SCommandSuggestion, SContainerButtonClick, SContainerClick, SContainerClose,
     SContainerSlotStateChanged, SInteract, SMovePlayer, SMovePlayerPos, SMovePlayerPosRot,
-    SMovePlayerRot, SMovePlayerStatusOnly, SMoveVehicle, SPickItemFromBlock, SPlayerAbilities,
-    SPlayerAction, SPlayerCommand, SPlayerInput, SPlayerLoad, SPunch, SRenameItem,
-    SSeenAdvancement, SSetBeacon, SSetCarriedItem, SSetCreativeModeSlot, SSignUpdate,
+    SMovePlayerRot, SMovePlayerStatusOnly, SMoveVehicle, SPickItemFromBlock, SPickItemFromEntity,
+    SPlayerAbilities, SPlayerAction, SPlayerCommand, SPlayerInput, SPlayerLoad, SPunch,
+    SRenameItem, SSeenAdvancement, SSetBeacon, SSetCarriedItem, SSetCreativeModeSlot, SSignUpdate,
     SSpectatorAction, SUseItem, SUseItemOn,
 };
 
@@ -110,6 +110,7 @@ enum ScheduledPlayPacketKind {
     Punch(SPunch),
     PlayerAction(SPlayerAction),
     PickItemFromBlock(SPickItemFromBlock),
+    PickItemFromEntity(SPickItemFromEntity),
     SignUpdate(SSignUpdate),
     SpectatorAction(SSpectatorAction),
     ClientCommand(SClientCommand),
@@ -177,6 +178,7 @@ impl ScheduledPlayPacket {
             | ScheduledPlayPacketKind::SetCarriedItem(_)
             | ScheduledPlayPacketKind::Punch(_)
             | ScheduledPlayPacketKind::PickItemFromBlock(_)
+            | ScheduledPlayPacketKind::PickItemFromEntity(_)
             | ScheduledPlayPacketKind::ClientCommand(_) => ScheduledPacketExecution::PlayerLocal,
             ScheduledPlayPacketKind::PlayerCommand(packet) => match packet.action {
                 PlayerCommandAction::StartSprinting
@@ -339,6 +341,9 @@ impl ScheduledPlayPacket {
             }
             ScheduledPlayPacketKind::PickItemFromBlock(packet) => {
                 player.handle_pick_item_from_block(packet);
+            }
+            ScheduledPlayPacketKind::PickItemFromEntity(packet) => {
+                player.handle_pick_item_from_entity(packet);
             }
             ScheduledPlayPacketKind::SignUpdate(packet) => player.handle_sign_update(packet),
             ScheduledPlayPacketKind::SpectatorAction(packet) => {
@@ -802,6 +807,11 @@ impl JavaConnection {
             play::S_PICK_ITEM_FROM_BLOCK => scheduled(ScheduledPlayPacketKind::PickItemFromBlock(
                 SPickItemFromBlock::read_packet(data)?,
             )),
+            play::S_PICK_ITEM_FROM_ENTITY => {
+                scheduled(ScheduledPlayPacketKind::PickItemFromEntity(
+                    SPickItemFromEntity::read_packet(data)?,
+                ))
+            }
             play::S_SIGN_UPDATE => scheduled(ScheduledPlayPacketKind::SignUpdate(
                 SSignUpdate::read_packet(data)?,
             )),

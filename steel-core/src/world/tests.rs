@@ -261,10 +261,8 @@ fn entity_breaker_is_available_to_chorus_flower_loot() {
 fn wall_variants_use_their_standing_block_loot_tables() {
     init_vanilla_registry();
     init_behaviors();
-
     let world_fixture = fresh_test_world("wall_variant_loot");
-    let world = &world_fixture.world;
-    let context = BlockLootContext::new(world, BlockPos::new(0, 64, 0));
+    let context = BlockLootContext::new(&world_fixture.world, BlockPos::new(0, 64, 0));
     let mut checked = 0;
     for (_, block) in REGISTRY.blocks.iter() {
         let name = block.key.path.as_ref();

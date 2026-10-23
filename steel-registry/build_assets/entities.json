@@ -2,6 +2,7 @@
   {
     "id": 0,
     "name": "acacia_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -233,6 +234,7 @@
   {
     "id": 1,
     "name": "acacia_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -472,6 +474,7 @@
   {
     "id": 2,
     "name": "allay",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.35,
     "height": 0.6,
     "eye_height": 0.36,
@@ -790,6 +793,7 @@
   {
     "id": 3,
     "name": "area_effect_cloud",
+    "spawn_dimensions_scale": 1.0,
     "width": 6.0,
     "height": 0.5,
     "eye_height": 0.425,
@@ -981,6 +985,7 @@
   {
     "id": 4,
     "name": "armadillo",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.7,
     "height": 0.65,
     "eye_height": 0.26,
@@ -1328,6 +1333,7 @@
   {
     "id": 5,
     "name": "armor_stand",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 1.975,
     "eye_height": 1.7775,
@@ -1672,6 +1678,7 @@
   {
     "id": 6,
     "name": "arrow",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.13,
@@ -1887,6 +1894,7 @@
   {
     "id": 7,
     "name": "axolotl",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.75,
     "height": 0.42,
     "eye_height": 0.2751,
@@ -2251,6 +2259,7 @@
   {
     "id": 8,
     "name": "bamboo_chest_raft",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -2490,6 +2499,7 @@
   {
     "id": 9,
     "name": "bamboo_raft",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -2721,6 +2731,7 @@
   {
     "id": 10,
     "name": "bat",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.9,
     "eye_height": 0.45,
@@ -3029,6 +3040,7 @@
   {
     "id": 11,
     "name": "bee",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.55,
     "height": 0.5,
     "eye_height": 0.3,
@@ -3386,6 +3398,7 @@
   {
     "id": 12,
     "name": "birch_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -3617,6 +3630,7 @@
   {
     "id": 13,
     "name": "birch_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -3856,6 +3870,7 @@
   {
     "id": 14,
     "name": "blaze",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.8,
     "eye_height": 1.53,
@@ -4173,6 +4188,7 @@
   {
     "id": 15,
     "name": "block_display",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.0,
     "height": 0.0,
     "eye_height": 0.0,
@@ -4494,6 +4510,7 @@
   {
     "id": 16,
     "name": "bogged",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.99,
     "eye_height": 1.74,
@@ -4819,6 +4836,7 @@
   {
     "id": 17,
     "name": "breeze",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.77,
     "eye_height": 1.3452,
@@ -5122,6 +5140,7 @@
   {
     "id": 18,
     "name": "breeze_wind_charge",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.3125,
     "height": 0.3125,
     "eye_height": 0.0,
@@ -5301,6 +5320,7 @@
   {
     "id": 19,
     "name": "camel",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.7,
     "height": 2.375,
     "eye_height": 2.275,
@@ -5678,6 +5698,7 @@
   {
     "id": 20,
     "name": "camel_husk",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.7,
     "height": 2.375,
     "eye_height": 2.275,
@@ -6063,6 +6084,7 @@
   {
     "id": 21,
     "name": "cat",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 0.7,
     "eye_height": 0.35,
@@ -6475,6 +6497,7 @@
   {
     "id": 22,
     "name": "cave_spider",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.7,
     "height": 0.5,
     "eye_height": 0.45,
@@ -6800,6 +6823,7 @@
   {
     "id": 23,
     "name": "cherry_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -7031,6 +7055,7 @@
   {
     "id": 24,
     "name": "cherry_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -7270,6 +7295,7 @@
   {
     "id": 25,
     "name": "chest_minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -7503,6 +7529,7 @@
   {
     "id": 26,
     "name": "chicken",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.4,
     "height": 0.7,
     "eye_height": 0.644,
@@ -7858,6 +7885,7 @@
   {
     "id": 27,
     "name": "cod",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.3,
     "eye_height": 0.195,
@@ -8190,6 +8218,7 @@
   {
     "id": 28,
     "name": "copper_golem",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.49,
     "height": 0.98,
     "eye_height": 0.8125,
@@ -8514,6 +8543,7 @@
   {
     "id": 29,
     "name": "command_block_minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -8761,6 +8791,7 @@
   {
     "id": 30,
     "name": "cow",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.4,
     "eye_height": 1.3,
@@ -9124,6 +9155,7 @@
   {
     "id": 31,
     "name": "creaking",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 2.7,
     "eye_height": 2.3,
@@ -9467,6 +9499,7 @@
   {
     "id": 32,
     "name": "creeper",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.7,
     "eye_height": 1.445,
@@ -9800,6 +9833,7 @@
   {
     "id": 33,
     "name": "cushion",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.0,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -9977,6 +10011,7 @@
   {
     "id": 34,
     "name": "dark_oak_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -10208,6 +10243,7 @@
   {
     "id": 35,
     "name": "dark_oak_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -10447,6 +10483,7 @@
   {
     "id": 36,
     "name": "dolphin",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 0.6,
     "eye_height": 0.3,
@@ -10802,6 +10839,7 @@
   {
     "id": 37,
     "name": "donkey",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.5,
     "eye_height": 1.425,
@@ -11179,6 +11217,7 @@
   {
     "id": 38,
     "name": "dragon_fireball",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.0,
     "height": 1.0,
     "eye_height": 0.85,
@@ -11350,6 +11389,7 @@
   {
     "id": 39,
     "name": "drowned",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.74,
@@ -11692,6 +11732,7 @@
   {
     "id": 40,
     "name": "egg",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -11888,6 +11929,7 @@
   {
     "id": 41,
     "name": "elder_guardian",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.9975,
     "height": 1.9975,
     "eye_height": 0.99875,
@@ -12221,6 +12263,7 @@
   {
     "id": 42,
     "name": "enderman",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 2.9,
     "eye_height": 2.55,
@@ -12556,6 +12599,7 @@
   {
     "id": 43,
     "name": "endermite",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.4,
     "height": 0.3,
     "eye_height": 0.13,
@@ -12859,6 +12903,7 @@
   {
     "id": 44,
     "name": "ender_dragon",
+    "spawn_dimensions_scale": 1.0,
     "width": 16.0,
     "height": 8.0,
     "eye_height": 6.8,
@@ -13201,6 +13246,7 @@
   {
     "id": 45,
     "name": "ender_pearl",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -13397,6 +13443,7 @@
   {
     "id": 46,
     "name": "end_crystal",
+    "spawn_dimensions_scale": 1.0,
     "width": 2.0,
     "height": 2.0,
     "eye_height": 1.7,
@@ -13576,6 +13623,7 @@
   {
     "id": 47,
     "name": "evoker",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.6575,
@@ -13939,6 +13987,7 @@
   {
     "id": 48,
     "name": "evoker_fangs",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.8,
     "eye_height": 0.68,
@@ -14094,6 +14143,7 @@
   {
     "id": 49,
     "name": "experience_bottle",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -14290,6 +14340,7 @@
   {
     "id": 50,
     "name": "experience_orb",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.425,
@@ -14459,6 +14510,7 @@
   {
     "id": 51,
     "name": "eye_of_ender",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -14631,6 +14683,7 @@
   {
     "id": 52,
     "name": "falling_block",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.98,
     "eye_height": 0.83300006,
@@ -14804,6 +14857,7 @@
   {
     "id": 53,
     "name": "fireball",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.0,
     "height": 1.0,
     "eye_height": 0.85,
@@ -15000,6 +15054,7 @@
   {
     "id": 54,
     "name": "firework_rocket",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -15198,6 +15253,7 @@
   {
     "id": 55,
     "name": "fox",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 0.7,
     "eye_height": 0.4,
@@ -15574,6 +15630,7 @@
   {
     "id": 56,
     "name": "frog",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.425,
@@ -15932,6 +15989,7 @@
   {
     "id": 57,
     "name": "furnace_minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -16171,6 +16229,7 @@
   {
     "id": 58,
     "name": "ghast",
+    "spawn_dimensions_scale": 1.0,
     "width": 4.0,
     "height": 4.0,
     "eye_height": 2.6,
@@ -16472,6 +16531,7 @@
   {
     "id": 59,
     "name": "happy_ghast",
+    "spawn_dimensions_scale": 1.0,
     "width": 4.0,
     "height": 4.0,
     "eye_height": 2.6,
@@ -16843,6 +16903,7 @@
   {
     "id": 60,
     "name": "giant",
+    "spawn_dimensions_scale": 1.0,
     "width": 3.6,
     "height": 12.0,
     "eye_height": 10.44,
@@ -17146,6 +17207,7 @@
   {
     "id": 61,
     "name": "glow_item_frame",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.0,
@@ -17361,6 +17423,7 @@
   {
     "id": 62,
     "name": "glow_squid",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.8,
     "height": 0.8,
     "eye_height": 0.4,
@@ -17715,6 +17778,7 @@
   {
     "id": 63,
     "name": "goat",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.3,
     "eye_height": 1.105,
@@ -18079,6 +18143,7 @@
   {
     "id": 64,
     "name": "guardian",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.85,
     "height": 0.85,
     "eye_height": 0.425,
@@ -18404,6 +18469,7 @@
   {
     "id": 65,
     "name": "hoglin",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.4,
     "eye_height": 1.19,
@@ -18751,6 +18817,7 @@
   {
     "id": 66,
     "name": "hopper_minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -18984,6 +19051,7 @@
   {
     "id": 67,
     "name": "horse",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.6,
     "eye_height": 1.52,
@@ -19353,6 +19421,7 @@
   {
     "id": 68,
     "name": "husk",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.74,
@@ -19695,6 +19764,7 @@
   {
     "id": 69,
     "name": "illusioner",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.6575,
@@ -20058,6 +20128,7 @@
   {
     "id": 70,
     "name": "interaction",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.0,
     "height": 0.0,
     "eye_height": 0.0,
@@ -20243,6 +20314,7 @@
   {
     "id": 71,
     "name": "iron_golem",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.4,
     "height": 2.7,
     "eye_height": 2.295,
@@ -20560,6 +20632,7 @@
   {
     "id": 72,
     "name": "item",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -20729,6 +20802,7 @@
   {
     "id": 73,
     "name": "item_display",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.0,
     "height": 0.0,
     "eye_height": 0.0,
@@ -21058,6 +21132,7 @@
   {
     "id": 74,
     "name": "item_frame",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.0,
@@ -21265,6 +21340,7 @@
   {
     "id": 75,
     "name": "jungle_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -21496,6 +21572,7 @@
   {
     "id": 76,
     "name": "jungle_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -21735,6 +21812,7 @@
   {
     "id": 77,
     "name": "leash_knot",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.375,
     "height": 0.5,
     "eye_height": 0.0625,
@@ -21898,6 +21976,7 @@
   {
     "id": 78,
     "name": "lightning_bolt",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.0,
     "height": 0.0,
     "eye_height": 0.0,
@@ -22053,6 +22132,7 @@
   {
     "id": 79,
     "name": "llama",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.87,
     "eye_height": 1.7765,
@@ -22452,6 +22532,7 @@
   {
     "id": 80,
     "name": "llama_spit",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -22615,6 +22696,7 @@
   {
     "id": 81,
     "name": "magma_cube",
+    "spawn_dimensions_scale": 4.0,
     "width": 0.52,
     "height": 0.52,
     "eye_height": 0.325,
@@ -22962,6 +23044,7 @@
   {
     "id": 82,
     "name": "mangrove_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -23193,6 +23276,7 @@
   {
     "id": 83,
     "name": "mangrove_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -23432,6 +23516,7 @@
   {
     "id": 84,
     "name": "mannequin",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.8,
     "eye_height": 1.62,
@@ -23753,6 +23838,7 @@
   {
     "id": 85,
     "name": "marker",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.0,
     "height": 0.0,
     "eye_height": 0.0,
@@ -23908,6 +23994,7 @@
   {
     "id": 86,
     "name": "minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -24133,6 +24220,7 @@
   {
     "id": 87,
     "name": "mooshroom",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.4,
     "eye_height": 1.3,
@@ -24488,6 +24576,7 @@
   {
     "id": 88,
     "name": "mule",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.6,
     "eye_height": 1.52,
@@ -24865,6 +24954,7 @@
   {
     "id": 89,
     "name": "nautilus",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.875,
     "height": 0.95,
     "eye_height": 0.2751,
@@ -25253,6 +25343,7 @@
   {
     "id": 90,
     "name": "oak_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -25484,6 +25575,7 @@
   {
     "id": 91,
     "name": "oak_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -25723,6 +25815,7 @@
   {
     "id": 92,
     "name": "ocelot",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 0.7,
     "eye_height": 0.595,
@@ -26071,6 +26164,7 @@
   {
     "id": 93,
     "name": "ominous_item_spawner",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -26240,6 +26334,7 @@
   {
     "id": 94,
     "name": "painting",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.425,
@@ -26439,6 +26534,7 @@
   {
     "id": 95,
     "name": "pale_oak_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -26670,6 +26766,7 @@
   {
     "id": 96,
     "name": "pale_oak_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -26909,6 +27006,7 @@
   {
     "id": 97,
     "name": "panda",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3,
     "height": 1.25,
     "eye_height": 1.0625,
@@ -27297,6 +27395,7 @@
   {
     "id": 98,
     "name": "parched",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.99,
     "eye_height": 1.74,
@@ -27608,6 +27707,7 @@
   {
     "id": 99,
     "name": "parrot",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.9,
     "eye_height": 0.54,
@@ -27997,6 +28097,7 @@
   {
     "id": 100,
     "name": "phantom",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 0.5,
     "eye_height": 0.175,
@@ -28298,6 +28399,7 @@
   {
     "id": 101,
     "name": "pig",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 0.9,
     "eye_height": 0.765,
@@ -28661,6 +28763,7 @@
   {
     "id": 102,
     "name": "piglin",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.79,
@@ -29016,6 +29119,7 @@
   {
     "id": 103,
     "name": "piglin_brute",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.79,
@@ -29341,6 +29445,7 @@
   {
     "id": 104,
     "name": "pillager",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.6575,
@@ -29696,6 +29801,7 @@
   {
     "id": 105,
     "name": "polar_bear",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.4,
     "height": 1.4,
     "eye_height": 1.19,
@@ -30044,6 +30150,7 @@
   {
     "id": 106,
     "name": "poplar_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -30275,6 +30382,7 @@
   {
     "id": 107,
     "name": "poplar_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -30514,6 +30622,7 @@
   {
     "id": 108,
     "name": "splash_potion",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -30718,6 +30827,7 @@
   {
     "id": 109,
     "name": "lingering_potion",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -30922,6 +31032,7 @@
   {
     "id": 110,
     "name": "pufferfish",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.7,
     "height": 0.7,
     "eye_height": 0.455,
@@ -31260,6 +31371,7 @@
   {
     "id": 111,
     "name": "rabbit",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.49,
     "height": 0.6,
     "eye_height": 0.59,
@@ -31608,6 +31720,7 @@
   {
     "id": 112,
     "name": "ravager",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.95,
     "height": 2.2,
     "eye_height": 1.8700001,
@@ -31941,6 +32054,7 @@
   {
     "id": 113,
     "name": "salmon",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.7,
     "height": 0.4,
     "eye_height": 0.26,
@@ -32287,6 +32401,7 @@
   {
     "id": 114,
     "name": "sheep",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.3,
     "eye_height": 1.235,
@@ -32634,6 +32749,7 @@
   {
     "id": 115,
     "name": "shulker",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.0,
     "height": 1.0,
     "eye_height": 0.5,
@@ -32966,6 +33082,7 @@
   {
     "id": 116,
     "name": "shulker_bullet",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.3125,
     "height": 0.3125,
     "eye_height": 0.265625,
@@ -33129,6 +33246,7 @@
   {
     "id": 117,
     "name": "silverfish",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.4,
     "height": 0.3,
     "eye_height": 0.13,
@@ -33432,6 +33550,7 @@
   {
     "id": 118,
     "name": "skeleton",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.99,
     "eye_height": 1.74,
@@ -33757,6 +33876,7 @@
   {
     "id": 119,
     "name": "skeleton_horse",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.6,
     "eye_height": 1.52,
@@ -34112,6 +34232,7 @@
   {
     "id": 120,
     "name": "slime",
+    "spawn_dimensions_scale": 4.0,
     "width": 0.52,
     "height": 0.52,
     "eye_height": 0.325,
@@ -34459,6 +34580,7 @@
   {
     "id": 121,
     "name": "small_fireball",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.3125,
     "height": 0.3125,
     "eye_height": 0.265625,
@@ -34655,6 +34777,7 @@
   {
     "id": 122,
     "name": "sniffer",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.9,
     "height": 1.75,
     "eye_height": 1.05,
@@ -35010,6 +35133,7 @@
   {
     "id": 123,
     "name": "snowball",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,
@@ -35206,6 +35330,7 @@
   {
     "id": 124,
     "name": "snow_golem",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.7,
     "height": 1.9,
     "eye_height": 1.7,
@@ -35522,6 +35647,7 @@
   {
     "id": 125,
     "name": "spawner_minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -35747,6 +35873,7 @@
   {
     "id": 126,
     "name": "spectral_arrow",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.13,
@@ -35948,6 +36075,7 @@
   {
     "id": 127,
     "name": "spider",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.4,
     "height": 0.9,
     "eye_height": 0.65,
@@ -36265,6 +36393,7 @@
   {
     "id": 128,
     "name": "spruce_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -36496,6 +36625,7 @@
   {
     "id": 129,
     "name": "spruce_chest_boat",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.375,
     "height": 0.5625,
     "eye_height": 0.5625,
@@ -36735,6 +36865,7 @@
   {
     "id": 130,
     "name": "squid",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.8,
     "height": 0.8,
     "eye_height": 0.4,
@@ -37067,6 +37198,7 @@
   {
     "id": 131,
     "name": "stray",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.99,
     "eye_height": 1.74,
@@ -37378,6 +37510,7 @@
   {
     "id": 132,
     "name": "strider",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.7,
     "eye_height": 1.445,
@@ -37733,6 +37866,7 @@
   {
     "id": 133,
     "name": "sulfur_cube",
+    "spawn_dimensions_scale": 2.0,
     "width": 0.49,
     "height": 0.49,
     "eye_height": 0.175,
@@ -38102,6 +38236,7 @@
   {
     "id": 134,
     "name": "tadpole",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.4,
     "height": 0.3,
     "eye_height": 0.19500001,
@@ -38441,6 +38576,7 @@
   {
     "id": 135,
     "name": "text_display",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.0,
     "height": 0.0,
     "eye_height": 0.0,
@@ -38794,6 +38930,7 @@
   {
     "id": 136,
     "name": "tnt",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.98,
     "eye_height": 0.15,
@@ -38971,6 +39108,7 @@
   {
     "id": 137,
     "name": "tnt_minecart",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.98,
     "height": 0.7,
     "eye_height": 0.595,
@@ -39196,6 +39334,7 @@
   {
     "id": 138,
     "name": "trader_llama",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 1.87,
     "eye_height": 1.7765,
@@ -39603,6 +39742,7 @@
   {
     "id": 139,
     "name": "trident",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.5,
     "eye_height": 0.13,
@@ -39826,6 +39966,7 @@
   {
     "id": 140,
     "name": "tropical_fish",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.5,
     "height": 0.4,
     "eye_height": 0.26,
@@ -40172,6 +40313,7 @@
   {
     "id": 141,
     "name": "turtle",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.2,
     "height": 0.4,
     "eye_height": 0.34,
@@ -40527,6 +40669,7 @@
   {
     "id": 142,
     "name": "vex",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.4,
     "height": 0.8,
     "eye_height": 0.51875,
@@ -40844,6 +40987,7 @@
   {
     "id": 143,
     "name": "villager",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.62,
@@ -41216,6 +41360,7 @@
   {
     "id": 144,
     "name": "vindicator",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.6575,
@@ -41557,6 +41702,7 @@
   {
     "id": 145,
     "name": "wandering_trader",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.62,
@@ -41903,6 +42049,7 @@
   {
     "id": 146,
     "name": "warden",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 2.9,
     "eye_height": 2.4650002,
@@ -42220,6 +42367,7 @@
   {
     "id": 147,
     "name": "wind_charge",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.3125,
     "height": 0.3125,
     "eye_height": 0.0,
@@ -42399,6 +42547,7 @@
   {
     "id": 148,
     "name": "witch",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.62,
@@ -42746,6 +42895,7 @@
   {
     "id": 149,
     "name": "wither",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.9,
     "height": 3.5,
     "eye_height": 2.9750001,
@@ -43088,6 +43238,7 @@
   {
     "id": 150,
     "name": "wither_skeleton",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.7,
     "height": 2.4,
     "eye_height": 2.1,
@@ -43399,6 +43550,7 @@
   {
     "id": 151,
     "name": "wither_skull",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.3125,
     "height": 0.3125,
     "eye_height": 0.265625,
@@ -43584,6 +43736,7 @@
   {
     "id": 152,
     "name": "wolf",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 0.85,
     "eye_height": 0.68,
@@ -43996,6 +44149,7 @@
   {
     "id": 153,
     "name": "zoglin",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.4,
     "eye_height": 1.19,
@@ -44313,6 +44467,7 @@
   {
     "id": 154,
     "name": "zombie",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.74,
@@ -44647,6 +44802,7 @@
   {
     "id": 155,
     "name": "zombie_horse",
+    "spawn_dimensions_scale": 1.0,
     "width": 1.3964844,
     "height": 1.6,
     "eye_height": 1.52,
@@ -45002,6 +45158,7 @@
   {
     "id": 156,
     "name": "zombie_nautilus",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.875,
     "height": 0.95,
     "eye_height": 0.2751,
@@ -45404,6 +45561,7 @@
   {
     "id": 157,
     "name": "zombie_villager",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.74,
@@ -45781,6 +45939,7 @@
   {
     "id": 158,
     "name": "zombified_piglin",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.95,
     "eye_height": 1.79,
@@ -46123,6 +46282,7 @@
   {
     "id": 159,
     "name": "player",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.6,
     "height": 1.8,
     "eye_height": 1.62,
@@ -46450,6 +46610,7 @@
   {
     "id": 160,
     "name": "fishing_bobber",
+    "spawn_dimensions_scale": 1.0,
     "width": 0.25,
     "height": 0.25,
     "eye_height": 0.2125,

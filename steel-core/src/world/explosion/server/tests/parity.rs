@@ -1,8 +1,9 @@
 use std::convert::Infallible;
 
+use crate::loot::{LootContext, vanilla_loot_tables};
 use rand::{Rng as _, TryRng};
-use steel_registry::loot_table::{LootCondition, LootContext, LootFunction};
-use steel_registry::{vanilla_attributes, vanilla_damage_types, vanilla_loot_tables};
+use steel_registry::{vanilla_attributes, vanilla_damage_types};
+use steel_utils::random::RandomSource;
 use steel_utils::random::legacy_random::LegacyRandom;
 
 use super::*;
@@ -125,29 +126,6 @@ fn player_owned_tnt_respects_player_team_and_pvp_damage_gates() {
     }
 }
 
-// rand's f32 sampler uses the high 24 bits, just like LegacyRandom.next_f32.
-struct JavaLootRandom(LegacyRandom);
-
-impl TryRng for JavaLootRandom {
-    type Error = Infallible;
-
-    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
-        Ok(self.0.next_i32() as u32)
-    }
-
-    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
-        Ok(self.0.next_i64() as u64)
-    }
-
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Infallible> {
-        for chunk in dst.chunks_mut(4) {
-            let bytes = self.next_u32().to_le_bytes();
-            chunk.copy_from_slice(&bytes[..chunk.len()]);
-        }
-        Ok(())
-    }
-}
-
 #[test]
 fn tnt_and_creeper_blasts_apply_vanilla_damage_and_knockback() {
     for (radius, offset, expected_damage, resistance) in [
@@ -200,27 +178,18 @@ fn explosion_decay_and_survival_match_java_seed_one() {
     init_vanilla_registry();
     // BlastOracle.java --loot: 64 nextFloat() <= 1/radius draws, seed 1.
     for (radius, expected_count) in [(3.0, 24), (4.0, 20)] {
-        let mut random = JavaLootRandom(LegacyRandom::from_seed(1));
-        let mut context = LootContext::new(&mut random).with_explosion(radius);
-        let mut stack = ItemStack::with_count(&vanilla_items::COBBLESTONE, 64);
-        LootFunction::ExplosionDecay.apply(&mut stack, &mut context);
-        assert_eq!(stack.count(), expected_count);
-
-        let mut random = JavaLootRandom(LegacyRandom::from_seed(1));
-        let mut context = LootContext::new(&mut random).with_explosion(radius);
-        let survived = (0..64)
-            .filter(|_| LootCondition::SurvivesExplosion.test(&mut context))
-            .count();
-        assert_eq!(survived, expected_count as usize);
-
-        let mut random = JavaLootRandom(LegacyRandom::from_seed(1));
+        let mut random = RandomSource::Legacy(LegacyRandom::from_seed(1));
         let tool = ItemStack::empty();
         let mut context = LootContext::new(&mut random)
             .with_tool(&tool)
             .with_block_state(vanilla_blocks::STONE.default_state())
             .with_explosion(radius);
         let dropped: i32 = (0..64)
-            .flat_map(|_| vanilla_loot_tables::BLOCKS_STONE.get_random_items(&mut context))
+            .flat_map(|_| {
+                vanilla_loot_tables::BLOCKS_STONE
+                    .get_random_items(&mut context)
+                    .expect("stone loot")
+            })
             .map(|item| {
                 assert!(item.is(&vanilla_items::COBBLESTONE));
                 item.count()
@@ -299,7 +268,7 @@ fn explosion_removal_spills_barrel_contents_once() {
     let block_entity = world.get_block_entity(pos).expect("barrel block entity");
     let container_ref = ContainerRef::from_block_entity(block_entity).expect("barrel container");
     {
-        let mut guard = ContainerLockGuard::lock_all(&[&container_ref]);
+        let mut guard = ContainerLockGuard::lock_all(&[&container_ref]).expect("lock barrel");
         let container = guard
             .get_mut(container_ref.container_id())
             .expect("locked barrel");

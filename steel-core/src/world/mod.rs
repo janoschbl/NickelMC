@@ -123,7 +123,6 @@ pub mod explosion;
 pub mod game_event;
 mod level_effects;
 mod level_reader;
-pub(crate) mod loot_random;
 mod player_index;
 pub(crate) mod player_spawn_finder;
 mod portals;
@@ -396,9 +395,6 @@ impl World {
 
         let path = config.level_data_path.as_deref().map(Path::new);
         let saved_data = SavedDataManager::new(path);
-        let persisted_loot_sequences = saved_data
-            .load_or_default(saved_data_names::LOOT_RANDOM_SEQUENCES)
-            .await?;
         let mut level_data = LevelDataManager::new(
             path,
             seed,
@@ -504,10 +500,6 @@ impl World {
         match self.level_data.write().save().await {
             Ok(()) => log::info!("World {} level data saved successfully", self.key),
             Err(e) => log::error!("Failed to save world level data: {e}"),
-        }
-
-        if let Err(error) = self.save_loot_random_sequences().await {
-            log::error!("Failed to save world loot random sequences: {error}");
         }
 
         let chunk_tickets = self.chunk_map.persistent_chunk_tickets();

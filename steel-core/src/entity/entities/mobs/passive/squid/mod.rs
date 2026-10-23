@@ -203,7 +203,7 @@ impl SquidEntity {
                 0.05 * f64::from(effect.amplifier() + 1)
             });
 
-        self.set_velocity(DVec3::new(0.0, y * self.get_air_drag(), 0.0));
+        self.set_velocity(DVec3::new(0.0, y * f64::from(self.get_air_drag()), 0.0));
     }
 
     /// Copies the body pitch to vanilla `xBodyRotO`, which

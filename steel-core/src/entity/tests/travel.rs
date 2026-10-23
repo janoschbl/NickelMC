@@ -221,3 +221,27 @@ fn push_impulse_updates_velocity_and_marks_sync() {
     assert_vec3_close(entity.velocity(), DVec3::new(0.1, 0.2, 0.3));
     assert!(!entity.needs_velocity_sync());
 }
+
+#[test]
+fn living_air_drag_depends_on_omnidirectional_air_mover_and_modifier() {
+    init_vanilla_registry();
+    let ground = LivingFluidTestEntity::new(0.0, 0.0, true);
+    let flyer = LivingFluidTestEntity::new(0.0, 0.0, true).with_omnidirectional_air_mover();
+    assert_eq!(ground.get_air_drag().to_bits(), 0.98_f32.to_bits());
+    assert_eq!(flyer.get_air_drag().to_bits(), 0.91_f32.to_bits());
+
+    for entity in [&ground, &flyer] {
+        entity
+            .attributes()
+            .lock()
+            .set_base_value(vanilla_attributes::AIR_DRAG_MODIFIER, 2.5);
+    }
+    assert_eq!(
+        ground.get_air_drag().to_bits(),
+        (1.0_f32 - (1.0_f32 - 0.98_f32) * 2.5_f32).to_bits()
+    );
+    assert_eq!(
+        flyer.get_air_drag().to_bits(),
+        (1.0_f32 - (1.0_f32 - 0.91_f32) * 2.5_f32).to_bits()
+    );
+}

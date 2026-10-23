@@ -125,12 +125,12 @@ impl Entity for ItemDisplayEntity {
         });
     }
 
-    fn get_slot(&self, slot: i32) -> Option<&dyn crate::entity::SlotAccess> {
-        (slot == 0).then_some(self)
+    fn get_slot(&self, slot: i32) -> Option<Box<dyn crate::entity::SlotAccess + '_>> {
+        (slot == 0).then(|| Box::new(self) as Box<dyn crate::entity::SlotAccess + '_>)
     }
 }
 
-impl crate::entity::SlotAccess for ItemDisplayEntity {
+impl crate::entity::SlotAccess for &ItemDisplayEntity {
     fn get(&self) -> ItemStack {
         self.entity_data.lock().item_stack.get().clone()
     }

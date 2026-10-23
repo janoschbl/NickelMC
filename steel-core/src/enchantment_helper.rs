@@ -213,10 +213,35 @@ pub(crate) fn do_post_attack_effects_from_item(
     );
 }
 
-pub(crate) fn do_post_attack_effects_with_item_source(
+pub(crate) fn do_post_attack_effects(world: &World, victim: &SharedEntity, source: &DamageSource) {
+    let context = EnchantmentPostAttackContext::new(victim, source);
+    apply_victim_post_attack_effects(world, victim.as_ref(), &context);
+    if let Some(attacker) = source
+        .causing_entity()
+        .and_then(|entity| entity.as_living_entity())
+    {
+        let slot = EquipmentSlot::MainHand;
+        let mut item = EnchantedItemInUse::Equipped {
+            owner: attacker,
+            slot,
+        };
+        let mut item_ref = &*vanilla_items::AIR;
+        item.with_item(&mut |stack| item_ref = stack.item);
+        if apply_post_attack_effects(
+            world,
+            &mut item,
+            Some(slot),
+            EnchantmentTarget::Attacker,
+            &context,
+        ) {
+            attacker.on_equipped_item_broken(item_ref, slot);
+        }
+    }
+}
+
+fn apply_victim_post_attack_effects(
     world: &World,
     victim: &dyn Entity,
-    source: &ItemStack,
     context: &EnchantmentPostAttackContext<'_>,
 ) {
     if let Some(living_victim) = victim.as_living_entity() {
@@ -239,7 +264,15 @@ pub(crate) fn do_post_attack_effects_with_item_source(
             }
         }
     }
+}
 
+pub(crate) fn do_post_attack_effects_with_item_source(
+    world: &World,
+    victim: &dyn Entity,
+    source: &ItemStack,
+    context: &EnchantmentPostAttackContext<'_>,
+) {
+    apply_victim_post_attack_effects(world, victim, context);
     let mut source = source.copy_with_count(source.count());
     let _ = apply_post_attack_effects(
         world,

@@ -122,6 +122,11 @@ impl<T: Entity> EntityEventSource for T {
 /// }
 /// ```
 pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
+    /// Returns mutable access to a numbered entity item slot, if one exists.
+    fn get_slot(&self, _slot: i32) -> Option<Box<dyn crate::entity::SlotAccess + '_>> {
+        None
+    }
+
     /// Returns a reference to the entity's shared vanilla base fields.
     fn base(&self) -> &EntityBase;
 
@@ -2331,6 +2336,20 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         self.fluid_contact().water_height() > 0.0
     }
 
+    /// Returns whether this entity touches water or rain at either end of its bounds.
+    fn is_in_water_or_rain(&self) -> bool {
+        self.is_in_water()
+            || self.level().is_some_and(|world| {
+                let pos = self.block_position();
+                world.is_raining_at(pos)
+                    || world.is_raining_at(BlockPos::containing(
+                        self.position().x,
+                        self.bounding_box().max_y(),
+                        self.position().z,
+                    ))
+            })
+    }
+
     /// Returns true if this entity is currently touching lava.
     fn is_in_lava(&self) -> bool {
         self.base().is_in_lava()
@@ -3902,11 +3921,6 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// Loads fields that may need this unpublished entity as a command-resolution source.
     fn load_additional_with_context(self: Arc<Self>, nbt: BorrowedNbtCompoundView<'_, '_>) {
         self.load_additional(nbt);
-    }
-
-    /// Returns a command-accessible slot, or `None` for unsupported slot IDs.
-    fn get_slot(&self, _slot: i32) -> Option<&dyn super::SlotAccess> {
-        None
     }
 
     /// Applies entity-specific implicit components carried by an item stack.

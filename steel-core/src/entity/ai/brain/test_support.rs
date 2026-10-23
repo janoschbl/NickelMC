@@ -9,6 +9,7 @@ use steel_utils::{DowncastType, DowncastTypeKey, Identifier};
 
 use super::context::BrainContext;
 use super::memory::{Memories, MemoryModuleType, MemoryValue, PersistentMemoryValue};
+use super::Activities;
 use crate::bootstrap::init_globals;
 use crate::entity::registry::ENTITIES;
 use crate::entity::{SharedEntity, next_entity_id};
@@ -67,6 +68,7 @@ pub(super) fn spawn_pig() -> SharedEntity {
 pub(super) struct TestBrain {
     entity: SharedEntity,
     memories: Memories,
+    activities: Activities,
     time: i64,
 }
 
@@ -75,6 +77,7 @@ impl TestBrain {
         Self {
             entity: spawn_pig(),
             memories: Memories::new(),
+            activities: Activities::new(),
             time: 0,
         }
     }
@@ -91,6 +94,7 @@ impl TestBrain {
         let Self {
             entity,
             memories,
+            activities,
             time,
         } = self;
 
@@ -100,6 +104,7 @@ impl TestBrain {
                 .as_pathfinder_mob()
                 .expect("pig should be a pathfinder mob"),
             memories,
+            activities,
             time: *time,
         }
     }

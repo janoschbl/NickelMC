@@ -1,5 +1,6 @@
 //! Brain AI.
 
+mod activities;
 pub mod behavior;
 pub mod context;
 pub mod memory;
@@ -8,6 +9,7 @@ pub mod sensor;
 #[cfg(test)]
 mod test_support;
 
+pub use activities::{Activities, ActivityData, ActivityRequirements};
 pub use context::BrainContext;
 
 /// Initialize the brain registries.

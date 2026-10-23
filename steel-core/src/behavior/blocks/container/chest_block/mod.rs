@@ -257,31 +257,32 @@ impl BlockBehavior for ChestBlock {
                 .downcast_ref::<ChestBlockEntity>()
                 .is_some_and(|chest| chest.can_open(player))
         }) {
-            if !player.is_spectator() {
-                player.send_overlay_message(
-                    &translations::CONTAINER_IS_LOCKED
-                        .message([title])
-                        .component(),
-                );
-                let mut center = DVec3::new(
-                    f64::from(pos.x()) + 0.5,
-                    f64::from(pos.y()) + 0.5,
-                    f64::from(pos.z()) + 0.5,
-                );
-                if chest.owners.len() == 2 {
-                    center += DVec3::from(Self::connected_direction(state).offset_vec()) * 0.5;
-                }
-                world.play_sound_at(
-                    &sound_events::BLOCK_CHEST_LOCKED,
-                    SoundSource::Blocks,
-                    center,
-                    1.0,
-                    1.0,
-                    None,
-                );
-            } else {
+            if player.is_spectator() {
                 player.send_spectator_cant_open_message();
+                return InteractionResult::Success;
             }
+            player.send_overlay_message(
+                &translations::CONTAINER_IS_LOCKED
+                    .message([title])
+                    .component(),
+            );
+            let mut center = DVec3::new(
+                f64::from(pos.x()) + 0.5,
+                f64::from(pos.y()) + 0.5,
+                f64::from(pos.z()) + 0.5,
+            );
+            if chest.owners.len() == 2 {
+                center += DVec3::from(Self::connected_direction(state).offset_vec()) * 0.5;
+            }
+            world.play_sound_at(
+                &sound_events::BLOCK_CHEST_LOCKED,
+                SoundSource::Blocks,
+                center,
+                1.0,
+                1.0,
+                None,
+            );
+
             return InteractionResult::Success;
         }
         for owner in &chest.owners {

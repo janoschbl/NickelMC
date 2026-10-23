@@ -10,9 +10,7 @@ use simdnbt::owned::NbtCompound;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::blocks::properties::BlockStateProperties;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::{
-    RegistryExt as _, vanilla_block_entity_types, vanilla_blocks, vanilla_entities,
-};
+use steel_registry::{vanilla_block_entity_types, vanilla_blocks, vanilla_entities};
 use steel_utils::types::UpdateFlags;
 use steel_utils::{
     BlockPos, BlockStateId, Direction, DowncastType, DowncastTypeKey, Identifier, locks::SyncMutex,

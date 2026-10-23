@@ -1,4 +1,3 @@
-use std::io;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;
@@ -240,10 +239,6 @@ pub trait LivingEntity: Entity {
     /// Appends vanilla-shaped living state used by command NBT predicates.
     fn save_command_nbt(&self, nbt: &mut NbtCompound) {
         nbt.insert("Health", self.get_health());
-        nbt.insert(
-            "HurtTime",
-            NbtTag::Short(self.living_base().hurt_time() as i16),
-        );
         nbt.insert(
             "DeathTime",
             NbtTag::Short(self.living_base().death_time() as i16),
@@ -574,13 +569,6 @@ pub trait LivingEntity: Entity {
         changes.apply(victim);
     }
 
-    /// Returns the active combat duration or the duration of the last ended combat.
-    fn combat_duration(&self) -> i32 {
-        self.base()
-            .damage_history()
-            .combat_duration(self.tick_count())
-    }
-
     /// Notifies the entity when damage from a living attacker starts combat.
     fn on_enter_combat(&self) {}
 
@@ -588,7 +576,7 @@ pub trait LivingEntity: Entity {
     fn on_leave_combat(&self, _duration: i32) {}
 
     /// Builds the death message while the exact historical sources are retained.
-    fn combat_death_message(&self) -> io::Result<TextComponent> {
+    fn combat_death_message(&self) -> TextComponent {
         let Some(victim) = self.as_living_entity() else {
             panic!("living death messages require a living entity");
         };
@@ -2271,11 +2259,6 @@ pub trait LivingEntity: Entity {
         self.living_base().tick_no_jump_delay();
     }
 
-    /// Returns the remaining hurt animation ticks.
-    fn hurt_time(&self) -> i32 {
-        self.living_base().hurt_time()
-    }
-
     /// Returns whether this entity is immobile because it's dead or dying.
     fn default_is_immobile(&self) -> bool {
         self.is_dead_or_dying()
@@ -2619,10 +2602,11 @@ pub trait LivingEntity: Entity {
         }
     }
 
-    /// Returns the vertical friction used by `travelInAir`.
-    fn air_travel_vertical_friction(&self, _horizontal_friction: f32) -> f32 {
-        // TODO: FlyingAnimal uses horizontal friction here once animal types exist.
-        0.98
+    /// The `AIR_DRAG_MODIFIER` attribute value narrowed to `f32` like vanilla's cast.
+    fn air_drag_modifier(&self) -> f32 {
+        self.attributes()
+            .lock()
+            .required_value(vanilla_attributes::AIR_DRAG_MODIFIER) as f32
     }
 
     /// Clamps movement while on a climbable block: caps horizontal and
@@ -2695,7 +2679,9 @@ pub trait LivingEntity: Entity {
         } else {
             1.0
         };
-        let horizontal_friction = block_friction * 0.91;
+        let air_drag_modifier = self.air_drag_modifier();
+        let air_drag = compute_modified_friction(BASE_HORIZONTAL_AIR_DRAG, air_drag_modifier);
+        let horizontal_friction = block_friction * air_drag;
         let (movement, result) =
             self.handle_relative_friction_and_calculate_movement(entity, input, block_friction)?;
         let movement_y = if let Some(levitation_y) = self.levitation_travel_y_delta(movement.y) {
@@ -2707,7 +2693,11 @@ pub trait LivingEntity: Entity {
         if self.should_discard_friction() {
             self.set_velocity(DVec3::new(movement.x, movement_y, movement.z));
         } else {
-            let vertical_friction = self.air_travel_vertical_friction(horizontal_friction);
+            let vertical_friction = if self.omnidirectional_air_mover() {
+                air_drag
+            } else {
+                compute_modified_friction(BASE_VERTICAL_AIR_DRAG, air_drag_modifier)
+            };
             self.set_velocity(DVec3::new(
                 movement.x * f64::from(horizontal_friction),
                 movement_y * f64::from(vertical_friction),

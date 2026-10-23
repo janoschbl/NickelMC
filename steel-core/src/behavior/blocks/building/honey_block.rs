@@ -43,12 +43,12 @@ impl HoneyBlock {
 
     #[must_use]
     fn old_delta_y(delta_y: f64) -> f64 {
-        delta_y / DEFAULT_AIR_DRAG + 0.08
+        delta_y / f64::from(DEFAULT_AIR_DRAG) + 0.08
     }
 
     #[must_use]
     fn new_delta_y(delta_y: f64) -> f64 {
-        (delta_y - 0.08) * DEFAULT_AIR_DRAG
+        (delta_y - 0.08) * f64::from(DEFAULT_AIR_DRAG)
     }
 
     #[must_use]

@@ -24,7 +24,7 @@ impl MultipartTestEntity {
         let parts = (0..PART_COUNT)
             .map(|index| {
                 let part: Arc<dyn PartEntity> = Arc::new(MultipartTestPart {
-                    base: EntityBase::new(ids.part(index), position, PART_SIZE, world.clone()),
+                    base: EntityBase::new(ids.part(index), position, PART_SIZE, Weak::clone(&world)),
                     part_base: PartEntityBase::new("test_part", PART_SIZE),
                 });
                 part
@@ -77,13 +77,6 @@ impl Entity for MultipartTestPart {
 
     fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
         self.part_base.size()
-    }
-
-    fn is_same_entity(&self, other: &dyn Entity) -> bool {
-        self.id() == other.id()
-            || self
-                .parent()
-                .is_some_and(|parent| parent.id() == other.id())
     }
 }
 

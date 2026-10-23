@@ -392,4 +392,19 @@ mod tests {
 
         assert_eq!(entity.entity_type(), &vanilla_entities::OAK_BOAT);
     }
+
+    #[test]
+    fn reserve_id_claims_a_block_for_each_declared_part() {
+        init_vanilla_registry();
+        let mut registry = EntityRegistry::new();
+        registry.register_parts(&vanilla_entities::OAK_BOAT, 3);
+
+        let multipart = registry.reserve_id(&vanilla_entities::OAK_BOAT);
+        let plain = registry.reserve_id(&vanilla_entities::PIG);
+
+        assert_eq!(multipart.len(), 4);
+        assert_eq!(plain.len(), 1);
+        // Other tests allocate concurrently, so only the ordering is stable.
+        assert!(plain.first() >= multipart.first() + 4);
+    }
 }

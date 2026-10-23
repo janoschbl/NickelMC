@@ -84,8 +84,14 @@ use entities::ExperienceOrbEntity;
 pub(crate) const ENTITY_LOAD_MAX_HORIZONTAL_POSITION: f64 = 3.000_051_2E7;
 pub(crate) const ENTITY_LOAD_MAX_VERTICAL_POSITION: f64 = 2.0E7;
 
-/// The default air drag value for entities.
-pub const DEFAULT_AIR_DRAG: f64 = 0.98;
+/// The default air drag value for entities (vanilla `Entity.getAirDrag` returns the float `0.98F`).
+pub const DEFAULT_AIR_DRAG: f32 = 0.98;
+
+/// Vanilla `LivingEntity.BASE_HORIZONTAL_AIR_DRAG`, also the omnidirectional air drag.
+pub const BASE_HORIZONTAL_AIR_DRAG: f32 = 0.91;
+
+/// Vanilla `LivingEntity.BASE_VERTICAL_AIR_DRAG`.
+pub const BASE_VERTICAL_AIR_DRAG: f32 = 0.98;
 
 /// Clamps an entity position using vanilla's load-time world-bound limits.
 pub(crate) fn clamp_loaded_entity_position(pos: DVec3) -> DVec3 {
@@ -894,10 +900,10 @@ pub use callback::{
 };
 pub use conversion::{AfterConversion, ConversionParams, ConversionType};
 pub(crate) use entity::apply_entity_look_at;
-pub(crate) use entity::position_rider_default;
 pub use entity::{
     AcceptedClientMovement, AcceptedClientMovementOutcome, Entity, EntityEventSource,
 };
+pub(crate) use entity::{compute_modified_friction, position_rider_default};
 pub use fluid_contact::EntityFluidContact;
 pub use identity::EntityGeneration;
 pub use inside_block_effects::{

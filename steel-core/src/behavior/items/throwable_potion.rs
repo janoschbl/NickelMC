@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::sync::Once;
 
 use steel_macros::item_behavior;
 use steel_protocol::packets::game::SoundSource;
@@ -68,6 +69,12 @@ impl ItemBehavior for SplashPotionItem {
 pub struct LingeringPotionItem;
 
 impl ItemBehavior for LingeringPotionItem {
+    fn use_item(&self, _context: &mut UseItemContext) -> InteractionResult {
+        static WARN: Once = Once::new();
+        WARN.call_once(|| log::warn!("Lingering potion throwing requires AreaEffectCloud support"));
+        InteractionResult::Pass
+    }
+
     fn get_name<'a>(&self, stack: &'a ItemStack) -> Cow<'a, TextComponent> {
         potion_name(stack)
     }

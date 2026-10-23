@@ -101,7 +101,10 @@ impl SplashPotionEntity {
         if scaled_effect.ends_within(MIN_REMAINING_TICKS) {
             return;
         }
-        living.add_mob_effect(scaled_effect);
+        living.add_mob_effect_with_source(
+            scaled_effect,
+            Some(owner.map_or(self.as_ref() as &dyn Entity, AsRef::as_ref)),
+        );
     }
 }
 

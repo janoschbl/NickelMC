@@ -96,7 +96,8 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
     {
         let hurts = potion_is_in_tag(contents, &PotionTag::HURTS_WATER_SENSITIVE_ENTITIES);
         let extinguishes = potion_is_in_tag(contents, &PotionTag::EXTINGUISHES_ENTITIES);
-        if !hurts && !extinguishes {
+        let rehydrates = potion_is_in_tag(contents, &PotionTag::REHYDRATES_AXOLOTLS);
+        if !hurts && !extinguishes && !rehydrates {
             return;
         }
         let aabb = self.bounding_box().inflate_xyz(4.0, 2.0, 4.0);
@@ -128,8 +129,8 @@ pub trait AbstractThrownPotion: ThrowableItemProjectile {
             }
         }
 
-        // TODO: rehydrate nearby Axolotl entities once Axolotl is implemented
-        // (vanilla `AbstractThrownPotion.onHitAsWater` also calls `Axolotl.rehydrate()`).
+        // TODO: With Axolotl, add affectEntitiesAround's separate spectator-filtered
+        // rehydration pass over this AABB, without the damage/extinguishing radius check.
     }
 
     /// Handles block impact and nearby fire dowsing for water potions

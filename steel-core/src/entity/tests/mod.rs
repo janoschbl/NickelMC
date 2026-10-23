@@ -646,6 +646,76 @@ impl Entity for KnownMovementTestEntity {
     }
 }
 
+#[test]
+fn splash_effect_notifications_preserve_owner_and_ownerless_source() {
+    use crate::entity::entities::SplashPotionEntity;
+    use crate::entity::{AbstractThrownPotion, Projectile, ProjectileHit};
+    use steel_registry::data_components::{PotionContents, vanilla_components};
+
+    init_vanilla_registry();
+    init_behaviors();
+    let fixture = fresh_test_world("splash_effect_source");
+    let world = &fixture.world;
+    insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+    let target = Arc::new(LivingFluidTestEntity::new_in_world(0.0, 0.0, true, world));
+    target.try_set_position(DVec3::new(8.0, 65.0, 8.0)).unwrap();
+    world
+        .try_add_entity(Arc::clone(&target) as SharedEntity)
+        .unwrap();
+    let potion = Arc::new(SplashPotionEntity::new(
+        &vanilla_entities::SPLASH_POTION,
+        2,
+        target.position(),
+        Arc::downgrade(world),
+    ));
+    let owner = PushableTestEntity::shared(3, target.position());
+    owner.base().set_world(Arc::downgrade(world));
+    world.try_add_entity(Arc::clone(&owner)).unwrap();
+    let mut item = ItemStack::new(&vanilla_items::SPLASH_POTION);
+    let hit = ProjectileHit::Block {
+        location: target.position(),
+        hit: crate::world::ClipHitResult {
+            location: target.position(),
+            direction: Direction::Up,
+            block_pos: target.block_position(),
+            miss: false,
+            inside: false,
+            world_border_hit: false,
+        },
+    };
+    for (amplifier, with_owner) in [(0, false), (1, true), (0, true)] {
+        potion.set_owner_entity(with_owner.then_some(&owner));
+        item.set(
+            vanilla_components::POTION_CONTENTS,
+            PotionContents::new(
+                None,
+                None,
+                vec![steel_registry::MobEffectInstance::simple(
+                    vanilla_mob_effects::LUCK,
+                    200,
+                    amplifier,
+                )],
+                None,
+            ),
+        );
+        potion.on_hit_as_potion(world, &item, &hit);
+    }
+    assert_eq!(
+        *target.effect_notifications.lock(),
+        [(false, Some(2), 0), (true, Some(3), 1)]
+    );
+    target.remove_mob_effect(vanilla_mob_effects::LUCK);
+    target.add_mob_effect(MobEffectInstance::with_duration(
+        vanilla_mob_effects::LUCK,
+        200,
+        0,
+    ));
+    assert_eq!(
+        target.effect_notifications.lock().last(),
+        Some(&(false, None, 0))
+    );
+}
+
 struct LivingFluidTestEntity {
     base: EntityBase,
     living_base: LivingEntityBase,
@@ -653,6 +723,7 @@ struct LivingFluidTestEntity {
     health: SyncMutex<f32>,
     damage_types: SyncMutex<Vec<Identifier>>,
     damage_world_keys: SyncMutex<Vec<String>>,
+    effect_notifications: SyncMutex<Vec<(bool, Option<i32>, i32)>>,
     entity_type: EntityTypeRef,
     affected_by_fluids: bool,
     can_stand_on_fluid: bool,
@@ -685,6 +756,7 @@ impl LivingFluidTestEntity {
             health: SyncMutex::new(20.0),
             damage_types: SyncMutex::new(Vec::new()),
             damage_world_keys: SyncMutex::new(Vec::new()),
+            effect_notifications: SyncMutex::new(Vec::new()),
             entity_type: &vanilla_entities::PLAYER,
             affected_by_fluids,
             can_stand_on_fluid: false,
@@ -822,6 +894,18 @@ impl Entity for LivingFluidTestEntity {
 }
 
 impl LivingEntity for LivingFluidTestEntity {
+    fn on_mob_effect_added(&self, effect: &MobEffectInstance, source: Option<&dyn Entity>) {
+        self.effect_notifications
+            .lock()
+            .push((false, source.map(Entity::id), effect.amplifier()));
+    }
+
+    fn on_mob_effect_updated(&self, effect: &MobEffectInstance, source: Option<&dyn Entity>) {
+        self.effect_notifications
+            .lock()
+            .push((true, source.map(Entity::id), effect.amplifier()));
+    }
+
     fn living_base(&self) -> &LivingEntityBase {
         &self.living_base
     }

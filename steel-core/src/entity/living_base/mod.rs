@@ -1080,6 +1080,14 @@ impl LivingEntityBase {
 
     /// Adds or updates active vanilla mob-effect state.
     pub fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
+        self.update_mob_effect(effect).is_some()
+    }
+
+    /// Returns the committed instance and whether it was inserted rather than updated.
+    pub(crate) fn update_mob_effect(
+        &self,
+        effect: MobEffectInstance,
+    ) -> Option<(MobEffectInstance, bool)> {
         let effect_key = effect.effect;
         let mut existing_effect = None;
         let mut changed_effect = None;
@@ -1099,23 +1107,23 @@ impl LivingEntityBase {
             self.add_effect_attribute_modifiers(&effect);
             self.mark_effects_dirty();
             self.queue_mob_effect_sync(MobEffectSyncChange::Update {
-                effect,
+                effect: effect.clone(),
                 blend_for_self: true,
             });
-            return true;
+            return Some((effect, true));
         }
 
         if let Some(effect) = changed_effect {
             self.refresh_effect_attribute_modifiers(&effect);
             self.mark_effects_dirty();
             self.queue_mob_effect_sync(MobEffectSyncChange::Update {
-                effect,
+                effect: effect.clone(),
                 blend_for_self: false,
             });
-            return true;
+            return Some((effect, false));
         }
 
-        false
+        None
     }
 
     /// Sets active vanilla mob-effect state.

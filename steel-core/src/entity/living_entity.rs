@@ -1485,11 +1485,27 @@ pub trait LivingEntity: Entity {
 
     /// Adds or updates active vanilla mob-effect state.
     fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
+        self.add_mob_effect_with_source(effect, None)
+    }
+
+    /// Adds an effect, retaining its source for entity-specific effect callbacks.
+    fn add_mob_effect_with_source(
+        &self,
+        effect: MobEffectInstance,
+        source: Option<&dyn Entity>,
+    ) -> bool {
         if !self.can_be_affected(&effect) {
             return false;
         }
         let (effect_key, amplifier) = (effect.effect(), effect.amplifier());
-        let changed = self.living_base().add_mob_effect(effect);
+        let change = self.living_base().update_mob_effect(effect);
+        if let Some((current, added)) = &change {
+            if *added {
+                self.on_mob_effect_added(current, source);
+            } else {
+                self.on_mob_effect_updated(current, source);
+            }
+        }
         // Mirrors vanilla `newEffect.onEffectStarted(this)`: called
         // unconditionally, even when it didn't replace a stronger instance.
         let dyn_self = self
@@ -1498,8 +1514,14 @@ pub trait LivingEntity: Entity {
         MOB_EFFECT_BEHAVIORS
             .get_behavior(effect_key)
             .on_effect_started(dyn_self, amplifier);
-        changed
+        change.is_some()
     }
+
+    /// Notification after insertion, attribute updates and synchronization have been queued.
+    fn on_mob_effect_added(&self, _effect: &MobEffectInstance, _source: Option<&dyn Entity>) {}
+
+    /// Notification after an existing effect actually changes, with the merged active instance.
+    fn on_mob_effect_updated(&self, _effect: &MobEffectInstance, _source: Option<&dyn Entity>) {}
 
     /// Sets the presence of a vanilla mob effect.
     fn set_mob_effect_active(&self, effect: MobEffectRef, active: bool) {

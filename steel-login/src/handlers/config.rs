@@ -18,7 +18,7 @@ use text_components::TextComponent;
 
 use crate::tcp_client::{ConnectionAction, ConnectionUpdate, JavaTcpClient};
 
-const BRAND_PAYLOAD: [u8; 5] = *b"Steel";
+const BRAND_PAYLOAD: [u8; 8] = *b"NickelMC";
 
 impl JavaTcpClient {
     /// Handles a custom payload packet during the configuration state.

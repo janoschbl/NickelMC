@@ -38,7 +38,7 @@ use steel_utils::{BlockPos, Identifier};
 
 const PLAYER_MAGIC: [u8; 4] = *b"STLP";
 const GLOBAL_MAGIC: [u8; 4] = *b"STLG";
-const PLAYER_STORAGE_VERSION: u16 = 9;
+const PLAYER_STORAGE_VERSION: u16 = 10;
 const GLOBAL_STORAGE_VERSION: u16 = 1;
 const GLOBAL_PLAYER_DATA_VERSION: i32 = 1;
 
@@ -73,6 +73,7 @@ struct PlayerDataFile {
     was_in_powder_snow: bool,
     has_visual_fire: bool,
     health: f32,
+    hurt_time: i16,
     game_mode: i32,
     prev_game_mode: Option<i32>,
     abilities: AbilitiesFile,
@@ -319,6 +320,7 @@ impl PlayerDataFile {
             was_in_powder_snow: data.was_in_powder_snow,
             has_visual_fire: data.has_visual_fire,
             health: data.health,
+            hurt_time: data.hurt_time,
             game_mode: data.game_mode,
             prev_game_mode: data.prev_game_mode,
             abilities: AbilitiesFile {
@@ -403,6 +405,7 @@ impl PlayerDataFile {
             was_in_powder_snow: self.was_in_powder_snow,
             has_visual_fire: self.has_visual_fire,
             health: self.health,
+            hurt_time: self.hurt_time,
             game_mode: self.game_mode,
             prev_game_mode: self.prev_game_mode,
             abilities: PersistentAbilities {

@@ -1482,10 +1482,14 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
 
     /// Returns whether `other` is this entity.
     ///
-    /// Mirrors vanilla `Entity.is`: identity, except that a multipart sub-entity
-    /// also reports its parent as itself.
+    /// Mirrors vanilla `Entity.is`, including `EnderDragonPart.is`: a multipart
+    /// sub-entity also reports its parent as itself.
     fn is_same_entity(&self, other: &dyn Entity) -> bool {
         self.id() == other.id()
+            || self
+                .as_part_entity()
+                .and_then(PartEntity::parent)
+                .is_some_and(|parent| parent.id() == other.id())
     }
 
     /// Returns this entity as a player when it is the concrete server player.

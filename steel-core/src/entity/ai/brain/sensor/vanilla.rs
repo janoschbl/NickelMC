@@ -107,31 +107,33 @@ impl Sensor for NearestLivingEntitySensor {
             .get_entity_by_id(body.id())
             .map(|entity| Arc::downgrade(&entity));
         let weak_level = Arc::downgrade(context.level);
-        let attack_target = context
-            .memories
-            .get_internal(&memories::ATTACK_TARGET)
-            .flatten()
-            .map(|entity| entity.uuid);
-        let visible = NearestVisibleLivingEntities::new(nearby.iter().collect(), move |target| {
-            let Some(body) = weak_body.as_ref().and_then(std::sync::Weak::upgrade) else {
-                return false;
-            };
-            let Some(level) = weak_level.upgrade() else {
-                return false;
-            };
-            let Some(living) = body.as_living_entity() else {
-                return false;
-            };
-            let Some(target) = target.as_living_entity() else {
-                return false;
-            };
-            let mut conditions =
-                TargetingConditions::for_non_combat().range(targeting::follow_range(living));
-            if attack_target == Some(target.uuid()) {
-                conditions = conditions.ignore_invisibility_testing();
-            }
-            conditions.test(level.as_ref(), Some(living), target)
-        });
+        let visible = NearestVisibleLivingEntities::new(
+            nearby.iter().collect(),
+            move |target, current_memories| {
+                let Some(body) = weak_body.as_ref().and_then(std::sync::Weak::upgrade) else {
+                    return false;
+                };
+                let Some(level) = weak_level.upgrade() else {
+                    return false;
+                };
+                let Some(living) = body.as_living_entity() else {
+                    return false;
+                };
+                let Some(target) = target.as_living_entity() else {
+                    return false;
+                };
+                let mut conditions =
+                    TargetingConditions::for_non_combat().range(targeting::follow_range(living));
+                if current_memories
+                    .get_internal(&memories::ATTACK_TARGET)
+                    .flatten()
+                    .is_some_and(|remembered| remembered.uuid == target.uuid())
+                {
+                    conditions = conditions.ignore_invisibility_testing();
+                }
+                conditions.test(level.as_ref(), Some(living), target)
+            },
+        );
         context
             .memories
             .set(&memories::NEAREST_LIVING_ENTITIES, nearby.iter().collect());

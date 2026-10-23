@@ -1,13 +1,13 @@
 //! Lazy visibility results cached for one sensor scan.
 
-use super::{MemoryValue, RememberedEntities};
+use super::{Memories, MemoryValue, RememberedEntities};
 use crate::entity::SharedEntity;
 use rustc_hash::FxHashMap;
 use std::fmt;
 use steel_utils::{DowncastType, DowncastTypeKey, locks::SyncMutex};
 use uuid::Uuid;
 
-type VisibilityTest = Box<dyn Fn(&SharedEntity) -> bool + Send + Sync>;
+type VisibilityTest = Box<dyn Fn(&SharedEntity, &Memories) -> bool + Send + Sync>;
 
 pub struct NearestVisibleLivingEntities {
     nearby: RememberedEntities,
@@ -32,13 +32,13 @@ impl NearestVisibleLivingEntities {
     pub fn empty() -> &'static Self {
         static EMPTY: std::sync::LazyLock<NearestVisibleLivingEntities> =
             std::sync::LazyLock::new(|| {
-                NearestVisibleLivingEntities::new(RememberedEntities::default(), |_| false)
+                NearestVisibleLivingEntities::new(RememberedEntities::default(), |_, _| false)
             });
         &EMPTY
     }
     pub fn new(
         nearby: RememberedEntities,
-        test: impl Fn(&SharedEntity) -> bool + Send + Sync + 'static,
+        test: impl Fn(&SharedEntity, &Memories) -> bool + Send + Sync + 'static,
     ) -> Self {
         Self {
             nearby,
@@ -49,22 +49,26 @@ impl NearestVisibleLivingEntities {
     pub fn nearby_entities(&self) -> &RememberedEntities {
         &self.nearby
     }
-    pub fn find_closest(&self, filter: impl Fn(&SharedEntity) -> bool) -> Option<SharedEntity> {
+    pub fn find_closest(
+        &self,
+        memories: &Memories,
+        filter: impl Fn(&SharedEntity) -> bool,
+    ) -> Option<SharedEntity> {
         self.nearby
             .resolve()
-            .find(|entity| filter(entity) && self.is_visible(entity))
+            .find(|entity| filter(entity) && self.is_visible(entity, memories))
     }
-    pub fn contains(&self, target: &SharedEntity) -> bool {
+    pub fn contains(&self, target: &SharedEntity, memories: &Memories) -> bool {
         self.nearby
             .resolve()
             .any(|entity| std::sync::Arc::ptr_eq(&entity, target))
-            && self.is_visible(target)
+            && self.is_visible(target, memories)
     }
-    fn is_visible(&self, entity: &SharedEntity) -> bool {
+    fn is_visible(&self, entity: &SharedEntity, memories: &Memories) -> bool {
         if let Some(visible) = self.cache.lock().get(&entity.uuid()).copied() {
             return visible;
         }
-        let visible = (self.test)(entity);
+        let visible = (self.test)(entity, memories);
         self.cache.lock().insert(entity.uuid(), visible);
         visible
     }

@@ -1,10 +1,17 @@
 //! Beehive block entity implementation.
 
+use std::io;
 use std::sync::Weak;
 
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::{NbtCompound, NbtList};
-use steel_registry::{vanilla_block_entity_types, vanilla_entities};
+use steel_registry::data_components::{
+    CustomData, DataComponentMap,
+    components::{BeehiveOccupant, Bees, EntityData},
+    vanilla_components::BEES,
+};
+use steel_registry::item_stack::ItemStack;
+use steel_registry::{REGISTRY, RegistryExt, vanilla_block_entity_types, vanilla_entities};
 use steel_utils::{BlockPos, BlockStateId, DowncastType, DowncastTypeKey, locks::SyncMutex};
 
 use crate::block_entity::{BlockEntity, BlockEntityBase};
@@ -130,6 +137,59 @@ impl BeehiveBlockEntity {
 }
 
 impl BlockEntity for BeehiveBlockEntity {
+    fn collect_implicit_components(&self, components: &mut DataComponentMap) -> io::Result<()> {
+        let bees = self
+            .state
+            .lock()
+            .stored
+            .iter()
+            .map(|bee| {
+                let key = bee
+                    .entity_data
+                    .get("id")
+                    .and_then(|tag| tag.string())
+                    .ok_or_else(|| io::Error::other("bee occupant has no entity id"))?
+                    .to_string()
+                    .parse()
+                    .map_err(io::Error::other)?;
+                let kind = REGISTRY
+                    .entity_types
+                    .by_key(&key)
+                    .ok_or_else(|| io::Error::other("unknown bee occupant entity id"))?;
+                let data = CustomData::try_from_compound(bee.entity_data.clone())
+                    .ok_or_else(|| io::Error::other("invalid bee occupant data"))?;
+                Ok(BeehiveOccupant::new(
+                    EntityData::new(kind, data),
+                    bee.ticks_in_hive,
+                    bee.min_ticks_in_hive,
+                ))
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        components.set(BEES, Some(Bees::new(bees)));
+        Ok(())
+    }
+
+    fn apply_components_from_item(&self, item: &ItemStack) {
+        use simdnbt::ToNbtTag as _;
+        self.state.lock().stored = item
+            .get(BEES)
+            .into_iter()
+            .flat_map(|bees| bees.bees())
+            .map(|bee| {
+                let simdnbt::owned::NbtTag::Compound(entity_data) =
+                    bee.entity_data().clone().to_nbt_tag()
+                else {
+                    unreachable!("typed entity data encodes as a compound");
+                };
+                BeeOccupant {
+                    entity_data,
+                    ticks_in_hive: bee.ticks_in_hive(),
+                    min_ticks_in_hive: bee.min_ticks_in_hive(),
+                }
+            })
+            .collect();
+    }
+
     fn base(&self) -> &BlockEntityBase {
         &self.base
     }

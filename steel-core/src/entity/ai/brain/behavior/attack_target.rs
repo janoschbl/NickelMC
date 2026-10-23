@@ -25,13 +25,15 @@ impl StartAttacking {
 }
 impl Behavior for StartAttacking {
     fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
-        &[
-            (memories::ATTACK_TARGET.entry(), MemoryStatus::ValueAbsent),
-            (
-                memories::CANT_REACH_WALK_TARGET_SINCE.entry(),
-                MemoryStatus::Registered,
-            ),
-        ]
+        const {
+            &[
+                (memories::ATTACK_TARGET.entry(), MemoryStatus::ValueAbsent),
+                (
+                    memories::CANT_REACH_WALK_TARGET_SINCE.entry(),
+                    MemoryStatus::Registered,
+                ),
+            ]
+        }
     }
     fn check_extra_start_conditions(&mut self, context: &mut BrainContext<'_>) -> bool {
         let Some(body) = context.mob.as_mob() else {
@@ -76,13 +78,15 @@ impl Default for StopAttackingIfTargetInvalid {
 }
 impl Behavior for StopAttackingIfTargetInvalid {
     fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
-        &[
-            (memories::ATTACK_TARGET.entry(), MemoryStatus::ValuePresent),
-            (
-                memories::CANT_REACH_WALK_TARGET_SINCE.entry(),
-                MemoryStatus::Registered,
-            ),
-        ]
+        const {
+            &[
+                (memories::ATTACK_TARGET.entry(), MemoryStatus::ValuePresent),
+                (
+                    memories::CANT_REACH_WALK_TARGET_SINCE.entry(),
+                    MemoryStatus::Registered,
+                ),
+            ]
+        }
     }
     fn check_extra_start_conditions(&mut self, context: &mut BrainContext<'_>) -> bool {
         let Some(body) = context.mob.as_mob() else {
@@ -94,7 +98,8 @@ impl Behavior for StopAttackingIfTargetInvalid {
             .and_then(RememberedEntity::resolve)
             .is_some_and(|target| {
                 target.as_living_entity().is_some_and(|living| {
-                    living.is_alive() && crate::entity::Mob::can_attack(body, living)
+                    crate::entity::LivingEntity::is_alive(living)
+                        && crate::entity::Mob::can_attack(body, living)
                 }) && target
                     .level()
                     .is_some_and(|level| Arc::ptr_eq(&level, context.level))
@@ -129,15 +134,17 @@ impl SetWalkTargetFromAttackTargetIfTargetOutOfReach {
 }
 impl Behavior for SetWalkTargetFromAttackTargetIfTargetOutOfReach {
     fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
-        &[
-            (memories::WALK_TARGET.entry(), MemoryStatus::Registered),
-            (memories::LOOK_TARGET.entry(), MemoryStatus::Registered),
-            (memories::ATTACK_TARGET.entry(), MemoryStatus::ValuePresent),
-            (
-                memories::NEAREST_VISIBLE_LIVING_ENTITIES.entry(),
-                MemoryStatus::Registered,
-            ),
-        ]
+        const {
+            &[
+                (memories::WALK_TARGET.entry(), MemoryStatus::Registered),
+                (memories::LOOK_TARGET.entry(), MemoryStatus::Registered),
+                (memories::ATTACK_TARGET.entry(), MemoryStatus::ValuePresent),
+                (
+                    memories::NEAREST_VISIBLE_LIVING_ENTITIES.entry(),
+                    MemoryStatus::Registered,
+                ),
+            ]
+        }
     }
     fn check_extra_start_conditions(&mut self, context: &mut BrainContext<'_>) -> bool {
         if context.mob.as_mob().is_none() {
@@ -153,7 +160,7 @@ impl Behavior for SetWalkTargetFromAttackTargetIfTargetOutOfReach {
         if context
             .memories
             .get(&memories::NEAREST_VISIBLE_LIVING_ENTITIES)
-            .is_some_and(|visible| visible.contains(&target))
+            .is_some_and(|visible| visible.contains(&target, context.memories))
             && (self.in_attack_range)(context, &target)
         {
             context.memories.erase(memories::WALK_TARGET.entry());

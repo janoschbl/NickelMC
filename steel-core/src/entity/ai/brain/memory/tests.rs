@@ -1,11 +1,12 @@
-use std::ptr;
+use std::{ptr, sync::Arc};
 
-use steel_utils::DowncastType as _;
+use steel_utils::{DowncastType as _, Identifier};
 
 use super::{
     Memories, MemoryModuleType, MemoryModuleTypeRegistry, MemoryStatus, PackedMemories,
     RememberedEntities, RememberedEntity,
 };
+use crate::bootstrap::init_globals;
 use crate::entity::ai::brain::test_support::{
     Ticks, spawn_pig, test_memory, test_persistent_memory,
 };
@@ -305,7 +306,7 @@ fn extracted_persistent_memories_round_trip_typed_values_and_ttl() {
 
 #[test]
 fn released_entity_retains_identity_without_ownership() {
-    let entity = spawn_entity();
+    let entity = spawn_pig();
     let remembered = RememberedEntity::new(&entity);
     let id = entity.id();
     let uuid = entity.uuid();

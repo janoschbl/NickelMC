@@ -85,14 +85,16 @@ impl Behavior for MoveToTargetSink {
         BehaviorDuration::range(150, 250)
     }
     fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
-        &[
-            (
-                memories::CANT_REACH_WALK_TARGET_SINCE.entry(),
-                MemoryStatus::Registered,
-            ),
-            (memories::PATH.entry(), MemoryStatus::ValueAbsent),
-            (memories::WALK_TARGET.entry(), MemoryStatus::ValuePresent),
-        ]
+        const {
+            &[
+                (
+                    memories::CANT_REACH_WALK_TARGET_SINCE.entry(),
+                    MemoryStatus::Registered,
+                ),
+                (memories::PATH.entry(), MemoryStatus::ValueAbsent),
+                (memories::WALK_TARGET.entry(), MemoryStatus::ValuePresent),
+            ]
+        }
     }
     fn check_extra_start_conditions(&mut self, context: &mut BrainContext<'_>) -> bool {
         if context.mob.as_pathfinder_mob().is_none() {

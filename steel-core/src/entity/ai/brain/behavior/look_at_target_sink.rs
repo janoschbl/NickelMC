@@ -19,7 +19,7 @@ impl LookAtTargetSink {
 }
 impl Behavior for LookAtTargetSink {
     fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
-        &[(memories::LOOK_TARGET.entry(), MemoryStatus::ValuePresent)]
+        const { &[(memories::LOOK_TARGET.entry(), MemoryStatus::ValuePresent)] }
     }
     fn duration(&self) -> BehaviorDuration {
         self.duration
@@ -38,6 +38,7 @@ impl Behavior for LookAtTargetSink {
                         .get_internal(&memories::NEAREST_VISIBLE_LIVING_ENTITIES)
                         .flatten()
                         .unwrap_or_else(|| NearestVisibleLivingEntities::empty()),
+                    context.memories,
                 )
             })
     }

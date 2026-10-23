@@ -359,6 +359,15 @@ impl Player {
         self.send_overlay_message(&message);
     }
 
+    /// Sends vanilla's red `container.spectatorCantOpen` overlay, shown when a menu is refused to a spectator.
+    pub(crate) fn send_spectator_cant_open_message(&self) {
+        let message = translations::CONTAINER_SPECTATOR_CANT_OPEN
+            .msg()
+            .component()
+            .color(Color::Red);
+        self.send_overlay_message(&message);
+    }
+
     /// Updates the player's chat session and initializes the message chain.
     ///
     /// This should be called when receiving a `ChatSessionUpdate` packet from the client.

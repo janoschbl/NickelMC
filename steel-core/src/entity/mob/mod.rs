@@ -10,6 +10,7 @@ use pathfinder::{find_ground_path_target_surface, path_end_node_can_reach_target
 
 use std::sync::Arc;
 
+use crate::loot::{LOOT_TABLES, LootTableRef};
 use glam::DVec3;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
@@ -23,7 +24,6 @@ use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::ItemRef;
-use steel_registry::loot_table::LootTableRef;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::{
@@ -352,6 +352,11 @@ pub trait Mob: LivingEntity + Leashable {
     fn mob_flags(&self) -> i8;
 
     fn set_mob_flags(&self, flags: i8);
+
+    /// Returns whether the entity-specific spawn predicate accepts this spawn.
+    fn check_spawn_rules(&self, _world: &Arc<World>, _reason: EntitySpawnReason) -> bool {
+        true
+    }
 
     /// Returns whether this mob has a saddle equipped.
     fn is_saddled(&self) -> bool {
@@ -1152,7 +1157,7 @@ pub trait Mob: LivingEntity + Leashable {
             .death_loot_table()
             .lock()
             .as_ref()
-            .and_then(|key| REGISTRY.loot_tables.by_key(key))
+            .and_then(|key| LOOT_TABLES.by_key(key))
     }
 
     fn has_custom_death_loot_table(&self) -> bool {

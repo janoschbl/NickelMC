@@ -3,7 +3,10 @@
 
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
+use steel_utils::random::legacy_random::LegacyRandom;
 
+use crate::loot::vanilla_loot_tables;
+use crate::loot::{LootContext, LootTableRef};
 use glam::DVec3;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
@@ -15,16 +18,13 @@ use steel_registry::entity_type::{
     EntityAttachmentPoint, EntityAttachments, EntityDimensions, EntityTypeRef,
 };
 use steel_registry::item_stack::ItemStack;
-use steel_registry::loot_table::{LootContext, LootTableRef};
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_entity_data::ChickenEntityData;
 use steel_registry::vanilla_item_tags::ItemTag;
-use steel_registry::vanilla_loot_tables;
 use steel_registry::{
     REGISTRY, RegistryExt, RegistryReference, TaggedRegistryExt, sound_events, vanilla_game_events,
 };
 use steel_utils::locks::SyncMutex;
-use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, BlockStateId, DowncastType, DowncastTypeKey, Identifier};
 
@@ -373,14 +373,26 @@ impl ChickenEntity {
     /// `gameplay/chicken_lay` table, returning whether any item was dropped.
     fn drop_gift_loot_table(&self, loot_table: LootTableRef) -> bool {
         let position = self.position();
-        let mut rng = rand::rng();
         let equipment = living_loot_equipment(self);
-        // Vanilla `LootContextParamSets.GIFT` carries only ORIGIN and THIS_ENTITY.
-        let mut context = LootContext::new(&mut rng)
-            .with_origin(position.x, position.y, position.z)
-            .with_this_entity(entity_loot_ref(self, Some(&equipment)));
-
-        let items = loot_table.get_random_items(&mut context);
+        let Some(world) = self.level() else {
+            return false;
+        };
+        let items = world.with_loot_random(loot_table, 0, |loot_rng| {
+            // Vanilla `LootContextParamSets.GIFT` carries only ORIGIN and THIS_ENTITY.
+            let context = LootContext::new(loot_rng)
+                .with_origin(position.x, position.y, position.z)
+                .with_this_entity(entity_loot_ref(self, Some(&equipment)))
+                .with_world(&world);
+            let mut context = context;
+            loot_table.get_random_items(&mut context)
+        });
+        let items = match items {
+            Ok(items) => items,
+            Err(error) => {
+                log::error!("Failed to generate gift loot {}: {error}", loot_table.key);
+                return false;
+            }
+        };
         let dropped_any = !items.is_empty();
         for item in items {
             self.spawn_at_location(item, EGG_LAY_SPAWN_Y_OFFSET);

@@ -1,3 +1,4 @@
+use crate::loot::LOOT_TABLES;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;
@@ -5,6 +6,8 @@ use steel_registry::{DyeColor, vanilla_custom_stats};
 
 use super::*;
 use crate::behavior::{BLOCK_BEHAVIORS, InventoryTickContext, MOB_EFFECT_BEHAVIORS};
+use crate::entity::ai::brain::memory::{MEMORY_MODULE_TYPES, PackedMemories};
+use crate::entity::ai::brain::{Brain, BrainProvider};
 use crate::entity::consume_effect::apply_consume_effect;
 use crate::entity::damage::RecentDamageSource;
 
@@ -18,10 +21,81 @@ const BED_SLEEP_POSITION_OFFSET: f64 = 0.125;
 /// **Note:** All methods take `&self` (not `&mut self`) because living entities
 /// are shared via `Arc` and use interior mutability (`SyncMutex`, etc.).
 pub trait LivingEntity: Entity {
+    /// Returns the preferred poses to try when leaving a vehicle.
+    fn dismount_poses(&self) -> &'static [EntityPose] {
+        &[EntityPose::Standing]
+    }
+
+    /// Places a detached passenger at the vehicle's safe exit or collision-safe fallback.
+    fn dismount_vehicle(&self, vehicle: &dyn Entity) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        let target = if self.is_removed() {
+            self.position()
+        } else if !vehicle.is_removed()
+            && !world
+                .get_block_state(vehicle.block_position())
+                .get_block()
+                .has_tag(&steel_registry::vanilla_block_tags::BlockTag::PORTALS)
+        {
+            let Some(passenger) = self.as_living_entity() else {
+                return;
+            };
+            vehicle.dismount_location_for_passenger(passenger)
+        } else {
+            let mut target = self.position();
+            target.y = target.y.max(vehicle.position().y);
+            let dimensions = self.dimensions_for_pose(self.pose());
+            if dimensions.width <= 4.0 && dimensions.height <= 4.0 {
+                let width = f64::from(dimensions.width);
+                let height = f64::from(dimensions.height);
+                let center = target + DVec3::Y * (height / 2.0);
+                let allowed = [WorldAabb::of_size(center, width, height, width)];
+                if let Some(free) =
+                    WorldCollisionProvider::for_entity(&world, self.as_entity_event_source())
+                        .find_free_position(&allowed, center, width, height, width)
+                {
+                    target = free - DVec3::Y * (height / 2.0);
+                }
+            }
+            target
+        };
+        if let Err(error) = self.teleport_to(target) {
+            log::warn!("Failed to dismount entity {}: {error}", self.id());
+        }
+    }
+
     /// Returns a reference to the shared [`LivingEntityBase`] that holds
     /// living runtime state such as attributes, cached movement speed,
     /// damage cooldown, and death animation counters.
     fn living_base(&self) -> &LivingEntityBase;
+
+    /// Declares this species' memories, sensors and per-body activities.
+    /// Species with no brain AI use vanilla's empty brain.
+    fn brain_provider(&self) -> Option<&BrainProvider> {
+        None
+    }
+
+    /// Rebuilds fresh sensor/behavior instances around saved persistent memories.
+    /// Species can also call this after construction or a profession change.
+    fn rebuild_brain(&self, packed: &PackedMemories) {
+        let brain = self.brain_provider().map_or_else(Brain::new, |provider| {
+            provider.make_brain(self.as_entity_event_source(), packed)
+        });
+        *self.living_base().brain().lock() = brain;
+    }
+
+    /// Runs this species' brain in its custom server AI step. Goal-driven mobs
+    /// do not call this hook and retain their existing AI.
+    fn tick_brain(&self) {
+        if let Some(level) = self.level() {
+            self.living_base()
+                .brain()
+                .lock()
+                .tick(self.as_entity_event_source(), &level);
+        }
+    }
 
     /// Returns vanilla living body/head rotation state.
     fn living_rotation_state(&self) -> LivingRotationState {
@@ -60,6 +134,17 @@ pub trait LivingEntity: Entity {
         self.living_base().tick_swing_state();
         self.entity_base_tick();
         self.tick_living_environmental_damage();
+        self.living_base().decrement_hurt_time();
+        if self.as_player().is_none() {
+            self.living_base().decrement_invulnerable_time();
+        }
+        if self.is_dead_or_dying() {
+            self.tick_death();
+        }
+        self.living_base().tick_last_hurt_by_player_memory();
+        self.living_base()
+            .tick_living_combat_memory(self.tick_count());
+        self.tick_mob_effects();
     }
 
     /// Returns vanilla arm-swing animation state.
@@ -177,6 +262,31 @@ pub trait LivingEntity: Entity {
     /// Drains equipment slots that changed since the last tracker sync.
     fn drain_dirty_equipment(&self) -> Vec<EquipmentSlotItem> {
         self.drain_dirty_living_equipment()
+    }
+
+    /// Saves the shared living state used by mob persistence.
+    fn save_living(&self, nbt: &mut NbtCompound) {
+        nbt.insert("HurtTime", self.living_base().hurt_time() as i16);
+        let mut brain = NbtCompound::new();
+        brain.insert(
+            "memories",
+            self.living_base().brain().lock().pack().to_nbt(),
+        );
+        nbt.insert("Brain", brain);
+        self.save_equipment(nbt);
+    }
+
+    /// Loads shared living state, including spawn NBT.
+    fn load_living(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        let packed = nbt
+            .compound("Brain")
+            .and_then(|brain| brain.compound("memories"))
+            .map(|memories| PackedMemories::from_nbt(&memories.to_owned(), &MEMORY_MODULE_TYPES))
+            .unwrap_or_default();
+        self.rebuild_brain(&packed);
+        self.living_base()
+            .set_hurt_time(nbt.short("HurtTime").unwrap_or(0));
+        self.load_equipment(nbt);
     }
 
     /// Saves equipment slots to NBT.
@@ -512,6 +622,56 @@ pub trait LivingEntity: Entity {
         history.record(self.base(), source, &world.game_time);
     }
 
+    /// Records nonzero damage after mitigation and before health loss.
+    fn record_combat_damage(&self, source: &DamageSource, damage: f32) {
+        let Some(victim) = self.as_living_entity() else {
+            return;
+        };
+        let Some(world) = self.level() else {
+            panic!("recording combat requires the victim's level");
+        };
+        let Some(history) = world.damage_history.upgrade() else {
+            panic!("recording combat requires server damage history");
+        };
+        let changes = self.base().damage_history().record_combat(
+            &history,
+            self.generation(),
+            damage::combat::CombatEntry::new(victim, source, damage),
+            self.tick_count(),
+            Entity::is_alive(self),
+        );
+        changes.apply(victim);
+    }
+
+    /// Expires combat using the victim's entity tick count, not world time.
+    fn recheck_combat_status(&self) {
+        let Some(victim) = self.as_living_entity() else {
+            return;
+        };
+        let changes = self
+            .base()
+            .damage_history()
+            .recheck_combat(self.tick_count(), Entity::is_alive(self));
+        changes.apply(victim);
+    }
+
+    /// Notifies the entity when damage from a living attacker starts combat.
+    fn on_enter_combat(&self) {}
+
+    /// Notifies the entity after combat ends, before its entries are released.
+    fn on_leave_combat(&self, _duration: i32) {}
+
+    /// Builds the death message while the exact historical sources are retained.
+    fn combat_death_message(&self) -> TextComponent {
+        let Some(victim) = self.as_living_entity() else {
+            panic!("living death messages require a living entity");
+        };
+        self.base()
+            .damage_history()
+            .combat_tracker()
+            .death_message(victim)
+    }
+
     /// Records the player that last hurt this entity.
     fn set_last_hurt_by_player(&self, player_uuid: Uuid, time_to_remember: i32) {
         self.living_base()
@@ -667,6 +827,11 @@ pub trait LivingEntity: Entity {
     /// `world` is the `ServerLevel` supplied by the vanilla caller. It may
     /// intentionally differ from the entity's attached world.
     fn hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
+        self.default_hurt_server(world, source, amount)
+    }
+
+    /// Runs the base `LivingEntity.hurtServer` body, for overrides that call `super.hurtServer`.
+    fn default_hurt_server(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
         if self.is_invulnerable_to(world, source) {
             return false;
         }
@@ -711,6 +876,9 @@ pub trait LivingEntity: Entity {
 
         self.before_actually_hurt(source, effective_amount);
         self.actually_hurt(world, source, effective_amount);
+        if took_full_damage {
+            self.living_base().begin_hurt_animation();
+        }
         self.resolve_mob_responsible_for_damage(source);
         self.resolve_player_responsible_for_damage(source);
 
@@ -868,6 +1036,7 @@ pub trait LivingEntity: Entity {
         }
 
         if damage != 0.0 {
+            self.record_combat_damage(source, damage);
             self.set_health(self.get_health() - damage);
             self.set_absorption_amount(self.get_absorption_amount() - damage);
             self.game_event(&vanilla_game_events::ENTITY_DAMAGE);
@@ -1033,6 +1202,8 @@ pub trait LivingEntity: Entity {
             return;
         }
 
+        self.handle_killing_blow();
+
         // Can't directly use &self for &dyn LivingEntity, as the compiler doesn't know if it's Sized.
         // Using a function meant for getting &dyn LivingEntity directly works well here.
         if let Some(world) = self.level()
@@ -1050,6 +1221,9 @@ pub trait LivingEntity: Entity {
         self.broadcast_entity_event(EntityStatus::Death);
         self.set_pose(EntityPose::Dying);
     }
+
+    /// Applies entity specific death behavior after death handling is claimed.
+    fn handle_killing_blow(&self) {}
 
     /// Returns whether this entity should drop loot on death: not a baby,
     /// and the mob-drops game rule allows it.
@@ -1144,7 +1318,7 @@ pub trait LivingEntity: Entity {
 
         let entity_type = self.entity_type();
         let loot_key = Identifier::vanilla(format!("entities/{}", entity_type.key.path));
-        REGISTRY.loot_tables.by_key(&loot_key)
+        LOOT_TABLES.by_key(&loot_key)
     }
 
     /// Returns the loot-table seed for this entity's death loot, if it's a mob.
@@ -1168,26 +1342,22 @@ pub trait LivingEntity: Entity {
         };
 
         let seed = self.death_loot_table_seed();
-        let drops = if seed == 0 {
-            let mut rng = rand::rng();
-            death_loot_items_with_rng(
+        let drops = world.with_loot_random(loot_table, seed, |rng| {
+            Ok(death_loot_items_with_rng(
                 self,
                 loot_table,
                 world.as_ref(),
                 source,
                 killed_by_player,
-                &mut rng,
-            )
-        } else {
-            let mut rng = StdRng::seed_from_u64(seed as u64);
-            death_loot_items_with_rng(
-                self,
-                loot_table,
-                world.as_ref(),
-                source,
-                killed_by_player,
-                &mut rng,
-            )
+                rng,
+            ))
+        });
+        let drops = match drops {
+            Ok(drops) => drops,
+            Err(error) => {
+                log::error!("Failed to generate death loot {}: {error}", loot_table.key);
+                return;
+            }
         };
 
         if has_custom_death_loot_table && let Some(mob) = self.as_mob() {
@@ -1648,7 +1818,7 @@ pub trait LivingEntity: Entity {
     /// Visits the item in a vanilla living-entity equipment slot.
     fn with_equipment_slot(&self, slot: EquipmentSlot, visitor: &mut dyn FnMut(&ItemStack)) {
         let equipment = self.living_base().equipment().lock();
-        visitor(equipment.get_ref(slot));
+        visitor(&equipment.get_ref(slot));
     }
 
     /// Returns whether the item in this entity's main hand matches `predicate`.
@@ -1682,7 +1852,7 @@ pub trait LivingEntity: Entity {
         visitor: &mut dyn FnMut(&mut ItemStack),
     ) {
         let mut equipment = self.living_base().equipment().lock();
-        visitor(equipment.get_mut(slot));
+        visitor(&mut equipment.get_mut(slot));
     }
 
     /// Returns whether this entity currently has an item in `slot`.
@@ -1776,7 +1946,7 @@ pub trait LivingEntity: Entity {
             }
 
             let mut inventory = player.inventory.lock();
-            if !self.is_equippable_in_slot(inventory.get_item_in_hand(hand), slot) {
+            if !self.is_equippable_in_slot(&inventory.get_item_in_hand(hand), slot) {
                 return InteractionResult::Pass;
             }
 
@@ -1971,12 +2141,10 @@ pub trait LivingEntity: Entity {
     /// The default `Entity::tick` dispatches living entities here.
     fn tick_living_entity(&self, entity: &SharedEntity) {
         self.default_tick();
-        self.living_base().decrement_invulnerable_time();
-        self.tick_mob_effects();
         self.detect_equipment_updates();
 
-        if self.is_dead_or_dying() {
-            self.tick_death();
+        if self.tick_count() % 20 == 0 {
+            self.recheck_combat_status();
         }
 
         if !self.is_removed() {
@@ -1995,9 +2163,6 @@ pub trait LivingEntity: Entity {
             .tick_fall_flying_state(self.is_fall_flying());
         self.refresh_dirty_attributes();
         self.living_base().tick_post_impulse_grace_time();
-        self.living_base().tick_last_hurt_by_player_memory();
-        self.living_base()
-            .tick_living_combat_memory(self.tick_count());
     }
 
     /// Returns whether the given item in the given slot allows elytra-style gliding.
@@ -2511,10 +2676,11 @@ pub trait LivingEntity: Entity {
         }
     }
 
-    /// Returns the vertical friction used by `travelInAir`.
-    fn air_travel_vertical_friction(&self, _horizontal_friction: f32) -> f32 {
-        // TODO: FlyingAnimal uses horizontal friction here once animal types exist.
-        0.98
+    /// The `AIR_DRAG_MODIFIER` attribute value narrowed to `f32` like vanilla's cast.
+    fn air_drag_modifier(&self) -> f32 {
+        self.attributes()
+            .lock()
+            .required_value(vanilla_attributes::AIR_DRAG_MODIFIER) as f32
     }
 
     /// Clamps movement while on a climbable block: caps horizontal and
@@ -2587,7 +2753,9 @@ pub trait LivingEntity: Entity {
         } else {
             1.0
         };
-        let horizontal_friction = block_friction * 0.91;
+        let air_drag_modifier = self.air_drag_modifier();
+        let air_drag = compute_modified_friction(BASE_HORIZONTAL_AIR_DRAG, air_drag_modifier);
+        let horizontal_friction = block_friction * air_drag;
         let (movement, result) =
             self.handle_relative_friction_and_calculate_movement(entity, input, block_friction)?;
         let movement_y = if let Some(levitation_y) = self.levitation_travel_y_delta(movement.y) {
@@ -2599,7 +2767,11 @@ pub trait LivingEntity: Entity {
         if self.should_discard_friction() {
             self.set_velocity(DVec3::new(movement.x, movement_y, movement.z));
         } else {
-            let vertical_friction = self.air_travel_vertical_friction(horizontal_friction);
+            let vertical_friction = if self.omnidirectional_air_mover() {
+                air_drag
+            } else {
+                compute_modified_friction(BASE_VERTICAL_AIR_DRAG, air_drag_modifier)
+            };
             self.set_velocity(DVec3::new(
                 movement.x * f64::from(horizontal_friction),
                 movement_y * f64::from(vertical_friction),
@@ -3181,13 +3353,13 @@ fn random_teleport_ground_y(world: &Arc<World>, x: f64, y: f64, z: f64) -> Optio
     None
 }
 
-fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
+fn death_loot_items_with_rng<E: LivingEntity + ?Sized>(
     entity: &E,
     loot_table: LootTableRef,
     world: &World,
     source: &DamageSource,
     killed_by_player: bool,
-    rng: &mut R,
+    rng: &mut RandomSource,
 ) -> Vec<ItemStack> {
     let causing_entity = source.causing_entity().map(AsRef::as_ref);
     let direct_entity = source.direct_entity().map(AsRef::as_ref);
@@ -3201,6 +3373,10 @@ fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
     let this_equipment = living_loot_equipment(entity);
     let causing_equipment = causing_entity.and_then(loot_equipment);
     let direct_equipment = direct_entity.and_then(loot_equipment);
+    let luck = last_damage_player
+        .as_deref()
+        .and_then(Entity::as_living_entity)
+        .map_or(0.0, LivingEntity::get_luck);
     let last_damage_player_equipment = last_damage_player.as_deref().and_then(loot_equipment);
     let this_entity = entity_loot_ref(entity.as_entity_event_source(), Some(&this_equipment));
     let causing_entity =
@@ -3217,6 +3393,8 @@ fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
     };
 
     let mut context = LootContext::new(rng)
+        .with_luck(luck)
+        .with_world(world)
         .with_origin(position.x, position.y, position.z)
         .with_game_time(world.game_time())
         .with_killed_by_player(killed_by_player)
@@ -3232,16 +3410,44 @@ fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
         context = context.with_last_damage_player(entity);
     }
 
-    loot_table.get_random_items(&mut context)
+    match loot_table.get_random_items(&mut context) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!("Failed to generate loot {}: {error}", loot_table.key);
+            Vec::new()
+        }
+    }
 }
 
 /// Runs vanilla `LivingEntity.dropFromShearingLootTable` for `loot_table`, returning the
 /// drops resolved with the vanilla shearing loot params (origin, entity, tool).
-pub(crate) fn shearing_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
+pub(crate) fn shearing_loot_items<E: LivingEntity + ?Sized>(
     entity: &E,
     loot_table: LootTableRef,
     tool: &ItemStack,
-    rng: &mut R,
+) -> Vec<ItemStack> {
+    let Some(world) = entity.level() else {
+        return Vec::new();
+    };
+    match world.with_loot_random(loot_table, 0, |rng| {
+        Ok(shearing_loot_items_with_rng(entity, loot_table, tool, rng))
+    }) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!(
+                "Failed to generate shearing loot {}: {error}",
+                loot_table.key
+            );
+            Vec::new()
+        }
+    }
+}
+
+pub(crate) fn shearing_loot_items_with_rng<E: LivingEntity + ?Sized>(
+    entity: &E,
+    loot_table: LootTableRef,
+    tool: &ItemStack,
+    rng: &mut RandomSource,
 ) -> Vec<ItemStack> {
     let position = entity.position();
     let equipment = living_loot_equipment(entity);
@@ -3252,8 +3458,15 @@ pub(crate) fn shearing_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Size
             Some(&equipment),
         ))
         .with_tool(tool);
-    if let Some(level) = entity.level() {
-        context = context.with_game_time(level.game_time());
+    let level = entity.level();
+    if let Some(level) = level.as_deref() {
+        context = context.with_world(level).with_game_time(level.game_time());
     }
-    loot_table.get_random_items(&mut context)
+    match loot_table.get_random_items(&mut context) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!("Failed to generate loot {}: {error}", loot_table.key);
+            Vec::new()
+        }
+    }
 }

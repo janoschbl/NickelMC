@@ -1,4 +1,5 @@
 //! Grindstone menu.
+use crate::inventory::stack_reference::StackItems;
 use crate::player::player_inventory::Prediction;
 use std::sync::Arc;
 
@@ -123,7 +124,7 @@ impl GrindstoneKind {
             return;
         };
 
-        let [first, second] = input_container.items() else {
+        let StackItems::Owned([first, second]) = input_container.items() else {
             log::warn!("input_container in grindstone menu does not fit expected shape");
             return;
         };

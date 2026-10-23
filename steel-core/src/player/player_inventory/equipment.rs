@@ -9,6 +9,7 @@ use steel_utils::types::InteractionHand;
 use crate::inventory::{
     container::Container,
     equipment::{EntityEquipment, EquipmentSlot},
+    stack_reference::{StackRead, StackReference, StackWrite},
 };
 
 use super::core::PlayerInventory;
@@ -43,9 +44,22 @@ const fn equipment_to_slot(slot: EquipmentSlot, selected: u8) -> usize {
 }
 
 impl PlayerInventory {
+    /// Retains the actual held stack object across slot replacements.
+    #[must_use]
+    pub fn item_in_hand_reference(&self, hand: InteractionHand) -> StackReference {
+        let slot = hand_to_equipment_slot(hand);
+        self.items[self.equipment_slot_index(slot)].clone()
+    }
+
+    /// Installs an existing stack object without copying it.
+    pub fn set_hand_reference(&mut self, hand: InteractionHand, stack: StackReference) {
+        let slot = self.equipment_slot_index(hand_to_equipment_slot(hand));
+        self.items[slot] = stack;
+        self.set_changed();
+    }
     /// Gets the item in the specified hand.
     #[must_use]
-    pub fn get_item_in_hand(&self, hand: InteractionHand) -> &ItemStack {
+    pub fn get_item_in_hand(&self, hand: InteractionHand) -> StackRead<'_> {
         match hand {
             InteractionHand::MainHand => self.get_selected_item(),
             InteractionHand::OffHand => self.get_offhand_item(),
@@ -54,7 +68,7 @@ impl PlayerInventory {
 
     /// Gets the item in the specified hand.
     #[must_use]
-    pub fn get_item_in_hand_mut(&mut self, hand: InteractionHand) -> &mut ItemStack {
+    pub fn get_item_in_hand_mut(&mut self, hand: InteractionHand) -> StackWrite<'_> {
         match hand {
             InteractionHand::MainHand => self.get_selected_item_mut(),
             InteractionHand::OffHand => self.get_offhand_item_mut(),
@@ -102,7 +116,7 @@ impl PlayerInventory {
         }
 
         let changed = {
-            let item = self.get_item_in_hand_mut(hand);
+            let mut item = self.get_item_in_hand_mut(hand);
             let previous_item = item.item();
             let previous_count = item.count();
             let previous_damage = item.get_damage_value();
@@ -143,7 +157,7 @@ impl PlayerInventory {
         }
 
         let changed = {
-            let item = self.get_item_in_hand_mut(hand);
+            let mut item = self.get_item_in_hand_mut(hand);
             let previous_item = item.item();
             let previous_count = item.count();
             let previous_damage = item.get_damage_value();
@@ -170,14 +184,12 @@ impl PlayerInventory {
     ///
     /// Returns true when the visible hand contents changed.
     pub fn swap_hands(&mut self) -> bool {
-        if ItemStack::matches(self.get_selected_item(), self.get_offhand_item()) {
+        if ItemStack::matches(&self.get_selected_item(), &self.get_offhand_item()) {
             return false;
         }
 
-        let main_hand = EntityEquipment::take(self, EquipmentSlot::MainHand);
-        let offhand = EntityEquipment::take(self, EquipmentSlot::OffHand);
-        let _ = EntityEquipment::set(self, EquipmentSlot::MainHand, offhand);
-        let _ = EntityEquipment::set(self, EquipmentSlot::OffHand, main_hand);
+        self.items.swap(self.selected as usize, Self::SLOT_OFFHAND);
+        self.set_changed();
         true
     }
 
@@ -188,24 +200,23 @@ impl PlayerInventory {
         slot: EquipmentSlot,
         has_infinite_materials: bool,
     ) -> EquipmentSwapResult {
-        let in_hand = self.get_item_in_hand(hand);
-        if in_hand.is_empty() {
-            return EquipmentSwapResult::Fail;
-        }
+        let count = {
+            let in_hand = self.get_item_in_hand(hand);
+            if in_hand.is_empty() {
+                return EquipmentSwapResult::Fail;
+            }
+            let in_equipment_slot = EntityEquipment::get_ref(self, slot);
+            if ItemStack::is_same_item_same_components(&in_hand, &in_equipment_slot)
+                || (!has_infinite_materials
+                    && in_equipment_slot
+                        .has_enchantment_effect(EnchantmentEffectComponent::PreventArmorChange))
+            {
+                return EquipmentSwapResult::Fail;
+            }
+            in_hand.count()
+        };
 
-        let in_equipment_slot = EntityEquipment::get_ref(self, slot);
-        if ItemStack::is_same_item_same_components(in_hand, in_equipment_slot) {
-            return EquipmentSwapResult::Fail;
-        }
-
-        if !has_infinite_materials
-            && in_equipment_slot
-                .has_enchantment_effect(EnchantmentEffectComponent::PreventArmorChange)
-        {
-            return EquipmentSwapResult::Fail;
-        }
-
-        if in_hand.count() <= 1 {
+        if count <= 1 {
             self.swap_single_item_with_equipment_slot(hand, slot, has_infinite_materials);
             return EquipmentSwapResult::Success(ItemStack::empty());
         }
@@ -233,7 +244,7 @@ impl PlayerInventory {
 
             let selected = rand::random_range(0..candidates.len());
             let slot = candidates[selected];
-            let item = EntityEquipment::get_mut(self, slot);
+            let mut item = EntityEquipment::get_mut(self, slot);
             let to_repair = item
                 .apply_unconditional_enchantment_value_effects(
                     EnchantmentEffectComponent::RepairWithXp,
@@ -277,9 +288,10 @@ impl PlayerInventory {
             return;
         }
 
-        let held = self.take_item_in_hand(hand);
-        let previous = EntityEquipment::set(self, slot, held);
-        self.set_item_in_hand(hand, previous);
+        let hand_index = self.equipment_slot_index(hand_to_equipment_slot(hand));
+        let equipment_index = self.equipment_slot_index(slot);
+        self.items.swap(hand_index, equipment_index);
+        self.set_changed();
     }
 
     fn repair_with_xp_candidate_slots(&self) -> Vec<EquipmentSlot> {
@@ -311,13 +323,6 @@ impl PlayerInventory {
         }
         slots
     }
-
-    fn take_item_in_hand(&mut self, hand: InteractionHand) -> ItemStack {
-        match hand {
-            InteractionHand::MainHand => EntityEquipment::take(self, EquipmentSlot::MainHand),
-            InteractionHand::OffHand => EntityEquipment::take(self, EquipmentSlot::OffHand),
-        }
-    }
 }
 
 impl PlayerInventory {
@@ -327,40 +332,43 @@ impl PlayerInventory {
 }
 
 impl EntityEquipment for PlayerInventory {
-    fn get_ref(&self, slot: EquipmentSlot) -> &ItemStack {
-        &self.items[self.equipment_slot_index(slot)]
+    fn get_ref(&self, slot: EquipmentSlot) -> StackRead<'_> {
+        self.items[self.equipment_slot_index(slot)].read()
     }
 
-    fn get_mut(&mut self, slot: EquipmentSlot) -> &mut ItemStack {
+    fn get_mut(&mut self, slot: EquipmentSlot) -> StackWrite<'_> {
         let inventory_index = self.equipment_slot_index(slot);
-        &mut self.items[inventory_index]
+        self.items[inventory_index].write()
     }
 
     fn set(&mut self, slot: EquipmentSlot, stack: ItemStack) -> ItemStack {
         let inventory_index = self.equipment_slot_index(slot);
-        let old = mem::replace(&mut self.items[inventory_index], stack);
+        let old = mem::replace(&mut self.items[inventory_index], StackReference::new(stack));
         Container::set_changed(self);
-        old
+        old.snapshot()
     }
 
     fn take(&mut self, slot: EquipmentSlot) -> ItemStack {
         let inventory_index = self.equipment_slot_index(slot);
-        let old = mem::take(&mut self.items[inventory_index]);
-        if !old.is_empty() {
+        let old = mem::replace(
+            &mut self.items[inventory_index],
+            StackReference::new(ItemStack::empty()),
+        );
+        if !old.read().is_empty() {
             Container::set_changed(self);
         }
-        old
+        old.snapshot()
     }
 
     fn clear(&mut self) {
         let mut changed = false;
         for slot in EquipmentSlot::ALL {
             let inventory_index = self.equipment_slot_index(slot);
-            if self.items[inventory_index].is_empty() {
+            if self.items[inventory_index].read().is_empty() {
                 continue;
             }
 
-            self.items[inventory_index] = ItemStack::empty();
+            self.items[inventory_index] = StackReference::new(ItemStack::empty());
             changed = true;
         }
         if changed {

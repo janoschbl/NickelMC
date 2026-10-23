@@ -20,10 +20,6 @@ use crate::physics::{CollisionWorld, WorldCollisionProvider};
 use crate::world::World;
 
 #[must_use]
-#[expect(
-    dead_code,
-    reason = "vanilla DismountHelper foundation; vehicle dismounts use this next"
-)]
 pub(crate) const fn offsets_for_direction(forward: steel_utils::Direction) -> [(i32, i32); 8] {
     let right = forward.rotate_y_clockwise();
     let left = right.opposite();
@@ -46,10 +42,20 @@ pub(crate) const fn offsets_for_direction(forward: steel_utils::Direction) -> [(
 }
 
 #[must_use]
-pub(crate) fn can_dismount_to(world: &Arc<World>, aabb: &WorldAabb) -> bool {
-    let collision_world = WorldCollisionProvider::new(world);
-    !collision_world.has_block_collision_with_context(aabb, BlockCollisionContext::empty())
-        && world.world_border_snapshot().is_within_bounds(*aabb)
+pub(crate) fn can_dismount_to(
+    world: &Arc<World>,
+    passenger: &dyn Entity,
+    aabb: &WorldAabb,
+) -> bool {
+    let collision_world = WorldCollisionProvider::for_entity(world, passenger);
+    !collision_world.has_block_collision_with_context(
+        aabb,
+        collision_world.entity_collision_context(
+            passenger.position().y,
+            passenger.is_descending(),
+            false,
+        ),
+    ) && world.world_border_snapshot().is_within_bounds(*aabb)
 }
 
 #[must_use]
@@ -71,14 +77,10 @@ pub(crate) fn can_dismount_to_pose(
         f64::from(dimensions.half_width()),
         f64::from(dimensions.height),
     );
-    can_dismount_to(world, &aabb)
+    can_dismount_to(world, passenger, &aabb)
 }
 
 #[must_use]
-#[expect(
-    dead_code,
-    reason = "vanilla DismountHelper foundation; vehicle dismounts use this next"
-)]
 pub(crate) fn find_ceiling_from(
     pos: BlockPos,
     blocks: i32,
@@ -136,7 +138,7 @@ pub(crate) fn find_safe_dismount_location(
         f64::from(dimensions.half_width()),
         f64::from(dimensions.height),
     );
-    if !can_dismount_to(world, &aabb) {
+    if !can_dismount_to(world, entity, &aabb) {
         return None;
     }
 
@@ -156,7 +158,7 @@ pub(crate) fn find_safe_dismount_location(
     Some(position)
 }
 
-fn non_climbable_shape(world: &Arc<World>, pos: BlockPos) -> OffsetVoxelShape {
+pub(crate) fn non_climbable_shape(world: &Arc<World>, pos: BlockPos) -> OffsetVoxelShape {
     let state = world.get_block_state(pos);
     let block = state.get_block();
     let is_open_trapdoor = block.has_tag(&BlockTag::TRAPDOORS)
@@ -184,7 +186,10 @@ fn non_climbable_shape(world: &Arc<World>, pos: BlockPos) -> OffsetVoxelShape {
     )
 }
 
-fn block_floor_height(block_shape: OffsetVoxelShape, below_block_shape: OffsetVoxelShape) -> f64 {
+pub(crate) fn block_floor_height(
+    block_shape: OffsetVoxelShape,
+    below_block_shape: OffsetVoxelShape,
+) -> f64 {
     if !block_shape.is_empty() {
         return block_shape.max(Axis::Y);
     }
@@ -197,7 +202,7 @@ fn block_floor_height(block_shape: OffsetVoxelShape, below_block_shape: OffsetVo
     }
 }
 
-fn is_block_floor_valid(block_floor_height: f64) -> bool {
+pub(crate) fn is_block_floor_valid(block_floor_height: f64) -> bool {
     !block_floor_height.is_infinite() && block_floor_height < 1.0
 }
 

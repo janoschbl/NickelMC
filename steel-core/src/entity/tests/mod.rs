@@ -1,3 +1,4 @@
+use crate::loot::vanilla_loot_tables;
 use std::{
     io::Cursor,
     sync::{Arc, Weak},
@@ -20,7 +21,7 @@ use steel_registry::vanilla_entity_data::LivingEntityData as SyncedLivingEntityD
 use steel_registry::{
     REGISTRY, init_vanilla_registry, sound_events, vanilla_attributes, vanilla_blocks,
     vanilla_damage_types, vanilla_entities, vanilla_fluids, vanilla_game_events, vanilla_items,
-    vanilla_loot_tables, vanilla_mob_effects,
+    vanilla_mob_effects,
 };
 use steel_utils::Downcast as _;
 use steel_utils::locks::SyncMutex;
@@ -52,12 +53,12 @@ use super::{
     DEFAULT_SWING_DURATION, DEFAULT_TICKS_REQUIRED_TO_FREEZE, ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
     ENTITY_LOAD_MAX_VERTICAL_POSITION, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
     EntityMoveError, EntityOwnership, EntitySyncedData, EntityVerticalMovementStateUpdate,
-    InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity, LivingEntityBase,
-    LivingTravelInput, MobEffectInstance, RemovalReason, SPEED_MODIFIER_POWDER_SNOW_ID,
-    SharedEntity, block_state_suffocates_eye_box, closest_open_space_direction,
-    fall_damage_reset_clip_target, fall_flying_collision_damage, fall_flying_free_fall_interval,
-    get_input_vector, indirect_passengers, passenger_transition_position,
-    passenger_transition_rotation, remove_after_changing_dimensions,
+    HURT_DURATION_TICKS, InsideBlockEffectCollector, InsideBlockEffectType, LivingEntity,
+    LivingEntityBase, LivingTravelInput, MobEffectInstance, RemovalReason,
+    SPEED_MODIFIER_POWDER_SNOW_ID, SharedEntity, block_state_suffocates_eye_box,
+    closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
+    fall_flying_free_fall_interval, get_input_vector, indirect_passengers,
+    passenger_transition_position, passenger_transition_rotation, remove_after_changing_dimensions,
     should_apply_entity_cramming_damage, should_apply_resolved_movement, start_riding_entities,
     transfer_leashables_to_holder, trapdoor_usable_as_ladder_state,
 };
@@ -661,6 +662,7 @@ struct LivingFluidTestEntity {
     in_wall_for_base_tick: bool,
     flying_player: bool,
     rejects_wither: bool,
+    omnidirectional_air_mover: bool,
 }
 
 impl LivingFluidTestEntity {
@@ -692,6 +694,7 @@ impl LivingFluidTestEntity {
             in_wall_for_base_tick: false,
             flying_player: false,
             rejects_wither: false,
+            omnidirectional_air_mover: false,
         }
     }
 
@@ -736,6 +739,11 @@ impl LivingFluidTestEntity {
         self
     }
 
+    const fn with_omnidirectional_air_mover(mut self) -> Self {
+        self.omnidirectional_air_mover = true;
+        self
+    }
+
     const fn rejecting_wither(mut self) -> Self {
         self.rejects_wither = true;
         self
@@ -773,12 +781,20 @@ impl LivingFluidTestEntity {
 crate::entity::impl_test_downcast_type!(LivingFluidTestEntity);
 
 impl Entity for LivingFluidTestEntity {
+    fn omnidirectional_air_mover(&self) -> bool {
+        self.omnidirectional_air_mover
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }
 
     fn entity_type(&self) -> EntityTypeRef {
         self.entity_type
+    }
+
+    fn base_tick(&self) {
+        LivingEntity::base_tick_living_entity(self);
     }
 
     fn is_vehicle(&self) -> bool {
@@ -1181,8 +1197,10 @@ mod damage;
 mod death_loot;
 mod equipment_and_freezing;
 mod fall_and_fluids;
+mod ids;
 mod living_state;
 mod movement;
+mod multipart;
 mod portals;
 mod riding_and_leashes;
 mod travel;

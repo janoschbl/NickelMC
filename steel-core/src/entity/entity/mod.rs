@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::entity::leash::Leashable;
+use crate::entity::{entities::objects::vehicles::AbstractMinecart, leash::Leashable};
 use steel_math::DEGREE_90;
+use steel_utils::nbt::{NbtNumeric, nbt_collection_values};
 
 /// Vanilla `Entity.refreshDimensions` small-entity limit: only entities at most
 /// this wide and tall (in blocks) get their position fudged after growing.
@@ -12,23 +13,38 @@ const FUDGE_POSITION_EPSILON: f64 = 1.0e-6;
 
 const MAX_ENTITY_MOTION_COMPONENT: f64 = 10.0;
 
-fn read_nbt_dvec3(nbt: &BorrowedNbtCompoundView<'_, '_>, key: &str) -> Option<DVec3> {
-    let values = nbt.list(key)?.doubles()?;
+pub(crate) fn nbt_dvec3(tag: &NbtTag) -> Option<DVec3> {
+    let values = nbt_collection_values(tag)?;
+    let values = values
+        .iter()
+        .filter_map(NbtNumeric::codec_f64)
+        .collect::<Vec<_>>();
     let &[x, y, z, ..] = values.as_slice() else {
         return None;
     };
     Some(DVec3::new(x, y, z))
 }
 
-fn read_nbt_rotation(nbt: &BorrowedNbtCompoundView<'_, '_>, key: &str) -> Option<(f32, f32)> {
-    let values = nbt.list(key)?.floats()?;
+pub(crate) fn read_nbt_dvec3(nbt: &BorrowedNbtCompoundView<'_, '_>, key: &str) -> Option<DVec3> {
+    nbt_dvec3(&nbt.get(key)?.to_owned())
+}
+
+pub(crate) fn read_nbt_rotation(
+    nbt: &BorrowedNbtCompoundView<'_, '_>,
+    key: &str,
+) -> Option<(f32, f32)> {
+    let values = nbt_collection_values(&nbt.get(key)?.to_owned())?;
+    let values = values
+        .iter()
+        .filter_map(NbtNumeric::codec_f32)
+        .collect::<Vec<_>>();
     let &[yaw, pitch, ..] = values.as_slice() else {
         return None;
     };
     Some((yaw, pitch))
 }
 
-fn sanitize_nbt_motion(motion: DVec3) -> DVec3 {
+pub(crate) fn sanitize_nbt_motion(motion: DVec3) -> DVec3 {
     let sanitize = |value: f64| {
         if value.abs() > MAX_ENTITY_MOTION_COMPONENT {
             0.0
@@ -391,8 +407,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 
     /// Returns whether vanilla fluid currents can push this entity.
+    ///
+    /// The extractor flattens vanilla's per-subclass overrides into one flag.
+    /// Entities with extra conditions still override, as `Player` does.
     fn is_pushed_by_fluid(&self) -> bool {
-        true
+        self.entity_type().flags.is_pushed_by_fluid
     }
 
     /// Applies bubble-column surface push velocity, dispatching to the
@@ -578,7 +597,37 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
 
     /// Stops riding the current vehicle, if any.
     fn stop_riding(&self) {
+        let old_vehicle = self.vehicle();
         self.base().stop_riding();
+        if let (Some(living), Some(vehicle)) = (self.as_living_entity(), old_vehicle) {
+            living.dismount_vehicle(vehicle.as_ref());
+        }
+    }
+
+    /// Returns the fallback dismount position above this vehicle.
+    fn dismount_location_for_passenger(&self, _passenger: &dyn LivingEntity) -> DVec3 {
+        self.default_dismount_location()
+    }
+
+    /// Returns the top-center fallback used when no side exit is safe.
+    fn default_dismount_location(&self) -> DVec3 {
+        DVec3::new(
+            self.position().x,
+            self.bounding_box().max_y(),
+            self.position().z,
+        )
+    }
+
+    /// Returns the item selected by the pick-item action, if supported.
+    fn pick_result(&self) -> Option<ItemStack> {
+        None
+    }
+
+    /// Dismounts every passenger from this entity.
+    fn eject_passengers(&self) {
+        for passenger in self.passengers().into_iter().rev() {
+            passenger.stop_riding();
+        }
     }
 
     /// Starts riding `entity_to_ride` if vanilla boarding rules allow it.
@@ -697,10 +746,9 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         )
     }
 
-    /// Returns this vehicle's passenger attachment point.
-    ///
-    /// Mirrors vanilla `Entity.getPassengerAttachmentPoint` for the base entity class.
-    fn passenger_attachment_point(&self, passenger: &dyn Entity) -> DVec3 {
+    /// Returns this vehicle's passenger attachment point for this entity's dimensions and
+    /// seat index, rotated by the vehicle's yaw.
+    fn default_passenger_attachment_point(&self, passenger: &dyn Entity) -> DVec3 {
         let dimensions = self.base().dimensions();
         let passenger_index = self.passenger_index(passenger).unwrap_or_default();
         dimensions.attachments.get_clamped(
@@ -709,6 +757,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
             self.rotation().0,
             dimensions,
         )
+    }
+
+    /// Returns the vehicle-relative position where this passenger attaches to.
+    fn passenger_attachment_point(&self, passenger: &dyn Entity) -> DVec3 {
+        self.default_passenger_attachment_point(passenger)
     }
 
     /// Returns the world position where `passenger` should ride this vehicle.
@@ -1450,6 +1503,16 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         try_as_dyn::<Self, dyn Projectile>(self)
     }
 
+    /// Returns the open-water fishing state when this entity has hook behavior.
+    fn fishing_hook_open_water(&self) -> Option<bool> {
+        None
+    }
+
+    /// Returns this entity's container-user capability.
+    fn as_container_user(&self) -> Option<&dyn super::ContainerUser> {
+        try_as_dyn::<Self, dyn super::ContainerUser>(self)
+    }
+
     /// Returns this entity as a living entity when it has living behavior.
     fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
         try_as_dyn::<Self, dyn LivingEntity>(self)
@@ -1458,6 +1521,35 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// Returns this entity as an item frame when it has item-frame behavior.
     fn as_item_frame(&self) -> Option<&dyn ItemFrame> {
         try_as_dyn::<Self, dyn ItemFrame>(self)
+    }
+
+    /// Returns this entity as a multipart sub-entity when it is one.
+    ///
+    /// Mirrors vanilla's `instanceof EnderDragonPart` branches, routed through
+    /// [`PartEntity`] so engine code supports any multipart mob.
+    fn as_part_entity(&self) -> Option<&dyn PartEntity> {
+        try_as_dyn::<Self, dyn PartEntity>(self)
+    }
+
+    /// Returns this entity's multipart sub-entities, or an empty slice.
+    ///
+    /// Mirrors vanilla `EnderDragon.getSubEntities`, hoisted onto `Entity` (as
+    /// `NeoForge` does with `Entity.getParts`) because this vanilla version has no
+    /// shared multipart base for engine code to match on.
+    fn parts(&self) -> &[Arc<dyn PartEntity>] {
+        &[]
+    }
+
+    /// Returns whether `other` is this entity.
+    ///
+    /// Mirrors vanilla `Entity.is`, including `EnderDragonPart.is`: a multipart
+    /// sub-entity also reports its parent as itself.
+    fn is_same_entity(&self, other: &dyn Entity) -> bool {
+        self.id() == other.id()
+            || self
+                .as_part_entity()
+                .and_then(PartEntity::parent)
+                .is_some_and(|parent| parent.id() == other.id())
     }
 
     /// Returns this entity as a player when it is the concrete server player.
@@ -1497,6 +1589,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// Returns this entity as a `Leashable` if it has [`Leashable`] behavior.
     fn as_leashable(&self) -> Option<&dyn Leashable> {
         try_as_dyn::<Self, dyn Leashable>(self)
+    }
+
+    /// Returns this entity as an `AbstractMinecart` if it has `AbstractMinecart` behavior.
+    fn as_abstract_minecart(&self) -> Option<&dyn AbstractMinecart> {
+        try_as_dyn::<Self, dyn AbstractMinecart>(self)
     }
 
     /// Returns true for entities that implement vanilla animal behavior.
@@ -1669,8 +1766,8 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         false
     }
 
-    /// Returns the movement vector vanilla exposes for block-contact logic.
-    fn known_movement(&self) -> DVec3 {
+    /// Returns vanilla's base known movement before entity-specific adjustments.
+    fn default_known_movement(&self) -> DVec3 {
         if let Some(controller) = self.controlling_passenger()
             && !self.is_removed()
             && controller.entity_type() == &vanilla_entities::PLAYER
@@ -1679,6 +1776,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         }
 
         self.velocity()
+    }
+
+    /// Returns the movement vector vanilla exposes for block-contact logic.
+    fn known_movement(&self) -> DVec3 {
+        self.default_known_movement()
     }
 
     /// Returns the base-tick displacement vanilla exposes as `getKnownSpeed`.
@@ -1737,6 +1839,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     fn direction_yaw(&self) -> Direction {
         let (yaw, _) = self.rotation();
         Direction::from_yaw(yaw)
+    }
+
+    /// Returns the horizontal direction used for movement-dependent behavior.
+    fn motion_direction(&self) -> Direction {
+        self.direction_yaw()
     }
 
     /// Rotates this entity to face a fixed position.
@@ -1984,6 +2091,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// Returns whether vanilla should play this entity's lava hurt sound.
     fn should_play_lava_hurt_sound(&self) -> bool {
         true
+    }
+
+    /// Ignites this entity in lava.
+    fn lava_ignite(&self) {
+        self.apply_inside_block_effect(InsideBlockEffectType::LavaIgnite);
     }
 
     /// Applies vanilla lava-contact damage after lava ignition effects.
@@ -2541,7 +2653,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         clippy::float_cmp,
         reason = "intentional: vanilla checks static block speed factors against 1.0"
     )]
-    fn block_speed_factor(&self) -> f32 {
+    fn default_block_speed_factor(&self) -> f32 {
         let Some(world) = self.level() else {
             return 1.0;
         };
@@ -2572,6 +2684,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
             .get_block()
             .config
             .speed_factor
+    }
+
+    /// Returns the block speed factor applied after movement.
+    fn block_speed_factor(&self) -> f32 {
+        self.default_block_speed_factor()
     }
 
     /// Returns the jump-height multiplier from the block at this entity's
@@ -3213,17 +3330,25 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         }
     }
 
-    /// get the air drag value of the entity
-    fn get_air_drag(&self) -> f64 {
+    /// Whether this entity moves through the air in all directions, so vertical air
+    /// drag equals horizontal air drag (bees, parrots, sulfur cubes holding an item).
+    fn omnidirectional_air_mover(&self) -> bool {
+        false
+    }
+
+    /// The air drag of the entity, kept as `f32` like vanilla's `getAirDrag()` so callers
+    /// widen the float result rather than a double constant.
+    fn get_air_drag(&self) -> f32 {
         let Some(entity) = self.as_living_entity() else {
             return DEFAULT_AIR_DRAG;
         };
         compute_modified_friction(
-            DEFAULT_AIR_DRAG,
-            entity
-                .attributes()
-                .lock()
-                .required_value(vanilla_attributes::AIR_DRAG_MODIFIER),
+            if self.omnidirectional_air_mover() {
+                BASE_HORIZONTAL_AIR_DRAG
+            } else {
+                BASE_VERTICAL_AIR_DRAG
+            },
+            entity.air_drag_modifier(),
         )
     }
 
@@ -3255,7 +3380,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
             return None;
         }
         self.base().clear_collision_flags();
-        self.refresh_fluid_contact();
+
+        // Minecarts retain their pre-move water state on waterlogged slopes.
+        if self.as_abstract_minecart().is_none() {
+            self.refresh_fluid_contact();
+        }
 
         Some(MoveResult {
             final_position,
@@ -3276,7 +3405,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         clippy::too_many_lines,
         reason = "keeps vanilla movement phases in order"
     )]
-    fn move_entity(self: Arc<Self>, mover_type: MoverType, delta: DVec3) -> Option<MoveResult> {
+    fn default_move_entity(
+        self: Arc<Self>,
+        mover_type: MoverType,
+        delta: DVec3,
+    ) -> Option<MoveResult> {
         let world = self.level()?;
         if self.no_physics() {
             return self.move_without_physics(delta);
@@ -3323,6 +3456,9 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
                 return None;
             }
         }
+        if self.as_abstract_minecart().is_none() {
+            self.refresh_fluid_contact();
+        }
         let vertical_state_update =
             EntityVerticalMovementStateUpdate::for_move(movement, self.is_server_driven_movement());
         let movement_flags = EntityMovementFlags::after_move_with_previous(
@@ -3340,7 +3476,6 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         };
         self.base()
             .set_movement_flags(movement_flags, ground_contact);
-        self.refresh_fluid_contact();
 
         if self.is_server_driven_movement()
             && Arc::clone(&self).apply_fall_damage_after_move(&result, &world)
@@ -3370,7 +3505,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
                 self.is_suppressing_bounce(),
                 self.as_living_entity()
                     .map_or_else(|| self.get_gravity(), LivingEntity::get_effective_gravity),
-                self.get_air_drag(),
+                f64::from(self.get_air_drag()),
             );
 
             let next_velocity =
@@ -3412,6 +3547,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         ));
 
         Some(result)
+    }
+
+    /// Moves the entity with collision detection.
+    fn move_entity(self: Arc<Self>, mover_type: MoverType, delta: DVec3) -> Option<MoveResult> {
+        self.default_move_entity(mover_type, delta)
     }
 
     /// Applies vanilla fall-distance bookkeeping after accepted movement.
@@ -3798,7 +3938,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 }
 
-fn compute_modified_friction(friction: f64, modifier: f64) -> f64 {
+pub(crate) fn compute_modified_friction(friction: f32, modifier: f32) -> f32 {
     (1.0 - (1.0 - friction) * modifier).clamp(0.0, 1.0)
 }
 

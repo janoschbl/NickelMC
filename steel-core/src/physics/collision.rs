@@ -341,7 +341,7 @@ impl<'a> WorldCollisionProvider<'a> {
         CollisionShape { boxes }
     }
 
-    fn entity_collision_context(
+    pub(crate) fn entity_collision_context(
         &self,
         entity_bottom: f64,
         descending: bool,
@@ -737,7 +737,7 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
         self.world
             .get_entity_bounding_boxes_in_aabb_matching(&query, |entity| match self.source {
                 Some(source) => {
-                    entity.id() != source.id()
+                    !entity.is_same_entity(source)
                         && !entity.is_removed()
                         && !entity.is_spectator()
                         && source.can_collide_with(entity)
@@ -762,7 +762,7 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
         self.world
             .has_entity_in_aabb_matching(&query, |entity| match self.source {
                 Some(source) => {
-                    entity.id() != source.id()
+                    !entity.is_same_entity(source)
                         && !entity.is_removed()
                         && !entity.is_spectator()
                         && source.can_collide_with(entity)

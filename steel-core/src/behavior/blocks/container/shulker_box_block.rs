@@ -150,7 +150,9 @@ impl BlockBehavior for ShulkerBoxBlock {
 
         if player.prevents_block_drops() && !shulker_box_block_entity.is_empty() {
             match shulker_box_block_entity.shulker_box_as_item(state) {
-                Ok(item) => world.pop_resource(pos, item),
+                Ok(item) => {
+                    world.pop_resource(pos, item);
+                }
                 Err(error) => log::error!("Could not collect shulker box at {pos:?}: {error}"),
             }
         } else if let Some(loot) = shulker_box_block_entity.as_randomizable_container()

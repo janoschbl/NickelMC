@@ -5,6 +5,7 @@ use steel_utils::{DowncastType, DowncastTypeKey};
 
 use crate::inventory::lock::{ContainerLockGuard, ContainerRef};
 use crate::inventory::slots::{NormalSlot, Slot, SlotStorage};
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 
 /// The enchanting table item slot accepts anything but holds a single item
 pub struct EnchantItemSlot {
@@ -30,11 +31,11 @@ impl Slot for EnchantItemSlot {
         self.base.storage()
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         self.base.get_item(guard)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         self.base.get_item_mut(guard)
     }
 

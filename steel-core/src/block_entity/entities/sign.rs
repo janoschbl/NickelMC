@@ -437,7 +437,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::{DyeColor, SIGN_TEXT_FRONT, SignBlockEntity, SignText, SignTextComponent, WAXED};
-    use crate::block_entity::BlockEntity as _;
+    use crate::block_entity::{BlockEntity as _, BlockEntityLifecycleExt as _};
     use crate::test_support::fresh_test_world;
 
     #[test]

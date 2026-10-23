@@ -388,8 +388,8 @@ mod tests {
 
         {
             let container = shulker.storage.container.lock();
-            assert!(container.items()[3].is(&vanilla_items::DIAMOND));
-            assert_eq!(container.items()[3].count(), 5);
+            assert!(container.items().get(3).is(&vanilla_items::DIAMOND));
+            assert_eq!(container.items().get(3).count(), 5);
             assert!(
                 container
                     .items()

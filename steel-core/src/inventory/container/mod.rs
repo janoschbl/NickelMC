@@ -592,14 +592,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "duplicate index")]
+    #[should_panic(expected = "distinct and in bounds")]
     fn test_with_indices_duplicate_panics() {
         let mut container = TestContainer::new(4);
         let _ = container.with_indices([1, 1]);
     }
 
     #[test]
-    #[should_panic(expected = "out of bounds")]
+    #[should_panic(expected = "distinct and in bounds")]
     fn test_with_indices_out_of_bounds_panics() {
         let mut container = TestContainer::new(4);
         let _ = container.with_indices([5]);

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MemoryStatus"],"mod":["damage","map","module_type","value","vanilla_memories","vanilla_values","visible"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BehaviorStatus"],"struct":["BehaviorDuration","LookAtTargetSink","MoveToTargetSink","SetWalkTargetFromAttackTargetIfTargetOutOfReach","StartAttacking","StopAttackingIfTargetInvalid","TimedBehavior"],"trait":["Behavior","BehaviorControl","BehaviorExt"]};

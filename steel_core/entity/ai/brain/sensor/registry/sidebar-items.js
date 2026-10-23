@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init_sensor_types_with"],"static":["SENSOR_TYPES"],"struct":["SensorTypeRegistry"]};

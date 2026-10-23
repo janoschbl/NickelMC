@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init_brain_registries","init_brain_registries_with"],"mod":["activities","behavior","container","context","memory","sensor"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Activities","ActivityData","Brain","BrainProvider"],"type":["ActivityRequirements"]};

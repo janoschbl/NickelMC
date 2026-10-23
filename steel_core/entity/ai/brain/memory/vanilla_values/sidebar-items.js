@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Dummy","SpearStatus"],"macro":[["payload",1]],"struct":["BlockPosTracker","BlockPosition","Boolean","EntityTracker","EntityUuid","EntityUuids","GlobalPosition","GlobalPositionSet","GlobalPositions","Integer","Long","LookTarget","NavigationPath","Unit","Vector","WalkTarget"],"trait":["PositionTracker"]};

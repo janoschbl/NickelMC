@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["round_count","set_enchantment","smelt","uniform_bonus"],"mod":["enchanting"]};

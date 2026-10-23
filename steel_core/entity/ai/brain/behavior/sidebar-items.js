@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["attack_target","control","look_at_target_sink","move_to_target_sink"],"struct":["BehaviorDuration"],"trait":["Behavior"]};

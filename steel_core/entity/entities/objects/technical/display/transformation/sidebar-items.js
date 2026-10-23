@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DECOMPOSITION_EPSILON","DECOMPOSITION_EPSILON_F64"],"struct":["Givens","NormalTransformation","Transformation"]};

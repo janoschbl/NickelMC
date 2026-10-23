@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["combat","history","source"],"struct":["DamageHistory","DamageSource","RecentDamageSource"]};

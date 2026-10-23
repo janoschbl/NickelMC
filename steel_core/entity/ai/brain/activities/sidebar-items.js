@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SCHEDULE_UPDATE_DELAY"],"fn":["contains","replace_entry"],"struct":["Activities","ActivityData"],"type":["ActivityRequirements"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_SCAN_RATE"],"mod":["registry","targeting","vanilla","vanilla_sensors"],"struct":["SensorType","WrappedSensor"],"trait":["Sensor"],"type":["SensorTypeRef"]};

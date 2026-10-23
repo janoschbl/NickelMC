@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["normalize"],"struct":["HurtingProjectileBase"],"trait":["AbstractHurtingProjectile"]};

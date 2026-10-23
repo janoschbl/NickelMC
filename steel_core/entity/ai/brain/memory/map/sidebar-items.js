@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INLINE_SLOTS","NEVER_EXPIRE"],"struct":["Memories","MemorySlot","PackedMemories","PackedMemory"]};

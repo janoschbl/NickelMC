@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["potion_default_instance","potion_use_on"],"struct":["PotionItem"]};

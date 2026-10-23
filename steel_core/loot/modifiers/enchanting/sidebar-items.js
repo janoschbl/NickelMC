@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["enchant_randomly","enchant_with_levels","primary_item","weighted_choice"]};

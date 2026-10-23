@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["RememberedEntities","RememberedEntity"],"trait":["MemoryValue","PersistentMemoryValue"]};

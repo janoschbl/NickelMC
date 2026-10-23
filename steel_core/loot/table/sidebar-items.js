@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["EMPTY_LOOT_TABLE"],"struct":["LootTable"],"type":["LootTableRef"]};

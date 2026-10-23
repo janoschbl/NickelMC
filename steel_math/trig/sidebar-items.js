@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FRAC_BIAS","INDEX_SCALE","TABLE_LEN","TABLE_MASK"],"fn":["atan2","cos","sin"],"static":["ATAN2_TABLE","SIN_TABLE"]};

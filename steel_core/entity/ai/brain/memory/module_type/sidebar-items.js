@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init_memory_module_types","init_memory_module_types_with","register_memory_module_types"],"static":["MEMORY_MODULE_TYPES"],"struct":["ErasedCodec","MemoryModuleType","MemoryModuleTypeEntry","MemoryModuleTypeRegistry","MemoryModuleTypeRegistryLock"],"type":["MemoryModuleTypeRef"]};

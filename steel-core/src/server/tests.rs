@@ -3973,5 +3973,6 @@ fn save_and_shutdown_disconnects_players_and_claims_their_removal() {
 }
 
 mod damage_history;
+mod display_text;
 mod game_time;
 mod projectile_owners;

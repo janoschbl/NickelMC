@@ -497,10 +497,7 @@ pub trait AbstractMinecart: VehicleEntity + AbstractMinecartEventSource {
     /// Saves display settings, flipped rotation, and first-tick state from NBT.
     fn save_abstract_minecart_data(&self, nbt: &mut NbtCompound) {
         if let Some(display_state) = self.custom_display_block() {
-            nbt.insert(
-                "DisplayState",
-                NbtTag::Compound(block_state_nbt::save(display_state)),
-            );
+            nbt.insert("DisplayState", block_state_nbt::save(display_state));
         }
         if self.display_offset() != self.default_display_offset() {
             nbt.insert("DisplayOffset", self.display_offset());
@@ -511,7 +508,7 @@ pub trait AbstractMinecart: VehicleEntity + AbstractMinecartEventSource {
 
     /// Loads display settings, flipped rotation, and first-tick state from NBT.
     fn load_abstract_minecart_data(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
-        self.set_custom_display_block(nbt.compound("DisplayState").and_then(block_state_nbt::load));
+        self.set_custom_display_block(nbt.get("DisplayState").and_then(block_state_nbt::load));
         self.set_display_offset(
             nbt.int("DisplayOffset")
                 .unwrap_or_else(|| self.default_display_offset()),

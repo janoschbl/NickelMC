@@ -261,6 +261,23 @@ pub(crate) struct CommandSource {
 }
 
 impl CommandSource {
+    /// Name resolution runs with selector permission, not a player's command authorization.
+    pub(crate) fn for_name_resolution(
+        entity: SharedEntity,
+        world: Arc<World>,
+        server: Arc<Server>,
+    ) -> Self {
+        let mut source = Self::new(CommandSender::Console, server);
+        source.position = entity.position();
+        source.rotation = entity.rotation();
+        source.authorization = CommandAuthorizationContext::unrestricted(world.key.clone());
+        source.authorization.world_scope = CommandWorldScope::Domain(world.domain().into());
+        source.world = world;
+        source.entity = Some(entity);
+        source.silent = true;
+        source
+    }
+
     pub(crate) fn new(sender: CommandSender, server: Arc<Server>) -> Self {
         let player = sender.get_player().cloned();
         let world = player.as_ref().map_or_else(

@@ -247,6 +247,7 @@ pub struct WorldConfig {
 
 /// A struct that represents a world.
 pub struct World {
+    server: SyncRwLock<Weak<crate::server::Server>>,
     pub(crate) damage_history: Weak<DamageHistory>,
     /// Gameplay and command users share one scoreboard across each domain.
     scoreboard: SyncRwLock<Arc<crate::scoreboard::Scoreboard>>,
@@ -333,6 +334,14 @@ pub struct World {
 }
 
 impl World {
+    pub(crate) fn set_server(&self, server: Weak<crate::server::Server>) {
+        *self.server.write() = server;
+    }
+
+    pub(crate) fn server(&self) -> Option<Arc<crate::server::Server>> {
+        self.server.read().upgrade()
+    }
+
     /// Creates a new world with custom configuration.
     ///
     /// This allows specifying storage backend (disk or RAM-only) and other options.
@@ -444,6 +453,7 @@ impl World {
             chunk_map.start_generation_refill_loop();
 
             Self {
+                server: SyncRwLock::new(Weak::new()),
                 damage_history: Arc::downgrade(&config.damage_history),
                 scoreboard: SyncRwLock::new(Arc::new(crate::scoreboard::Scoreboard::new())),
                 chunk_map,

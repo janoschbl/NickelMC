@@ -1,7 +1,7 @@
 //! Entity registry for creating entity instances.
 
 use std::ops::Deref;
-use std::sync::{OnceLock, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 
 use glam::DVec3;
 use simdnbt::borrow::{
@@ -116,7 +116,8 @@ impl EntityRegistry {
             living.set_y_body_rot(yaw);
         }
 
-        entity.load_additional(*nbt);
+        let nbt: BorrowedNbtCompoundView<'_, '_> = (*nbt).into();
+        Arc::clone(entity).load_additional_with_context(nbt);
         entity.set_old_position_to_current();
         entity.base().set_old_rotation_to_current();
         entity.sync_base_entity_data();

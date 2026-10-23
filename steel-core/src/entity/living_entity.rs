@@ -1,4 +1,3 @@
-use std::io;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;
@@ -240,10 +239,6 @@ pub trait LivingEntity: Entity {
     /// Appends vanilla-shaped living state used by command NBT predicates.
     fn save_command_nbt(&self, nbt: &mut NbtCompound) {
         nbt.insert("Health", self.get_health());
-        nbt.insert(
-            "HurtTime",
-            NbtTag::Short(self.living_base().hurt_time() as i16),
-        );
         nbt.insert(
             "DeathTime",
             NbtTag::Short(self.living_base().death_time() as i16),
@@ -574,13 +569,6 @@ pub trait LivingEntity: Entity {
         changes.apply(victim);
     }
 
-    /// Returns the active combat duration or the duration of the last ended combat.
-    fn combat_duration(&self) -> i32 {
-        self.base()
-            .damage_history()
-            .combat_duration(self.tick_count())
-    }
-
     /// Notifies the entity when damage from a living attacker starts combat.
     fn on_enter_combat(&self) {}
 
@@ -588,7 +576,7 @@ pub trait LivingEntity: Entity {
     fn on_leave_combat(&self, _duration: i32) {}
 
     /// Builds the death message while the exact historical sources are retained.
-    fn combat_death_message(&self) -> io::Result<TextComponent> {
+    fn combat_death_message(&self) -> TextComponent {
         let Some(victim) = self.as_living_entity() else {
             panic!("living death messages require a living entity");
         };
@@ -2261,11 +2249,6 @@ pub trait LivingEntity: Entity {
     /// Decrements vanilla jump cooldown once per living AI step.
     fn tick_no_jump_delay(&self) {
         self.living_base().tick_no_jump_delay();
-    }
-
-    /// Returns the remaining hurt animation ticks.
-    fn hurt_time(&self) -> i32 {
-        self.living_base().hurt_time()
     }
 
     /// Returns whether this entity is immobile because it's dead or dying.

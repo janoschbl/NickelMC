@@ -53,7 +53,7 @@ impl EnvironmentAttributeSystem<'_> {
                 world.biome_at(pos)
             } else {
                 world
-                    .noise_biome_id(pos.x >> 2, pos.y >> 2, pos.z >> 2)
+                    .noise_biome_id(pos.x() >> 2, pos.y() >> 2, pos.z() >> 2)
                     .and_then(|id| REGISTRY.biomes.by_id(usize::from(id)))
             };
             if let Some(biome) = biome

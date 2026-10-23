@@ -24,7 +24,7 @@ impl MultipartTestEntity {
                         ids.part(index),
                         position,
                         EntityDimensions::with_default_eye_height(1.0, 1.0),
-                        world.clone(),
+                        Weak::clone(&world),
                     ),
                     part_base: PartEntityBase::new(
                         "test_part",
@@ -81,13 +81,6 @@ impl Entity for MultipartTestPart {
 
     fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
         self.part_base.size()
-    }
-
-    fn is_same_entity(&self, other: &dyn Entity) -> bool {
-        self.id() == other.id()
-            || self
-                .parent()
-                .is_some_and(|parent| parent.id() == other.id())
     }
 }
 

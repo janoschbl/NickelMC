@@ -13,13 +13,11 @@ use crate::{
 const SQUID_FLEE_SPEED: f64 = 3.0;
 const SQUID_FLEE_MIN_DISTANCE: f64 = 5.0;
 
-pub struct SquidFleeGoal {
-    flee_ticks: i32,
-}
+pub struct SquidFleeGoal;
 
 impl SquidFleeGoal {
     pub const fn new() -> Self {
-        Self { flee_ticks: 0 }
+        Self
     }
 }
 
@@ -39,13 +37,9 @@ impl Goal for SquidFleeGoal {
         true
     }
 
-    fn start(&mut self, _mob: &dyn PathfinderMob) {
-        self.flee_ticks = 0;
-    }
-
+    // Vanilla's `fleeTicks` only schedules a client-local `Level.addParticle` bubble, so
+    // there is nothing to send and no state to keep.
     fn tick(&mut self, mob: &dyn PathfinderMob, entity: &SharedEntity) {
-        self.flee_ticks += 1;
-
         let Some(attacker) = mob.last_hurt_by_mob() else {
             return;
         };

@@ -102,8 +102,8 @@ fn fixed_seed_offers_match_vanilla_26_3() {
         [(EnchantmentRef, u32); 3],
     );
 
-    // Oracle: 26.3 EnchantmentHelper/EnchantmentMenu algorithms in Java using
-    // java.util.Random and the existing vanilla datapack's ordered table tag.
+    // Reproduce with steel-core/test_assets/enchanting/README.md (JDK 25,
+    // isolated 26.3 algorithms and extracted registry inputs; no server run).
     // Include signed seed overflow and a book offer that discards a result.
     let cases: &[Case] = &[
         (

@@ -458,6 +458,7 @@ pub trait BlockEntity: ErasedType + Send + Sync {
     /// Returns the stored components together with the implicit ones.
     ///
     /// Do not override; customize [`Self::collect_implicit_components`] instead.
+    // TODO: Add remove_components_from_tag before pick-block-with-data so implicit fields are not stored twice.
     fn collect_components(&self) -> DataComponentMap {
         let mut components = self.base().stored_components();
         self.collect_implicit_components(&mut components);

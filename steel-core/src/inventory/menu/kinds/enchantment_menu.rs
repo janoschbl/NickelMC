@@ -311,6 +311,7 @@ impl MenuKind for EnchantmentKind {
 
         {
             let mut experience = player.experience.lock();
+            // The next XpSeed is incidental runtime randomness, not an offer RNG draw.
             experience.on_enchantment_performed(enchantment_cost, rand::random());
             self.enchantment_seed = experience.enchantment_seed();
         }

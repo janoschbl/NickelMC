@@ -38,6 +38,8 @@ pub const SIGN_LINES: usize = 4;
 pub struct SignText {
     /// The 4 lines of text (raw, unfiltered).
     pub messages: [TextComponent; SIGN_LINES],
+    /// Filtered lines, retained even when server-side filtering is disabled.
+    pub filtered_messages: Option<[TextComponent; SIGN_LINES]>,
     /// Text color (dye color applied to the sign).
     pub color: DyeColor,
     /// Whether the text has a glowing effect (from glow ink sac).
@@ -56,6 +58,7 @@ impl SignText {
     pub fn new() -> Self {
         Self {
             messages: array::from_fn(|_| TextComponent::new()),
+            filtered_messages: None,
             color: DyeColor::Black,
             has_glowing_text: false,
         }
@@ -70,6 +73,9 @@ impl SignText {
     /// Sets a message line by index.
     pub fn set_message(&mut self, index: usize, message: TextComponent) {
         if index < SIGN_LINES {
+            if let Some(filtered) = &mut self.filtered_messages {
+                filtered[index] = message.clone();
+            }
             self.messages[index] = message;
         }
     }
@@ -87,10 +93,11 @@ impl SignText {
     }
 
     /// Builds sign text from an item's `sign_text_front`/`sign_text_back`
-    /// component. Filtered messages are dropped: Steel has no text filtering.
+    /// component, preserving the filtered representation for persistence.
     fn from_component(component: Option<&SignTextComponent>) -> Self {
         component.map_or_else(Self::new, |component| Self {
             messages: component.messages.clone(),
+            filtered_messages: component.filtered_messages.clone(),
             color: component.color,
             has_glowing_text: component.has_glowing_text,
         })
@@ -120,6 +127,15 @@ impl SignText {
             }
         }
 
+        self.filtered_messages = nbt.list("filtered_messages").and_then(|messages| {
+            let tags = messages.to_owned().as_nbt_tags();
+            let messages = tags
+                .iter()
+                .map(TextComponent::from_nbt)
+                .collect::<Option<Vec<_>>>()?;
+            messages.try_into().ok()
+        });
+
         // Load color
         if let Some(color_str) = nbt.string("color") {
             self.color =
@@ -143,6 +159,19 @@ impl SignText {
                     .collect::<Vec<_>>(),
             ),
         );
+        if let Some(filtered) = &self.filtered_messages
+            && filtered != &self.messages
+        {
+            nbt.insert(
+                "filtered_messages",
+                NbtList::from(
+                    filtered
+                        .iter()
+                        .map(TextComponent::to_codec_nbt)
+                        .collect::<Vec<_>>(),
+                ),
+            );
+        }
 
         // Save color
         nbt.insert("color", self.color.serialized_name());
@@ -328,7 +357,7 @@ impl BlockEntity for SignBlockEntity {
                 component,
                 Some(SignTextComponent::new(
                     text.messages.clone(),
-                    None,
+                    text.filtered_messages.clone(),
                     text.color,
                     text.has_glowing_text,
                 )),
@@ -428,6 +457,7 @@ mod tests {
         let mut expected = SignText::new();
         expected.messages[0] = TextComponent::plain("plain");
         expected.messages[1] = TextComponent::plain("styled").bold(true);
+        expected.filtered_messages = Some(array::from_fn(|_| TextComponent::plain("filtered")));
 
         let mut nbt = NbtCompound::new();
         expected.save(&mut nbt);
@@ -449,6 +479,7 @@ mod tests {
         decoded.load(compound);
 
         assert_eq!(decoded.messages, expected.messages);
+        assert_eq!(decoded.filtered_messages, expected.filtered_messages);
         assert_eq!(decoded.color, expected.color);
         assert_eq!(decoded.has_glowing_text, expected.has_glowing_text);
     }
@@ -480,7 +511,12 @@ mod tests {
         let mut item = ItemStack::new(&vanilla_items::OAK_SIGN);
         item.set(
             SIGN_TEXT_FRONT,
-            SignTextComponent::new(messages.clone(), None, DyeColor::Red, true),
+            SignTextComponent::new(
+                messages.clone(),
+                Some(array::from_fn(|_| TextComponent::plain("filtered"))),
+                DyeColor::Red,
+                true,
+            ),
         );
         item.set(WAXED, ());
 

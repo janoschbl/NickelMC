@@ -43,7 +43,7 @@ impl BedBlock {
         Self { block }
     }
 
-    /// Vanilla `BedBlock.destroyOnUse`: removes both halves and explodes.
+    /// Removes both halves and explodes when beds cannot be used here.
     fn destroy_on_use(&self, world: &Arc<World>, head_state: BlockStateId, head_pos: BlockPos) {
         world.remove_block(head_pos, false);
         let foot_pos = head_state.get_value(FACING).opposite().relative(head_pos);
@@ -228,6 +228,55 @@ impl BedBlock {
     const fn bed_above_standup_offsets(forward: Direction) -> [(i32, i32); 2] {
         let (fx, fz) = forward.offset_xz();
         [(0, 0), (-fx, -fz)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        behavior::init_behaviors,
+        test_support::{fresh_test_world, insert_ready_full_chunk},
+    };
+    use steel_registry::init_vanilla_registry;
+    use steel_utils::ChunkPos;
+
+    #[test]
+    fn bad_respawn_bed_explosion_removes_both_halves_and_destroys_nearby_blocks() {
+        init_vanilla_registry();
+        init_behaviors();
+        let fixture = fresh_test_world("bed_explosion");
+        let world = &fixture.world;
+        insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+        let head = BlockPos::new(8, 64, 8);
+        let foot = head.south();
+        let state = vanilla_blocks::RED_BED
+            .default_state()
+            .set_value(FACING, Direction::North);
+        assert!(world.set_block(
+            head,
+            state.set_value(BED_PART, BedPart::Head),
+            UpdateFlags::UPDATE_NONE
+        ));
+        assert!(world.set_block(
+            foot,
+            state.set_value(BED_PART, BedPart::Foot),
+            UpdateFlags::UPDATE_NONE
+        ));
+        let glass = head.east();
+        assert!(world.set_block(
+            glass,
+            vanilla_blocks::GLASS.default_state(),
+            UpdateFlags::UPDATE_NONE
+        ));
+        BedBlock::new(&vanilla_blocks::RED_BED).destroy_on_use(
+            world,
+            world.get_block_state(head),
+            head,
+        );
+        assert!(world.get_block_state(head).is_air());
+        assert!(world.get_block_state(foot).is_air());
+        assert!(world.get_block_state(glass).is_air());
     }
 }
 

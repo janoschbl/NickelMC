@@ -245,7 +245,7 @@ impl BlockBehavior for TntBlock {
 
         let owner = projectile.get_owner();
         let living_owner = owner.as_deref().filter(|owner| owner.is_living_entity());
-        // TODO: Pass `AbstractArrow.getPickupItemStackOrigin` once arrows exist.
+        // TODO: Use AbstractArrow.getPickupItemStackOrigin for the adventure-mode can-break gate when that API exists.
         let denied_in_adventure_mode = Self::adventure_mode_denies_priming(
             world,
             hit.block_pos,

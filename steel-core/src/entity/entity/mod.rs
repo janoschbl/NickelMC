@@ -574,7 +574,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
 
     /// Returns whether this entity is allied to `other`.
     fn is_allied_to(&self, other: &dyn Entity) -> bool {
-        self.is_same_entity(other)
+        std::ptr::addr_eq(self.as_entity_event_source(), other)
             || self.considers_entity_as_ally(other)
             || other.considers_entity_as_ally(self.as_entity_event_source())
     }

@@ -100,7 +100,7 @@ impl LootRandomSequences {
     }
 }
 
-pub(super) enum LootRandom<'a> {
+pub(crate) enum LootRandom<'a> {
     Legacy(&'a mut LegacyRandom),
     Xoroshiro(&'a mut Xoroshiro),
 }
@@ -262,7 +262,7 @@ mod tests {
     fn world_loot_selects_explicit_seed_before_persisted_sequence() {
         init_vanilla_registry();
         let fixture = fresh_test_world("loot_random_selection");
-        let table = vanilla_loot_tables::BLOCKS_STONE;
+        let table = &vanilla_loot_tables::BLOCKS_STONE;
         let drops = |seed, count| {
             fixture.world.with_loot_rng(table, seed, |random| {
                 let mut context = LootContext::new(random).with_explosion(4.0);

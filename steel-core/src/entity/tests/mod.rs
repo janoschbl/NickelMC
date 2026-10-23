@@ -136,6 +136,15 @@ impl Entity for TypedTestEntity {
 }
 
 #[test]
+fn teamless_alliance_uses_object_identity_not_reused_entity_ids() {
+    let first = TypedTestEntity::new(1, &vanilla_entities::PIG);
+    let replacement = TypedTestEntity::new(1, &vanilla_entities::PIG);
+    assert!(first.is_allied_to(&first));
+    assert!(!first.is_allied_to(&replacement));
+    assert!(!replacement.is_allied_to(&first));
+}
+
+#[test]
 fn non_player_command_identity_uses_uuid_and_resolved_name() {
     let entity = TypedTestEntity::new(1, &vanilla_entities::PIG);
 

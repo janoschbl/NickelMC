@@ -37,7 +37,7 @@ impl DamageSource {
 
     /// Explosion damage, `player_explosion` when both a direct and a causing entity exist.
     ///
-    /// Vanilla `DamageSources.explosion(Entity, Entity)`.
+    /// Attributes blast damage to its direct source and indirect owner.
     #[must_use]
     pub fn explosion(direct: Option<SharedEntity>, causing: Option<SharedEntity>) -> Self {
         let damage_type = if direct.is_some() && causing.is_some() {
@@ -53,7 +53,7 @@ impl DamageSource {
 
     /// The blast of a bed or respawn anchor used where it cannot work.
     ///
-    /// Vanilla `DamageSources.badRespawnPointExplosion`: only the blast position, no entity.
+    /// Attributes a bad-respawn blast to its position, without an entity source.
     #[must_use]
     pub const fn bad_respawn_point_explosion(center: DVec3) -> Self {
         Self::environment(&vanilla_damage_types::BAD_RESPAWN_POINT).with_source_position(center)

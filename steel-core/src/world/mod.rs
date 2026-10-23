@@ -123,7 +123,7 @@ pub mod explosion;
 pub mod game_event;
 mod level_effects;
 mod level_reader;
-mod loot_random;
+pub(crate) mod loot_random;
 mod player_index;
 pub(crate) mod player_spawn_finder;
 mod portals;

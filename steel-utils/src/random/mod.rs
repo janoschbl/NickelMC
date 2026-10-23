@@ -65,6 +65,7 @@ pub trait Random {
 
     /// Vanilla `Util.shuffle`: one descending bounded draw per swapped position.
     fn shuffle<T>(&mut self, items: &mut [T]) {
+        // A collection beyond Java's int range cannot be shuffled with this algorithm.
         let Ok(size) = i32::try_from(items.len()) else {
             panic!("shuffle length {} exceeds Java's int range", items.len());
         };

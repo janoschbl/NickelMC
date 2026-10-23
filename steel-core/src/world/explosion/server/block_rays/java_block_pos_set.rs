@@ -77,6 +77,7 @@ impl JavaBlockPosSet {
             }
         }
 
+        // Exceeding this arena is fatal: Java-sized collections cannot represent more entries.
         let Ok(entry_index) = u32::try_from(self.entries.len()) else {
             panic!("JavaBlockPosSet entry arena exceeded its u32 index space");
         };

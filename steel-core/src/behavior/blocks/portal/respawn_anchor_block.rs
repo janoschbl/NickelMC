@@ -111,7 +111,7 @@ impl RespawnAnchorBlock {
             .is_water()
     }
 
-    /// Vanilla `RespawnAnchorBlock.explode`: removes the anchor and explodes.
+    /// Removes the anchor and explodes, retaining water resistance at its origin.
     fn explode(world: &Arc<World>, pos: BlockPos) {
         world.remove_block(pos, false);
         let in_water = Direction::HORIZONTAL
@@ -345,9 +345,47 @@ impl BlockBehavior for RespawnAnchorBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        behavior::init_behaviors,
+        test_support::{fresh_test_world, insert_ready_full_chunk},
+    };
     use steel_registry::blocks::block_state_ext::BlockStateExt;
     use steel_registry::{init_vanilla_registry, vanilla_blocks};
     use steel_utils::BlockPos;
+    use steel_utils::ChunkPos;
+
+    #[test]
+    fn anchor_explosion_retains_water_resistance_at_the_removed_origin() {
+        init_vanilla_registry();
+        init_behaviors();
+        for flooded in [false, true] {
+            let fixture = fresh_test_world("anchor_explosion");
+            let world = &fixture.world;
+            insert_ready_full_chunk(world, ChunkPos::new(0, 0));
+            let pos = BlockPos::new(8, 64, 8);
+            let glass = pos.east();
+            assert!(world.set_block(
+                pos,
+                vanilla_blocks::RESPAWN_ANCHOR.default_state(),
+                UpdateFlags::UPDATE_NONE
+            ));
+            assert!(world.set_block(
+                glass,
+                vanilla_blocks::GLASS.default_state(),
+                UpdateFlags::UPDATE_NONE
+            ));
+            if flooded {
+                assert!(world.set_block(
+                    pos.above(),
+                    vanilla_blocks::WATER.default_state(),
+                    UpdateFlags::UPDATE_NONE
+                ));
+            }
+            RespawnAnchorBlock::explode(world, pos);
+            assert!(world.get_block_state(pos).is_air());
+            assert_eq!(world.get_block_state(glass).is_air(), !flooded);
+        }
+    }
 
     #[test]
     fn standup_candidates_match_vanilla_order() {

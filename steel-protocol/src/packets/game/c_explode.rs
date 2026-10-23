@@ -25,6 +25,30 @@ struct WeightedExplosionParticleInfo {
 #[derive(WriteTo, Clone, Debug)]
 pub struct ExplosionParticlePalette(Vec<WeightedExplosionParticleInfo>);
 
+impl Default for ExplosionParticlePalette {
+    fn default() -> Self {
+        use steel_registry::vanilla_particle_types;
+        Self(vec![
+            WeightedExplosionParticleInfo {
+                value: ExplosionParticleInfo {
+                    particle: ParticleData::simple(&vanilla_particle_types::POOF),
+                    scaling: 0.5,
+                    speed: 1.0,
+                },
+                weight: 1,
+            },
+            WeightedExplosionParticleInfo {
+                value: ExplosionParticleInfo {
+                    particle: ParticleData::simple(&vanilla_particle_types::SMOKE),
+                    scaling: 1.0,
+                    speed: 1.0,
+                },
+                weight: 1,
+            },
+        ])
+    }
+}
+
 impl ExplosionParticlePalette {
     /// Validates Vanilla's non-negative weights and signed 32-bit list limits.
     pub fn try_new(

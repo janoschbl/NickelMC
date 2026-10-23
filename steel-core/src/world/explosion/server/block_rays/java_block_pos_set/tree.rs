@@ -29,6 +29,7 @@ impl JavaBlockPosSet {
     pub(super) fn links_mut(&mut self, node: u32) -> &mut Links {
         match self.trees.get_mut(&node) {
             Some(links) => links,
+            // Only tree-bin entries reach this helper; missing links indicate corrupt invariants.
             None => panic!("tree bin entry has no tree links"),
         }
     }

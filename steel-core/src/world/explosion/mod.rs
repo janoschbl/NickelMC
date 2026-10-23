@@ -1,9 +1,9 @@
 //! Server-side explosion calculation and application.
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use glam::DVec3;
-use steel_protocol::packets::game::{CExplode, ExplosionParticleInfo, ExplosionParticlePalette};
+use steel_protocol::packets::game::{CExplode, ExplosionParticlePalette};
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::fluid::FluidState;
 use steel_registry::game_rules::GameRule;
@@ -25,6 +25,8 @@ use server::ServerExplosion;
 mod server;
 
 const MAX_PACKET_DISTANCE_SQUARED: f64 = 64.0 * 64.0;
+static DEFAULT_BLOCK_PARTICLES: LazyLock<ExplosionParticlePalette> =
+    LazyLock::new(ExplosionParticlePalette::default);
 
 /// High-level source category used to resolve Vanilla explosion gamerules.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -419,7 +421,7 @@ impl ExplosionOptions<'_> {
             large_explosion_particle: ParticleData::simple(
                 &vanilla_particle_types::EXPLOSION_EMITTER,
             ),
-            block_particles: default_block_particles(),
+            block_particles: DEFAULT_BLOCK_PARTICLES.clone(),
             explosion_sound: SoundEventHolder::registry(&sound_events::ENTITY_GENERIC_EXPLODE),
         }
     }
@@ -503,26 +505,4 @@ impl World {
             BlockInteraction::Destroy
         }
     }
-}
-
-fn default_block_particles() -> ExplosionParticlePalette {
-    let entries = [
-        ExplosionParticleInfo {
-            particle: ParticleData::simple(&vanilla_particle_types::POOF),
-            scaling: 0.5,
-            speed: 1.0,
-        },
-        ExplosionParticleInfo {
-            particle: ParticleData::simple(&vanilla_particle_types::SMOKE),
-            scaling: 1.0,
-            speed: 1.0,
-        },
-    ]
-    .into_iter()
-    .map(|particle| (particle, 1))
-    .collect();
-    let Ok(palette) = ExplosionParticlePalette::try_new(entries) else {
-        panic!("Vanilla explosion particle palette must be valid");
-    };
-    palette
 }

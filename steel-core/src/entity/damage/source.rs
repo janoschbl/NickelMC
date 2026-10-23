@@ -4,7 +4,7 @@ use std::sync::Arc;
 use glam::DVec3;
 use steel_registry::{
     REGISTRY, TaggedRegistryExt, damage_type::DamageScaling, damage_type::DamageType,
-    vanilla_damage_type_tags,
+    vanilla_damage_type_tags, vanilla_damage_types,
 };
 
 use crate::entity::SharedEntity;
@@ -33,6 +33,30 @@ impl DamageSource {
             direct_entity: None,
             source_position: None,
         }
+    }
+
+    /// Explosion damage, `player_explosion` when both a direct and a causing entity exist.
+    ///
+    /// Attributes blast damage to its direct source and indirect owner.
+    #[must_use]
+    pub fn explosion(direct: Option<SharedEntity>, causing: Option<SharedEntity>) -> Self {
+        let damage_type = if direct.is_some() && causing.is_some() {
+            &vanilla_damage_types::PLAYER_EXPLOSION
+        } else {
+            &vanilla_damage_types::EXPLOSION
+        };
+        let mut damage_source = Self::environment(damage_type);
+        damage_source.direct_entity = direct;
+        damage_source.causing_entity = causing;
+        damage_source
+    }
+
+    /// The blast of a bed or respawn anchor used where it cannot work.
+    ///
+    /// Attributes a bad-respawn blast to its position, without an entity source.
+    #[must_use]
+    pub const fn bad_respawn_point_explosion(center: DVec3) -> Self {
+        Self::environment(&vanilla_damage_types::BAD_RESPAWN_POINT).with_source_position(center)
     }
 
     /// Damage delivered directly by its causing entity.

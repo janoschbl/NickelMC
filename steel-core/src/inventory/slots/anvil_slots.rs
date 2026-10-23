@@ -97,7 +97,7 @@ impl ResultHandler for AnvilResultHandler {
 
         let repair_cost = self.repair_item_count.load(Ordering::Relaxed);
         if repair_cost > 0 {
-            let second = input.get_item_mut(1);
+            let mut second = input.get_item_mut(1);
             if !second.is_empty() && second.count() > repair_cost {
                 second.shrink(repair_cost);
             } else {

@@ -1,5 +1,8 @@
 //! This module contains entity-related traits and types.
 
+mod container_user;
+pub use container_user::ContainerUser;
+
 use std::sync::Weak;
 use std::{
     any::try_as_dyn,
@@ -7,12 +10,16 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use crate::loot::LootTableRef;
+use crate::loot::{
+    DamageSourceInfo, EntityEquipmentRef, EntityEquipmentSlots, EntityRef, EntityRefFlags,
+    LootContext,
+};
 use glam::DVec3;
-use rand::{SeedableRng as _, rngs::StdRng};
 use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
-use steel_math::wrap_degrees;
+use steel_math::{trig, wrap_degrees};
 use steel_protocol::packets::game::{
     AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, CSwingAnimation,
     CTeleportEntity, EquipmentSlotItem, RelativeMovement, SoundSource,
@@ -32,10 +39,6 @@ use steel_registry::fluid::{FluidState, FluidStateExt as _};
 use steel_registry::game_events::GameEventRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::ItemRef;
-use steel_registry::loot_table::{
-    DamageSourceInfo, EntityEquipmentRef, EntityEquipmentSlots, EntityRef, EntityRefFlags,
-    LootContext, LootTableRef,
-};
 use steel_registry::mob_effect::MobEffectRef;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -52,6 +55,7 @@ use steel_registry::{RegistryEntry, RegistryExt};
 use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vanilla_mob_effects};
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
+use steel_utils::random::RandomSource;
 use steel_utils::types::{Difficulty, InteractionHand, UpdateFlags};
 use steel_utils::{
     BlockPos, BlockStateId, ChunkPos, Direction, Downcast as _, ErasedType, Identifier,
@@ -76,7 +80,7 @@ use crate::physics::{
     WorldCollisionProvider, move_entity as resolve_entity_movement,
 };
 use crate::world::game_event::GameEventContext;
-use crate::world::{ClipBlockShape, ClipFluid, LevelReader, World};
+use crate::world::{ClipBlockShape, ClipFluid, Explosion, LevelReader, World};
 use crate::{enchantment_helper, entity::damage::DamageSource, player::Player};
 
 use entities::ExperienceOrbEntity;
@@ -452,13 +456,13 @@ pub(crate) fn get_input_vector(input: DVec3, speed: f32, yaw_degrees: f32) -> DV
     } else {
         input
     } * f64::from(speed);
-    let yaw = yaw_degrees.to_radians();
-    let sin = yaw.sin();
-    let cos = yaw.cos();
+    let yaw = f64::from(yaw_degrees.to_radians());
+    let sin = f64::from(trig::sin(yaw));
+    let cos = f64::from(trig::cos(yaw));
     DVec3::new(
-        movement.x * f64::from(cos) - movement.z * f64::from(sin),
+        movement.x * cos - movement.z * sin,
         movement.y,
-        movement.z * f64::from(cos) + movement.x * f64::from(sin),
+        movement.z * cos + movement.x * sin,
     )
 }
 
@@ -587,7 +591,7 @@ fn apply_block_effect_segment(
     to: DVec3,
     max_iterations: i32,
     effect_collector: &mut InsideBlockEffectCollector,
-    visited_blocks: &mut FxHashSet<BlockPos>,
+    visited_blocks: &mut block_effects::VisitedBlockPositions,
 ) -> BlockEffectSegmentResult {
     let aabb = entity.make_bounding_box_at(to).deflate(1.0E-5);
     if aabb.is_empty() {
@@ -724,7 +728,8 @@ fn apply_effects_from_block_movements(entity: &dyn Entity, movements: &[EntityMo
 
     apply_step_on_block(entity, &world);
 
-    let mut visited_blocks = FxHashSet::default();
+    // Deduplicates effects across every movement segment of this tick.
+    let mut visited_blocks = block_effects::VisitedBlockPositions::default();
     let mut effect_collector = InsideBlockEffectCollector::new();
     let before_effects = BlockEffectFireSnapshot::from_entity(entity);
     for movement in movements.iter().copied() {
@@ -870,6 +875,7 @@ pub mod projectile;
 mod reference;
 mod registry;
 mod spawn;
+mod spawn_placements;
 mod storage;
 mod synced_data;
 mod ticking;
@@ -880,6 +886,9 @@ use crate::portal::{
     TeleportTransition, WorldChangeRequest, portal_shape::PortalShape,
 };
 pub(crate) use ageable::{AgeableMob, AgeableMobBase};
+/// Brain AI is public API: memories are an open set that owners outside this
+/// crate extend, unlike the crate-internal goal AI beside it.
+pub use ai::brain;
 pub(crate) use animal::{Animal, AnimalBase};
 pub use base::{
     DEFAULT_MAX_AIR_SUPPLY, DEFAULT_TICKS_REQUIRED_TO_FREEZE, EntityAmethystStepSound, EntityBase,
@@ -894,6 +903,7 @@ pub use callback::{
 };
 pub use conversion::{AfterConversion, ConversionParams, ConversionType};
 pub(crate) use entity::apply_entity_look_at;
+pub(crate) use entity::nbt_dvec3;
 pub use entity::{
     AcceptedClientMovement, AcceptedClientMovementOutcome, Entity, EntityEventSource,
 };
@@ -912,6 +922,7 @@ pub use living_base::{
     sync_dirty_mob_effects,
 };
 pub use living_entity::LivingEntity;
+pub(crate) use manager::EntityCollisionCandidates;
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityLifecycleChanges, EntityMoveError,
     EntityMoveUpdate, EntityOwnership, EntityVisibility, WorldEntityManager,
@@ -928,22 +939,23 @@ pub use movement_sync::{
 pub use part::{PartEntity, PartEntityBase};
 pub(crate) use potion_contents::apply_potion_contents;
 pub use projectile::{
-    EntityHitResult, Projectile, ProjectileBase, ProjectileDeflection, ProjectileEventSource,
-    ProjectileHit, ThrowableItemProjectile, ThrowableProjectile, ViewVectorHitResult,
-    compute_margin, get_hit_result_on_view_vector, spawn_throwable_item_projectile,
+    AbstractThrownPotion, EntityHitResult, Projectile, ProjectileBase, ProjectileDeflection,
+    ProjectileEventSource, ProjectileHit, SPLASH_RANGE_SQ, ThrowableItemProjectile,
+    ThrowableProjectile, ViewVectorHitResult, compute_margin, get_hit_result_on_view_vector,
+    spawn_throwable_item_projectile,
 };
 pub use reference::EntityReference;
+pub(crate) use registry::SpawnRule;
 pub use registry::{ENTITIES, EntityLoadRequest, EntityRegistry, init_entities};
 pub(crate) use spawn::{
     AgeableMobGroupData, EntitySpawnPlacement, EntitySpawnReason, EntitySpawnRequest,
     SpawnGroupData, add_spawned_entity, apply_implicit_item_stack_components,
-    create_entity_instance, spawn_entity,
+    apply_item_stack_components, create_entity_instance, load_entity_recursive_owned, spawn_entity,
 };
+pub(crate) use spawn_placements::SpawnPlacements;
 pub(crate) use storage::{EntityStorage, EntityStorageAddResult};
 pub use synced_data::{EntitySyncedData, LivingEntitySyncedData};
-pub(crate) use ticking::{
-    snapshot_old_pos_and_rot_for_tick, tick_vehicle_passengers_with_ticked_if,
-};
+pub(crate) use ticking::{snapshot_old_pos_and_rot_for_tick, tick_vehicle_passengers_if};
 pub use tracker::{EntityChangeSenders, EntityTracker};
 
 #[cfg(test)]
@@ -1056,7 +1068,7 @@ pub(crate) fn change_entity_world(
         return None;
     }
 
-    if entity.as_player().is_some() {
+    let changed = if entity.as_player().is_some() {
         let Some(player) = source_world.players.get_by_entity_id(entity.id()) else {
             tracing::error!(
                 entity_id = entity.id(),
@@ -1069,10 +1081,12 @@ pub(crate) fn change_entity_world(
         if !player.change_world_within_domain(teleport_transition) {
             return None;
         }
-        return Some(entity);
-    }
-
-    change_non_player_entity_world(entity, teleport_transition)
+        entity
+    } else {
+        change_non_player_entity_world(entity, teleport_transition)?
+    };
+    changed.on_teleported();
+    Some(changed)
 }
 
 fn change_non_player_entity_world(
@@ -1470,6 +1484,7 @@ pub(crate) fn entity_loot_ref<'a>(
     let living_entity = entity.as_living_entity();
     let sheep = living_entity.and_then(LivingEntity::sheep_loot_state);
     EntityRef {
+        entity: Some(entity),
         entity_type: Some(&entity.entity_type().key),
         flags: EntityRefFlags {
             is_on_fire: entity.is_on_fire(),

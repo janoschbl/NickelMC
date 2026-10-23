@@ -18,6 +18,17 @@ pub trait AnyCriterion: Send + Sync {
     fn id(&self) -> Identifier;
 }
 
+/// Trigger identity for predicates compiled in core, where gameplay context lives.
+pub struct CompiledCriterion {
+    pub trigger: Identifier,
+}
+
+impl AnyCriterion for CompiledCriterion {
+    fn id(&self) -> Identifier {
+        self.trigger.clone()
+    }
+}
+
 impl<T, G> AnyCriterion for Criterion<T, G>
 where
     T: CriterionTriggerInstance + 'static,

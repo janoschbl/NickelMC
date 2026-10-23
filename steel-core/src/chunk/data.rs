@@ -1041,7 +1041,7 @@ impl Chunk {
             let scan_local_y = ((scan_y - min_y) % 16) as usize;
             sections.sections[scan_section_index]
                 .read()
-                .states
+                .states()
                 .get(lx, scan_local_y, lz)
         };
 
@@ -1076,7 +1076,7 @@ impl Chunk {
             let scan_local_y = ((scan_y - min_y) % 16) as usize;
             sections.sections[scan_section_index]
                 .read()
-                .states
+                .states()
                 .get(lx, scan_local_y, lz)
         };
 
@@ -1113,7 +1113,7 @@ impl Chunk {
         let local_y = (y & 15) as usize;
         let local_z = (pos.0.z & 15) as usize;
 
-        section_guard.states.get(local_x, local_y, local_z)
+        section_guard.states().get(local_x, local_y, local_z)
     }
 
     fn with_locked_block_state<R>(&self, pos: BlockPos, f: impl FnOnce(BlockStateId) -> R) -> R {
@@ -1123,7 +1123,7 @@ impl Chunk {
         }
 
         let section = self.sections.sections[self.get_section_index(y)].read();
-        let state = section.states.get(
+        let state = section.states().get(
             (pos.x() & 15) as usize,
             (y & 15) as usize,
             (pos.z() & 15) as usize,
@@ -1536,6 +1536,7 @@ mod tests {
         );
         let moving_pos = BlockPos::new(2, 4, 5);
         let chest_pos = BlockPos::new(3, 4, 5);
+        let unimplemented_pos = BlockPos::new(4, 4, 5);
         assert!(
             proto
                 .set_block_state_for_generation(
@@ -1556,20 +1557,42 @@ mod tests {
                 )
                 .is_some()
         );
+        assert!(
+            proto
+                .set_block_state_for_generation(
+                    ChunkStatus::Empty,
+                    unimplemented_pos,
+                    vanilla_blocks::COPPER_CHEST.default_state(),
+                    UpdateFlags::UPDATE_NONE,
+                )
+                .is_some()
+        );
         proto.set_pending_block_entity(moving_pos);
         proto.set_pending_block_entity(chest_pos);
+        proto.set_pending_block_entity(unimplemented_pos);
 
         assert!(proto.promote_pending_block_entity(moving_pos).is_none());
-        assert!(proto.promote_pending_block_entity(chest_pos).is_none());
+        assert!(proto.promote_pending_block_entity(chest_pos).is_some());
+        assert!(
+            proto
+                .promote_pending_block_entity(unimplemented_pos)
+                .is_none()
+        );
         let pending = proto.pending_block_entity_positions();
         assert!(pending.contains(&moving_pos));
-        assert!(pending.contains(&chest_pos));
+        assert!(!pending.contains(&chest_pos));
+        assert!(pending.contains(&unimplemented_pos));
 
         let full = proto.promote_to_full().chunk;
         assert!(full.get_block_entity(moving_pos).is_none());
         assert!(!full.pending_block_entity_positions().contains(&moving_pos));
-        assert!(full.get_block_entity(chest_pos).is_none());
-        assert!(full.pending_block_entity_positions().contains(&chest_pos));
+        assert!(full.get_block_entity(chest_pos).is_some());
+        assert!(!full.pending_block_entity_positions().contains(&chest_pos));
+        assert!(full.get_block_entity(unimplemented_pos).is_none());
+        assert!(
+            full.pending_block_entity_positions()
+                .contains(&unimplemented_pos)
+        );
     }
 
     #[test]

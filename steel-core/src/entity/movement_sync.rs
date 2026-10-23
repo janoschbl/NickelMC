@@ -482,6 +482,8 @@ pub struct ServerEntityMovementSyncState {
 /// Runtime values accepted by vanilla `ServerEntity.sendChanges` movement sync.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ServerEntityMovementSyncUpdate {
+    /// Whether the entity explicitly requires absolute position precision.
+    pub requires_precise_position: bool,
     /// entity type for the itemonly collision precision rule
     pub entity_type: EntityTypeRef,
     /// whether the latest movement collided vertically
@@ -654,7 +656,8 @@ impl ServerEntityMovementSyncState {
         let full_precision_required = should_send_position
             && packed_delta.is_some_and(|delta| update.is_full_precision_encoding_required(delta));
 
-        let force_full = delta_too_big
+        let force_full = update.requires_precise_position
+            || delta_too_big
             || self.teleport_delay > FORCED_TELEPORT_PERIOD
             || self.was_riding
             || self.was_on_ground != update.on_ground;
@@ -1086,6 +1089,7 @@ mod tests {
 
     fn server_update(position: DVec3, velocity: DVec3) -> ServerEntityMovementSyncUpdate {
         ServerEntityMovementSyncUpdate {
+            requires_precise_position: false,
             entity_type: &vanilla_entities::PIG,
             vertical_collision: false,
             horizontal_collision: false,
@@ -1100,6 +1104,27 @@ mod tests {
             has_dirty_entity_data: false,
             force_velocity_sync: false,
         }
+    }
+
+    #[test]
+    fn server_entity_precise_position_forces_absolute_packet_without_movement() {
+        let mut state = ServerEntityMovementSyncState::new(
+            DVec3::ZERO,
+            DVec3::ZERO,
+            false,
+            (0.0, 0.0),
+            0.0,
+            1,
+            false,
+        );
+        let mut update = server_update(DVec3::ZERO, DVec3::ZERO);
+        update.requires_precise_position = true;
+        let packets = collect_server_packets(&mut state, update);
+        assert!(matches!(
+            packets.as_slice(),
+            [EntityMovementSyncPacket::PositionSync(_)]
+        ));
+        assert_eq!(state.teleport_delay, 0);
     }
 
     #[test]

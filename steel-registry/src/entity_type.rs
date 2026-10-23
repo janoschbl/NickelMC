@@ -278,6 +278,8 @@ pub struct EntityType {
 
     /// Default entity dimensions.
     pub dimensions: EntityDimensions,
+    /// Scale applied to the type's collision box before spawn placement checks.
+    pub spawn_dimensions_scale: f32,
     /// If true, dimensions cannot be scaled.
     pub fixed: bool,
 

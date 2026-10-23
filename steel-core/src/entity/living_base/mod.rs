@@ -5,6 +5,7 @@
 //! embed this struct and expose it via `LivingEntity::living_base()`, just like
 //! `EntityBase` is used for core `Entity` fields.
 
+use crate::inventory::stack_reference::StackReference;
 use std::{array, mem, sync::Arc};
 
 use glam::DVec3;
@@ -19,6 +20,7 @@ use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::ItemRef;
 use steel_registry::mob_effect::MobEffectRef;
+use steel_registry::mob_effect_instance::INFINITE_EFFECT_DURATION;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_entity_data::VanillaLivingEntityData;
 use steel_registry::vanilla_mob_effects;
@@ -28,6 +30,7 @@ use steel_utils::{BlockPos, Identifier};
 use uuid::Uuid;
 
 use crate::behavior::MOB_EFFECT_BEHAVIORS;
+use crate::entity::ai::brain::Brain;
 use crate::entity::attribute::{AttributeMap, AttributeModifier, AttributeModifierOperation};
 use crate::entity::synced_data::EntitySyncedData;
 use crate::entity::{LivingEntity, SharedEntity, WeakEntity};
@@ -40,7 +43,6 @@ pub const DEATH_DURATION: i32 = 20;
 pub const HURT_DURATION_TICKS: i32 = 10;
 /// Vanilla default `SwingAnimation` duration in ticks.
 pub const DEFAULT_SWING_DURATION: i32 = 6;
-const INFINITE_EFFECT_DURATION: i32 = -1;
 const MIN_EFFECT_AMPLIFIER: i32 = 0;
 const MAX_EFFECT_AMPLIFIER: i32 = 255;
 const SPRINT_SPEED_MODIFIER_AMOUNT: f64 = 0.3;
@@ -147,6 +149,22 @@ impl MobEffectInstance {
     #[must_use]
     pub const fn is_infinite_duration(&self) -> bool {
         self.duration == INFINITE_EFFECT_DURATION
+    }
+
+    /// Checks whether the duration is at most `ticks` infinite effects never qualify
+    #[must_use]
+    pub const fn ends_within(&self, ticks: i32) -> bool {
+        !self.is_infinite_duration() && self.duration <= ticks
+    }
+
+    /// Maps the duration leaving zero and infinite durations unchanged
+    #[must_use]
+    fn map_duration(&self, mapper: impl FnOnce(i32) -> i32) -> i32 {
+        if self.is_infinite_duration() || self.duration == 0 {
+            self.duration
+        } else {
+            mapper(self.duration)
+        }
     }
 
     /// Serializes this effect with vanilla's `MobEffectInstance.CODEC` shape.
@@ -278,9 +296,7 @@ impl MobEffectInstance {
             hidden_effect.tick_down_duration();
         }
 
-        if !self.is_infinite_duration() && self.duration != 0 {
-            self.duration -= 1;
-        }
+        self.duration = self.map_duration(|duration| duration - 1);
     }
 
     fn downgrade_to_hidden_effect(&mut self) -> bool {
@@ -643,6 +659,7 @@ struct LivingEntityState {
     rotation: LivingRotationState,
     swing: LivingSwingState,
     active_item_use: Option<ActiveItemUseState>,
+    use_item_reference: Option<StackReference>,
     no_jump_delay: i32,
     no_action_time: i32,
 }
@@ -679,6 +696,7 @@ impl LivingEntityState {
             rotation: LivingRotationState::new(),
             swing: LivingSwingState::new(),
             active_item_use: None,
+            use_item_reference: None,
             no_jump_delay: 0,
             no_action_time: 0,
         }
@@ -703,6 +721,7 @@ impl LivingEntityState {
 /// death side effects. Health remains the source of truth for dead-or-dying
 /// checks such as client respawn requests.
 pub struct LivingEntityBase {
+    brain: SyncMutex<Brain>,
     state: SyncMutex<LivingEntityState>,
     attributes: SyncMutex<AttributeMap>,
     active_mob_effects: SyncMutex<FxHashMap<MobEffectRef, ActiveMobEffect>>,
@@ -750,6 +769,7 @@ impl LivingEntityBase {
         let speed = attributes.required_value(vanilla_attributes::MOVEMENT_SPEED) as f32;
 
         Self {
+            brain: SyncMutex::new(Brain::new()),
             state: SyncMutex::new(LivingEntityState::new(speed)),
             attributes: SyncMutex::new(attributes),
             active_mob_effects: SyncMutex::new(FxHashMap::default()),
@@ -765,6 +785,12 @@ impl LivingEntityBase {
     #[inline]
     pub const fn attributes(&self) -> &SyncMutex<AttributeMap> {
         &self.attributes
+    }
+
+    /// Returns the entity's brain. Callbacks use their context rather than
+    /// locking this again while a brain tick is running.
+    pub const fn brain(&self) -> &SyncMutex<Brain> {
+        &self.brain
     }
 
     /// Applies vanilla constructor-time synced-data mutations for living entities.
@@ -837,7 +863,14 @@ impl LivingEntityBase {
     /// Returns a snapshot of vanilla active item-use state.
     #[must_use]
     pub fn active_item_use(&self) -> Option<ActiveItemUseState> {
-        self.state.lock().active_item_use
+        let (mut active, reference) = {
+            let state = self.state.lock();
+            (state.active_item_use?, state.use_item_reference.clone())
+        };
+        if let Some(reference) = reference {
+            active.item = reference.read().item();
+        }
+        Some(active)
     }
 
     /// Returns whether this living entity is actively using an item.
@@ -862,7 +895,22 @@ impl LivingEntityBase {
 
     /// Stops vanilla active item use without calling item hooks.
     pub fn stop_using_item(&self) -> Option<ActiveItemUseState> {
-        self.state.lock().active_item_use.take()
+        let mut state = self.state.lock();
+        state.use_item_reference = None;
+        state.active_item_use.take()
+    }
+
+    /// Rebinds use to the current same-item stack before its tick/release hook.
+    pub fn rebind_use_item(&self, item: StackReference) {
+        let mut state = self.state.lock();
+        if state.active_item_use.is_some() {
+            state.use_item_reference = Some(item);
+        }
+    }
+
+    /// Retains the current use object without holding the entity-state lock.
+    pub fn use_item_reference(&self) -> Option<StackReference> {
+        self.state.lock().use_item_reference.clone()
     }
 
     /// Decrements active-use remaining ticks and returns the updated state.
@@ -1066,6 +1114,14 @@ impl LivingEntityBase {
 
     /// Adds or updates active vanilla mob-effect state.
     pub fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
+        self.update_mob_effect(effect).is_some()
+    }
+
+    /// Returns the committed instance and whether it was inserted rather than updated.
+    pub(crate) fn update_mob_effect(
+        &self,
+        effect: MobEffectInstance,
+    ) -> Option<(MobEffectInstance, bool)> {
         let effect_key = effect.effect;
         let mut existing_effect = None;
         let mut changed_effect = None;
@@ -1085,23 +1141,23 @@ impl LivingEntityBase {
             self.add_effect_attribute_modifiers(&effect);
             self.mark_effects_dirty();
             self.queue_mob_effect_sync(MobEffectSyncChange::Update {
-                effect,
+                effect: effect.clone(),
                 blend_for_self: true,
             });
-            return true;
+            return Some((effect, true));
         }
 
         if let Some(effect) = changed_effect {
             self.refresh_effect_attribute_modifiers(&effect);
             self.mark_effects_dirty();
             self.queue_mob_effect_sync(MobEffectSyncChange::Update {
-                effect,
+                effect: effect.clone(),
                 blend_for_self: false,
             });
-            return true;
+            return Some((effect, false));
         }
 
-        false
+        None
     }
 
     /// Sets active vanilla mob-effect state.

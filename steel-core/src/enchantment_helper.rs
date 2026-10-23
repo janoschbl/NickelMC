@@ -18,6 +18,10 @@ use crate::entity::{Entity, LivingEntity, MobEffectInstance, SharedEntity};
 use crate::inventory::equipment::EquipmentSlot;
 use crate::world::World;
 
+mod selection;
+
+pub(crate) use selection::{EnchantmentInstance, get_enchantment_cost, select_enchantment};
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EnchantmentDamageContext<'a> {
     this_entity_type: EntityTypeRef,
@@ -1075,7 +1079,7 @@ mod tests {
             let equipment = self.living_base.equipment().try_lock().expect(
                 "entity effects must release equipment locks before inspecting source weapons",
             );
-            visitor(Some(equipment.get_ref(EquipmentSlot::MainHand)));
+            visitor(Some(&equipment.get_ref(EquipmentSlot::MainHand)));
         }
     }
 

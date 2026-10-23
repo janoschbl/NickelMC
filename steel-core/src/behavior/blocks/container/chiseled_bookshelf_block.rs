@@ -820,7 +820,7 @@ mod tests {
             dropped_items
                 .iter()
                 .filter(|item| item.is(&vanilla_items::BOOK))
-                .map(ItemStack::count)
+                .map(|stack| stack.count())
                 .sum::<i32>(),
             BOTTOM_RIGHT_SLOT as i32,
         );
@@ -828,7 +828,7 @@ mod tests {
             dropped_items
                 .iter()
                 .filter(|item| item.is(&vanilla_items::ENCHANTED_BOOK))
-                .map(ItemStack::count)
+                .map(|stack| stack.count())
                 .sum::<i32>(),
             EXPECTED_ENCHANTED_BOOK_DROP_COUNT,
         );

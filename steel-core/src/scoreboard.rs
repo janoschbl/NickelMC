@@ -8,7 +8,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet, btree_map::Entry},
     io,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use serde::{Deserialize, Serialize};
@@ -59,17 +62,54 @@ impl ScoreboardObjective {
     }
 }
 
-/// Team identity resolved from one domain scoreboard.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Team snapshot resolved from one domain scoreboard.
+#[derive(Clone, Debug)]
 pub struct ScoreboardTeam {
     name: String,
+    allow_friendly_fire: bool,
+    scoreboard_identity: Arc<()>,
 }
+
+impl PartialEq for ScoreboardTeam {
+    fn eq(&self, other: &Self) -> bool {
+        self.is_allied_to(other)
+    }
+}
+
+impl Eq for ScoreboardTeam {}
 
 impl ScoreboardTeam {
     /// Returns the team name.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Returns whether this snapshot permits damage between team members.
+    #[must_use]
+    pub const fn is_allow_friendly_fire(&self) -> bool {
+        self.allow_friendly_fire
+    }
+
+    /// Same-named teams from different domain scoreboards are not allied.
+    #[must_use]
+    pub fn is_allied_to(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.scoreboard_identity, &other.scoreboard_identity)
+            && self.name == other.name
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TeamState {
+    allow_friendly_fire: bool,
+}
+
+impl Default for TeamState {
+    fn default() -> Self {
+        Self {
+            allow_friendly_fire: true,
+        }
     }
 }
 
@@ -124,7 +164,7 @@ struct ObjectiveState {
 struct PersistentScoreboard {
     objectives: BTreeMap<String, ObjectiveState>,
     scores: BTreeMap<String, BTreeMap<String, ScoreboardScore>>,
-    teams: BTreeSet<String>,
+    teams: BTreeMap<String, TeamState>,
     holder_teams: BTreeMap<String, String>,
 }
 
@@ -164,6 +204,7 @@ struct ScoreboardSaveSnapshot {
 
 /// Command-facing scoreboard for one Steel domain.
 pub struct Scoreboard {
+    identity: Arc<()>,
     state: SyncRwLock<PersistentScoreboard>,
     revision: AtomicU64,
     saved_revision: AtomicU64,
@@ -174,6 +215,7 @@ impl Scoreboard {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            identity: Arc::new(()),
             state: SyncRwLock::new(PersistentScoreboard::default()),
             revision: AtomicU64::new(0),
             saved_revision: AtomicU64::new(0),
@@ -183,6 +225,7 @@ impl Scoreboard {
     fn from_persistent(state: PersistentScoreboard) -> Result<Self, ScoreboardError> {
         validate_persistent_scoreboard(&state)?;
         Ok(Self {
+            identity: Arc::new(()),
             state: SyncRwLock::new(state),
             revision: AtomicU64::new(0),
             saved_revision: AtomicU64::new(0),
@@ -252,11 +295,16 @@ impl Scoreboard {
         let name = name.into();
         ensure_team_name(&name)?;
         let mut state = self.state.write();
-        if !state.teams.insert(name.clone()) {
+        if state.teams.contains_key(&name) {
             return Err(ScoreboardError::DuplicateTeam(name));
         }
+        state.teams.insert(name.clone(), TeamState::default());
         self.mark_dirty();
-        Ok(ScoreboardTeam { name })
+        Ok(ScoreboardTeam {
+            name,
+            allow_friendly_fire: true,
+            scoreboard_identity: Arc::clone(&self.identity),
+        })
     }
 
     /// Returns a team by name.
@@ -265,16 +313,55 @@ impl Scoreboard {
         self.state
             .read()
             .teams
-            .contains(name)
-            .then(|| ScoreboardTeam {
+            .get(name)
+            .map(|team| ScoreboardTeam {
                 name: name.to_owned(),
+                allow_friendly_fire: team.allow_friendly_fire,
+                scoreboard_identity: Arc::clone(&self.identity),
             })
     }
 
     /// Returns team names in stable order.
     #[must_use]
     pub fn team_names(&self) -> Vec<String> {
-        self.state.read().teams.iter().cloned().collect()
+        self.state.read().teams.keys().cloned().collect()
+    }
+
+    /// Updates the friendly-fire policy; callers must resolve a fresh team snapshot.
+    ///
+    /// # Errors
+    /// Returns an error if the team does not exist in this scoreboard.
+    pub fn set_allow_friendly_fire(
+        &self,
+        team: &ScoreboardTeam,
+        allow: bool,
+    ) -> Result<(), ScoreboardError> {
+        let mut state = self.state.write();
+        let Some(stored) = state
+            .teams
+            .get_mut(team.name())
+            .filter(|_| Arc::ptr_eq(&self.identity, &team.scoreboard_identity))
+        else {
+            return Err(ScoreboardError::MissingTeam(team.name().to_owned()));
+        };
+        if stored.allow_friendly_fire != allow {
+            stored.allow_friendly_fire = allow;
+            self.mark_dirty();
+        }
+        Ok(())
+    }
+
+    /// Resolves the holder's current team and friendly-fire policy atomically.
+    #[must_use]
+    pub fn holder_team(&self, holder: &ScoreHolder) -> Option<ScoreboardTeam> {
+        let state = self.state.read();
+        let name = state.holder_teams.get(holder.name())?;
+        let team = state.teams.get(name)?;
+        Some(ScoreboardTeam {
+            name: name.to_owned(),
+            allow_friendly_fire: team.allow_friendly_fire,
+            scoreboard_identity: Arc::clone(&self.identity),
+        })
     }
 
     /// Returns the current team name for a score holder.
@@ -295,7 +382,9 @@ impl Scoreboard {
     ) -> Result<(), ScoreboardError> {
         ensure_holder_name(holder.name())?;
         let mut state = self.state.write();
-        if !state.teams.contains(team.name()) {
+        if !Arc::ptr_eq(&self.identity, &team.scoreboard_identity)
+            || !state.teams.contains_key(team.name())
+        {
             return Err(ScoreboardError::MissingTeam(team.name().to_owned()));
         }
         if state
@@ -443,7 +532,7 @@ fn validate_persistent_scoreboard(state: &PersistentScoreboard) -> Result<(), Sc
     for name in state.objectives.keys() {
         ensure_objective_name(name)?;
     }
-    for name in &state.teams {
+    for name in state.teams.keys() {
         ensure_team_name(name)?;
     }
     for (holder, scores) in &state.scores {
@@ -456,7 +545,7 @@ fn validate_persistent_scoreboard(state: &PersistentScoreboard) -> Result<(), Sc
     }
     for (holder, team) in &state.holder_teams {
         ensure_holder_name(holder)?;
-        if !state.teams.contains(team) {
+        if !state.teams.contains_key(team) {
             return Err(ScoreboardError::MissingTeam(team.clone()));
         }
     }
@@ -513,7 +602,7 @@ fn ensure_writable_objective(
 
 /// Loaded command scoreboards keyed by Steel domain.
 pub struct DomainScoreboards {
-    scoreboards: BTreeMap<String, Scoreboard>,
+    scoreboards: BTreeMap<String, Arc<Scoreboard>>,
     save_lock: AsyncMutex<()>,
 }
 
@@ -536,6 +625,10 @@ impl DomainScoreboards {
                     format!("invalid scoreboard for domain '{domain}': {error}"),
                 )
             })?;
+            let scoreboard = Arc::new(scoreboard);
+            for world in worlds.values().filter(|world| world.domain() == domain) {
+                world.set_scoreboard(Arc::clone(&scoreboard));
+            }
             scoreboards.insert(domain.to_owned(), scoreboard);
         }
         Ok(Self {
@@ -547,7 +640,7 @@ impl DomainScoreboards {
     /// Returns the scoreboard for a domain.
     #[must_use]
     pub fn get(&self, domain: &str) -> Option<&Scoreboard> {
-        self.scoreboards.get(domain)
+        self.scoreboards.get(domain).map(AsRef::as_ref)
     }
 
     /// Saves every dirty domain scoreboard and returns the number written.
@@ -594,6 +687,7 @@ fn scoreboard_io_error(domain: &str, error: io::Error) -> io::Error {
 mod tests {
     use std::{
         env::temp_dir,
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
     use tokio::fs;
@@ -683,6 +777,13 @@ mod tests {
         scoreboard
             .set_score(&holder, &objective, 5)
             .expect("score should be writable");
+        let team = scoreboard.add_team("red").expect("team");
+        scoreboard
+            .add_holder_to_team(&holder, &team)
+            .expect("membership");
+        scoreboard
+            .set_allow_friendly_fire(&team, false)
+            .expect("friendly fire");
 
         let snapshot = scoreboard
             .pending_save()
@@ -703,6 +804,12 @@ mod tests {
             .objective("kills")
             .expect("objective should persist");
         assert_eq!(restored.score(&holder, &restored_objective), Some(5));
+        assert!(
+            !restored
+                .holder_team(&holder)
+                .expect("restored membership")
+                .is_allow_friendly_fire()
+        );
 
         fs::remove_dir_all(path)
             .await
@@ -732,11 +839,39 @@ mod tests {
     }
 
     #[test]
+    fn team_identity_and_mutation_are_scoped_to_the_owning_scoreboard() {
+        let alpha = Scoreboard::new();
+        let beta = Scoreboard::new();
+        let alpha_team = alpha.add_team("red").expect("alpha team");
+        let beta_team = beta.add_team("red").expect("beta team");
+        assert!(!alpha_team.is_allied_to(&beta_team));
+        assert_ne!(alpha_team, beta_team);
+        assert!(alpha.set_allow_friendly_fire(&beta_team, false).is_err());
+        assert!(
+            alpha
+                .add_holder_to_team(&ScoreHolder::new("Steve"), &beta_team)
+                .is_err()
+        );
+        alpha
+            .set_allow_friendly_fire(&alpha_team, false)
+            .expect("own policy");
+        let current = alpha.team("red").expect("current team");
+        assert!(current.is_allied_to(&alpha_team));
+        assert_eq!(current, alpha_team);
+        assert!(!current.is_allow_friendly_fire());
+        assert!(
+            beta.team("red")
+                .expect("other team")
+                .is_allow_friendly_fire()
+        );
+    }
+
+    #[test]
     fn domains_keep_independent_scoreboards() {
         let scoreboards = DomainScoreboards {
             scoreboards: [
-                ("alpha".to_owned(), Scoreboard::new()),
-                ("beta".to_owned(), Scoreboard::new()),
+                ("alpha".to_owned(), Arc::new(Scoreboard::new())),
+                ("beta".to_owned(), Arc::new(Scoreboard::new())),
             ]
             .into_iter()
             .collect(),

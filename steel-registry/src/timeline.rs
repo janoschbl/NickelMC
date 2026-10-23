@@ -12,6 +12,8 @@ pub enum KeyframeValue {
     Int(i32),
     Bool(bool),
     String(&'static str),
+    /// A resolved discrete activity from an extracted schedule track.
+    Activity(crate::activity::ActivityRef),
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +132,9 @@ impl ToNbtTag for &Timeline {
                         KeyframeValue::Int(i) => kc.insert("value", *i),
                         KeyframeValue::Bool(b) => kc.insert("value", i8::from(*b)),
                         KeyframeValue::String(s) => kc.insert("value", *s),
+                        KeyframeValue::Activity(activity) => {
+                            kc.insert("value", activity.key.to_string())
+                        }
                     }
                     kc
                 })

@@ -102,7 +102,7 @@ impl AdvancementProgress {
     }
 
     /// Check if a criterion his mark has complete
-    fn is_criterion_done(&self, criterion: &str) -> bool {
+    pub(super) fn is_criterion_done(&self, criterion: &str) -> bool {
         self.criteria
             .get(criterion)
             .is_some_and(CriterionProgress::is_done)

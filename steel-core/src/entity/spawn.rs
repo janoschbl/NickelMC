@@ -564,7 +564,8 @@ mod tests {
     fn recursive_spawner_load_rejects_unknown_and_unimplemented_entities() {
         init_vanilla_registry();
         init_entities();
-        let world = fresh_test_world("spawner_recursive_load_rejects_unsupported");
+        let world_fixture = fresh_test_world("spawner_recursive_load_rejects_unsupported");
+        let world = &world_fixture.world;
 
         let unknown = entity_nbt("minecraft:not_an_entity");
         assert!(
@@ -592,7 +593,8 @@ mod tests {
     fn recursive_spawner_load_skips_failed_passengers_and_keeps_valid_siblings() {
         init_vanilla_registry();
         init_entities();
-        let world = fresh_test_world("spawner_recursive_load_rejects_passenger");
+        let world_fixture = fresh_test_world("spawner_recursive_load_rejects_passenger");
+        let world = &world_fixture.world;
 
         let mut root = entity_nbt("minecraft:pig");
         root.insert(
@@ -629,7 +631,8 @@ mod tests {
     fn recursive_spawner_load_rejects_hostile_entities_in_peaceful() {
         init_vanilla_registry();
         init_entities();
-        let world = fresh_test_world("spawner_recursive_load_peaceful");
+        let world_fixture = fresh_test_world("spawner_recursive_load_peaceful");
+        let world = &world_fixture.world;
         world.set_difficulty(Difficulty::Peaceful);
 
         assert!(

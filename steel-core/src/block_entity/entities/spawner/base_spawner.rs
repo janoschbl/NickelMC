@@ -8,7 +8,6 @@ use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as Nbt
 use simdnbt::owned::{NbtCompound, NbtList};
 use steel_registry::data_components::components::EntityData;
 use steel_registry::entity_type::{EntityTypeRef, MobCategory};
-use steel_registry::loot_table::{LootContext, LootTableRef};
 use steel_registry::{
     REGISTRY, RegistryExt, level_events, vanilla_blocks, vanilla_game_events, vanilla_game_rules,
 };
@@ -24,6 +23,7 @@ use crate::entity::{
     nbt_dvec3,
 };
 use crate::inventory::equipment::EquipmentSlot;
+use crate::loot::{LOOT_TABLES, LootContext};
 use crate::physics::{WorldCollisionProvider, has_collision};
 use crate::world::World;
 
@@ -623,19 +623,37 @@ fn random_spawn_position<R: Rng + ?Sized>(
 }
 
 fn equip_from_table(mob: &dyn Mob, equipment: &EquipmentTable) {
-    let Some(table): Option<LootTableRef> = REGISTRY.loot_tables.by_key(&equipment.loot_table)
-    else {
+    let Some(table) = LOOT_TABLES.by_key(&equipment.loot_table) else {
+        return;
+    };
+    let Some(world) = mob.level() else {
         return;
     };
 
-    let mut random = rng();
     let equipment_snapshot = crate::entity::living_loot_equipment(mob);
-    let entity_ref = entity_loot_ref(mob.as_entity_event_source(), Some(&equipment_snapshot));
-    let mut context = LootContext::new(&mut random)
-        .with_origin(mob.position().x, mob.position().y, mob.position().z)
-        .with_this_entity(entity_ref);
+    let position = mob.position();
+    let items = world.with_loot_random(table, 0, |loot_rng| {
+        let mut context = LootContext::new(loot_rng)
+            .with_origin(position.x, position.y, position.z)
+            .with_this_entity(entity_loot_ref(
+                mob.as_entity_event_source(),
+                Some(&equipment_snapshot),
+            ))
+            .with_world(&world);
+        table.get_random_items(&mut context)
+    });
+    let items = match items {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!(
+                "Failed to generate spawner equipment loot {}: {error}",
+                table.key
+            );
+            return;
+        }
+    };
     let mut inserted = [false; EquipmentSlot::ALL.len()];
-    for mut item in table.get_random_items(&mut context) {
+    for mut item in items {
         if item.is_empty() {
             continue;
         }

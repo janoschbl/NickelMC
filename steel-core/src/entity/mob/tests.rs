@@ -47,7 +47,8 @@ const INITIAL_TEST_HEALTH: f32 = 10.0;
 fn spawner_obstruction_rejects_overlapping_players() {
     init_vanilla_registry();
     init_behaviors();
-    let world = fresh_test_world("spawner_player_obstruction");
+    let world_fixture = fresh_test_world("spawner_player_obstruction");
+    let world = &world_fixture.world;
     let player = TestPlayerBuilder::new(Arc::clone(&world), "SpawnerPlayer", 1).build();
     assert!(world.add_player(Arc::clone(&player), ResetReason::InitialJoin));
     let position = player.position();

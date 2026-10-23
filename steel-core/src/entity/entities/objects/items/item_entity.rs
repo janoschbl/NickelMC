@@ -22,8 +22,7 @@ use uuid::Uuid;
 use crate::entity::damage::DamageSource;
 
 use crate::entity::{
-    DEFAULT_AIR_DRAG, Entity, EntityBase, EntityBaseLoad, EntityBaseState, EntitySyncedData,
-    RemovalReason,
+    Entity, EntityBase, EntityBaseLoad, EntityBaseState, EntitySyncedData, RemovalReason,
 };
 use crate::inventory::container::Container;
 use crate::physics::MoverType;
@@ -590,19 +589,20 @@ impl Entity for ItemEntity {
                 // Get world for block queries
                 if let Some(world) = self.level() {
                     // Apply friction (vanilla: ItemEntity.tick line 125-128)
+                    let air_drag = self.get_air_drag();
                     let friction = if result.on_ground
                         && let Some(block_pos) = self.block_pos_below_that_affects_movement()
                     {
                         let block_state = world.get_block_state(block_pos);
-                        f64::from(block_state.get_block().config.friction) * DEFAULT_AIR_DRAG
+                        air_drag * block_state.get_block().config.friction
                     } else {
-                        DEFAULT_AIR_DRAG
+                        air_drag
                     };
 
                     let mut velocity = self.velocity();
-                    velocity.x *= friction;
-                    velocity.z *= friction;
-                    velocity.y *= DEFAULT_AIR_DRAG;
+                    velocity.x *= f64::from(friction);
+                    velocity.z *= f64::from(friction);
+                    velocity.y *= f64::from(air_drag);
 
                     // Bounce when landing on ground (vanilla: ItemEntity.tick lines 145-149)
                     if result.on_ground && velocity.y < 0.0 {

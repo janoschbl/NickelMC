@@ -166,6 +166,12 @@ impl Memories {
         }
     }
 
+    /// Returns whether no memory is registered on this mob.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.slots.is_empty()
+    }
+
     /// Returns whether `memory` is registered on this mob.
     #[must_use]
     pub fn is_registered(&self, memory: MemoryModuleTypeRef) -> bool {

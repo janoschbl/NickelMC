@@ -5,16 +5,22 @@ use steel_registry::activity::ActivityRef;
 use steel_registry::vanilla_activities;
 use steel_utils::locks::SyncMutex;
 
-use super::{ActivityData, Brain};
+use steel_utils::Identifier;
+
+use super::{ActivityData, Brain, BrainProvider};
+use crate::entity::PathfinderMob;
 use crate::entity::ai::brain::behavior::{
     Behavior, BehaviorControl, BehaviorDuration, BehaviorExt,
 };
 use crate::entity::ai::brain::context::BrainContext;
+use crate::entity::ai::brain::memory::PackedMemories;
 use crate::entity::ai::brain::memory::{
-    MemoryModuleType, MemoryModuleTypeRef, MemoryStatus, RememberedEntity,
+    MemoryModuleType, MemoryModuleTypeRef, MemoryModuleTypeRegistry, MemoryStatus, RememberedEntity,
 };
-use crate::entity::ai::brain::sensor::Sensor;
-use crate::entity::ai::brain::test_support::{TestBrain, Ticks, test_memory};
+use crate::entity::ai::brain::sensor::{Sensor, SensorType};
+use crate::entity::ai::brain::test_support::{
+    TestBrain, Ticks, test_memory, test_persistent_memory,
+};
 
 static TARGET: MemoryModuleType<Ticks> = test_memory("target");
 static SIGHTING: MemoryModuleType<Ticks> = test_memory("sighting");
@@ -103,6 +109,10 @@ impl Sensor for SightingSensor {
     }
 }
 
+fn mob_of(mob: &TestBrain) -> &dyn PathfinderMob {
+    mob.mob()
+}
+
 fn probes(names: &[&'static str], journal: &Arc<Journal>) -> Vec<Box<dyn BehaviorControl>> {
     names
         .iter()
@@ -110,10 +120,9 @@ fn probes(names: &[&'static str], journal: &Arc<Journal>) -> Vec<Box<dyn Behavio
         .collect()
 }
 
-fn tick(brain: &mut Brain, mob: &mut TestBrain, time: i64) {
-    mob.set_time(time);
+fn tick(brain: &mut Brain, mob: &mut TestBrain) {
     let context = mob.context();
-    brain.tick(context.mob, context.level, time);
+    brain.tick(context.mob, context.level);
 }
 
 #[test]
@@ -156,7 +165,7 @@ fn behaviors_start_in_priority_order_and_share_priorities() {
         ],
     ));
 
-    tick(&mut brain, &mut mob, 1);
+    tick(&mut brain, &mut mob);
 
     assert_eq!(
         journal.started(),
@@ -182,11 +191,11 @@ fn leaving_an_activity_does_not_stop_its_running_behaviors() {
         probes(&["panic"], &journal),
     ));
 
-    tick(&mut brain, &mut mob, 1);
+    tick(&mut brain, &mut mob);
     let ticks_while_idle = journal.ticks.load(Ordering::Relaxed);
 
     brain.set_active_activity_if_possible(&vanilla_activities::PANIC);
-    tick(&mut brain, &mut mob, 2);
+    tick(&mut brain, &mut mob);
 
     assert!(
         journal.ticks.load(Ordering::Relaxed) > ticks_while_idle + 1,
@@ -291,7 +300,7 @@ fn memories_expire_before_behaviors_read_them() {
     ));
     brain.memories_mut().set_with_expiry(&TARGET, Ticks(1), 0);
 
-    tick(&mut brain, &mut mob, 1);
+    tick(&mut brain, &mut mob);
 
     assert!(
         journal.started().is_empty(),
@@ -315,11 +324,279 @@ fn sensors_write_memories_that_behaviors_start_on_the_same_tick() {
         ],
     ));
 
-    tick(&mut brain, &mut mob, 1);
+    tick(&mut brain, &mut mob);
 
     assert_eq!(
         journal.started(),
         vec!["idle"],
         "a behavior should see the memory its sensor wrote this tick"
     );
+}
+
+/// Activities whose behaviors all start under the one priority, in the order
+/// Java's `HashMap<Activity, _>` iterates them.
+fn start_order(activities: &[(ActivityRef, &'static str)]) -> Vec<&'static str> {
+    let journal = Arc::new(Journal::default());
+    let mut mob = TestBrain::new();
+    let mut brain = Brain::new();
+    brain.set_core_activities(activities.iter().map(|&(activity, _)| activity).collect());
+    for &(activity, name) in activities {
+        brain.add_activity(ActivityData::prioritized(
+            activity,
+            vec![(0, Probe::new(name, &journal).control())],
+        ));
+    }
+    brain.set_active_activity_if_possible(&vanilla_activities::PANIC);
+
+    tick(&mut brain, &mut mob);
+
+    journal.started()
+}
+
+#[test]
+fn equal_priority_activities_start_in_java_hash_map_order() {
+    // Expected orders were produced by iterating a JDK 21 `HashMap<String, _>`
+    // filled in the same order, which hashes exactly as `Activity` does.
+    let few = [
+        (&vanilla_activities::CORE, "core"),
+        (&vanilla_activities::IDLE, "idle"),
+        (&vanilla_activities::WORK, "work"),
+        (&vanilla_activities::PLAY, "play"),
+        (&vanilla_activities::REST, "rest"),
+        (&vanilla_activities::MEET, "meet"),
+        (&vanilla_activities::PANIC, "panic"),
+    ];
+    assert_eq!(
+        start_order(&few),
+        ["play", "core", "rest", "meet", "idle", "work", "panic"]
+    );
+
+    // Thirteen entries outgrow the initial 16 buckets, which reorders them.
+    let many = [
+        (&vanilla_activities::WORK, "work"),
+        (&vanilla_activities::REST, "rest"),
+        (&vanilla_activities::FIGHT, "fight"),
+        (&vanilla_activities::CELEBRATE, "celebrate"),
+        (&vanilla_activities::HIDE, "hide"),
+        (&vanilla_activities::IDLE, "idle"),
+        (&vanilla_activities::CORE, "core"),
+        (&vanilla_activities::PANIC, "panic"),
+        (&vanilla_activities::RAID, "raid"),
+        (&vanilla_activities::PRE_RAID, "pre_raid"),
+        (&vanilla_activities::PLAY, "play"),
+        (&vanilla_activities::MEET, "meet"),
+        (&vanilla_activities::ADMIRE_ITEM, "admire_item"),
+    ];
+    assert_eq!(
+        start_order(&many),
+        [
+            "play",
+            "rest",
+            "admire_item",
+            "celebrate",
+            "idle",
+            "work",
+            "panic",
+            "core",
+            "hide",
+            "meet",
+            "pre_raid",
+            "fight",
+            "raid"
+        ]
+    );
+}
+
+#[test]
+fn readding_an_activity_replaces_the_memories_it_erases() {
+    let journal = Arc::new(Journal::default());
+    let mut brain = Brain::new();
+    brain.register_memory(TARGET.entry());
+    brain.add_activity(ActivityData::new(
+        &vanilla_activities::IDLE,
+        0,
+        probes(&["idle"], &journal),
+    ));
+    brain.add_activity(
+        ActivityData::new(&vanilla_activities::PANIC, 0, probes(&["panic"], &journal))
+            .erasing_when_stopped(vec![TARGET.entry()]),
+    );
+    brain.add_activity(ActivityData::new(
+        &vanilla_activities::PANIC,
+        1,
+        probes(&["panic_again"], &journal),
+    ));
+    brain.add_activity(
+        ActivityData::new(&vanilla_activities::PANIC, 2, Vec::new())
+            .erasing_when_stopped(vec![SIGHTING.entry()]),
+    );
+    brain.register_memory(SIGHTING.entry());
+    brain.set_active_activity_if_possible(&vanilla_activities::PANIC);
+    brain.memories_mut().set(&TARGET, Ticks(1));
+    brain.memories_mut().set(&SIGHTING, Ticks(1));
+
+    brain.use_default_activity();
+
+    assert!(
+        brain.memories().has_value(TARGET.entry()),
+        "the earlier erase set is replaced, not kept beside the new one"
+    );
+    assert!(!brain.memories().has_value(SIGHTING.entry()));
+}
+
+/// Switches the brain to panic as soon as it starts.
+struct PanicSwitch;
+
+impl Behavior for PanicSwitch {
+    fn start(&mut self, context: &mut BrainContext<'_>) {
+        context
+            .activities
+            .set_active_activity_if_possible(context.memories, &vanilla_activities::PANIC);
+    }
+}
+
+#[test]
+fn behaviors_switch_activity_through_their_context() {
+    let journal = Arc::new(Journal::default());
+    let mut mob = TestBrain::new();
+    let mut brain = Brain::new();
+    brain.add_activity(ActivityData::new(
+        &vanilla_activities::IDLE,
+        0,
+        vec![PanicSwitch.control()],
+    ));
+    brain.add_activity(ActivityData::new(
+        &vanilla_activities::PANIC,
+        1,
+        probes(&["panic"], &journal),
+    ));
+
+    tick(&mut brain, &mut mob);
+
+    assert!(brain.is_active(&vanilla_activities::PANIC));
+    assert_eq!(
+        journal.started(),
+        vec!["panic"],
+        "the switch lands before the panic group is considered this tick"
+    );
+}
+
+#[test]
+fn schedule_is_consulted_at_most_every_twenty_ticks() {
+    let mut brain = Brain::new();
+    let journal = Arc::new(Journal::default());
+    brain.add_activity(ActivityData::new(
+        &vanilla_activities::IDLE,
+        0,
+        probes(&["idle"], &journal),
+    ));
+    brain.add_activity(ActivityData::new(
+        &vanilla_activities::REST,
+        0,
+        probes(&["rest"], &journal),
+    ));
+    let mut asked = Vec::new();
+    let mut update = |brain: &mut Brain, game_time: i64| {
+        brain.update_activity_from_schedule(game_time, || {
+            asked.push(game_time);
+            &vanilla_activities::REST
+        });
+    };
+
+    update(&mut brain, 100);
+    assert!(brain.is_active(&vanilla_activities::REST));
+    brain.use_default_activity();
+    update(&mut brain, 120);
+    update(&mut brain, 121);
+
+    assert_eq!(asked, [100, 121]);
+    assert!(brain.is_active(&vanilla_activities::REST));
+}
+
+/// Remembers that something was seen.
+struct SawSomething;
+
+impl Behavior for SawSomething {
+    fn entry_condition(&self) -> &[(MemoryModuleTypeRef, MemoryStatus)] {
+        NEEDS_SIGHTING
+    }
+
+    fn start(&mut self, context: &mut BrainContext<'_>) {
+        context.memories.set(&TARGET, Ticks(2));
+    }
+}
+
+fn saw_something_sensor() -> Box<dyn Sensor> {
+    Box::new(SightingSensor)
+}
+
+fn idle_activities(_mob: &dyn PathfinderMob) -> Vec<ActivityData> {
+    vec![ActivityData::new(
+        &vanilla_activities::IDLE,
+        0,
+        vec![SawSomething.control()],
+    )]
+}
+
+static SIGHTING_SENSOR: SensorType = SensorType::new(
+    Identifier::new_static("steel_test", "sighting"),
+    saw_something_sensor,
+);
+static SAVED_TARGET: MemoryModuleType<Ticks> = test_persistent_memory("saved_target");
+
+#[test]
+fn ticked_brain_turns_a_sensed_memory_into_a_behavior_result() {
+    let mut mob = TestBrain::new();
+    let provider = BrainProvider::new(
+        vec![TARGET.entry()],
+        vec![&SIGHTING_SENSOR],
+        idle_activities,
+    );
+    let mut brain = provider.make_brain(mob.context().mob, &PackedMemories::default());
+    assert!(!brain.memories().has_value(TARGET.entry()));
+
+    tick(&mut brain, &mut mob);
+
+    assert_eq!(
+        brain.memories().get(&SIGHTING),
+        Some(&Ticks(1)),
+        "the sensor wrote what it saw"
+    );
+    assert_eq!(
+        brain.memories().get(&TARGET),
+        Some(&Ticks(2)),
+        "the behavior started on the sensed memory and wrote its result"
+    );
+}
+
+#[test]
+fn provider_builds_independent_brains_and_restores_packed_memories() {
+    let mob = TestBrain::new();
+    let provider = BrainProvider::new(
+        vec![SAVED_TARGET.entry()],
+        vec![&SIGHTING_SENSOR],
+        idle_activities,
+    );
+    let mut original = provider.make_brain(mob_of(&mob), &PackedMemories::default());
+    original
+        .memories_mut()
+        .set_with_expiry(&SAVED_TARGET, Ticks(9), 30);
+    original.memories_mut().set(&SIGHTING, Ticks(1));
+
+    let mut registry = MemoryModuleTypeRegistry::new();
+    registry.register(&SAVED_TARGET);
+    registry.register(&SIGHTING);
+    let saved = PackedMemories::from_nbt(&original.pack().to_nbt(), &registry);
+    let restored = provider.make_brain(mob_of(&mob), &saved);
+
+    assert_eq!(restored.memories().get(&SAVED_TARGET), Some(&Ticks(9)));
+    assert_eq!(
+        restored.memories().time_until_expiry(SAVED_TARGET.entry()),
+        30
+    );
+    assert!(
+        !restored.memories().has_value(SIGHTING.entry()),
+        "a memory that is not persistent is not carried over"
+    );
+    assert!(restored.memories().is_registered(SIGHTING.entry()));
 }

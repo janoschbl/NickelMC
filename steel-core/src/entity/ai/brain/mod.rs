@@ -9,7 +9,7 @@ pub mod sensor;
 #[cfg(test)]
 mod test_support;
 
-pub use container::{ActivityData, Brain};
+pub use container::{Activities, ActivityData, Brain, BrainProvider};
 pub use context::BrainContext;
 
 /// Initialize the brain registries.

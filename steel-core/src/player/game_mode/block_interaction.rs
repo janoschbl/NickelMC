@@ -213,6 +213,26 @@ impl Player {
 
         // TODO: If include_data, copy the block entity data into the picked item stack.
 
+        self.try_pick_item(item_stack);
+    }
+
+    /// Picks the target entity's item, using the same inventory rules as block picking.
+    pub fn handle_pick_item_from_entity(&self, packet: SPickItemFromEntity) {
+        let Some(entity) = self
+            .get_world()
+            .get_accessible_entity_or_part_by_id(packet.id)
+        else {
+            return;
+        };
+        if !self.is_within_entity_interaction_range_with_buffer(entity.bounding_box(), 3.0) {
+            return;
+        }
+        if let Some(stack) = entity.pick_result().filter(|stack| !stack.is_empty()) {
+            self.try_pick_item(stack);
+        }
+    }
+
+    fn try_pick_item(&self, item_stack: ItemStack) {
         let mut inventory = self.inventory.lock();
 
         match inventory.find_slot_matching_item_with_same_components(&item_stack) {
@@ -220,17 +240,11 @@ impl Player {
                 if PlayerInventory::is_hotbar_slot(slot_with_item) {
                     inventory.set_selected_slot(slot_with_item);
                 } else {
-                    let slot = inventory.get_suitable_hotbar_slot();
-
-                    inventory.set_selected_slot(slot);
                     inventory.pick_slot(slot_with_item);
                 }
             }
             None => {
                 if self.has_infinite_materials() {
-                    let slot = inventory.get_suitable_hotbar_slot();
-
-                    inventory.set_selected_slot(slot);
                     inventory.add_and_pick_item(item_stack);
                 } else {
                     return;

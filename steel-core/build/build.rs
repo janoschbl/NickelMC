@@ -15,6 +15,9 @@ mod candle_cakes;
 mod common;
 mod entities;
 mod items;
+mod loot_tables;
+mod memories;
+mod sensors;
 mod skull_type;
 mod waxables;
 mod weathering;
@@ -32,6 +35,13 @@ pub fn main() {
     let behavior_out_dir = format!("{manifest_dir}/src/behavior/generated");
     let entity_out_dir = format!("{manifest_dir}/src/entity/generated");
 
+    let loot_dir = format!("{manifest_dir}/src/loot/generated");
+    fs::create_dir_all(&loot_dir).unwrap_or_else(|e| panic!("{loot_dir}: {e}"));
+    write_if_changed(
+        format!("{loot_dir}/tables.rs"),
+        loot_tables::build().to_string(),
+    );
+
     let classes_json = fs::read_to_string(format!("{manifest_dir}/build/classes.json"))
         .expect("Failed to read classes.json");
     let classes: Classes =
@@ -39,6 +49,8 @@ pub fn main() {
 
     fs::create_dir_all(&behavior_out_dir).expect("Failed to create behavior output directory");
     fs::create_dir_all(&entity_out_dir).expect("Failed to create entity output directory");
+    write_if_changed(format!("{entity_out_dir}/memories.rs"), memories::build());
+    write_if_changed(format!("{entity_out_dir}/sensors.rs"), sensors::build());
 
     write_if_changed(
         format!("{behavior_out_dir}/blocks.rs"),

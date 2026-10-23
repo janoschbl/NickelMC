@@ -298,6 +298,7 @@ impl PlayerInventory {
         if slot >= Self::INVENTORY_SIZE {
             return;
         }
+        self.set_selected_slot(self.get_suitable_hotbar_slot());
         let selected = self.selected as usize;
         self.items.swap(selected, slot);
         self.set_changed();
@@ -306,18 +307,14 @@ impl PlayerInventory {
     /// Adds an item to the hotbar (for creative pick block) and selects it.
     /// Returns true if successful.
     pub fn add_and_pick_item(&mut self, stack: ItemStack) -> bool {
-        // Find first empty hotbar slot
-        for i in 0..Self::SELECTION_SIZE {
-            let j = usize::from(i);
-            if self.items[j].read().is_empty() {
-                self.items[j] = StackReference::new(stack);
-                self.selected = i;
-                self.set_changed();
-                return true;
-            }
+        self.set_selected_slot(self.get_suitable_hotbar_slot());
+        let selected = usize::from(self.selected);
+        if !self.items[selected].read().is_empty()
+            && let Some(free_slot) = self.get_free_slot()
+        {
+            self.items.swap(selected, usize::from(free_slot));
         }
-        // No empty slot, replace current slot
-        self.items[self.selected as usize] = StackReference::new(stack);
+        self.items[selected] = StackReference::new(stack);
         self.set_changed();
         true
     }

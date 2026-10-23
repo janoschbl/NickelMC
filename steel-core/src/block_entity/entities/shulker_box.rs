@@ -316,6 +316,14 @@ impl ShulkerBoxBlockEntity {
 }
 
 impl BlockEntity for ShulkerBoxBlockEntity {
+    fn collect_implicit_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) -> std::io::Result<()> {
+        components.set(CONTAINER, Some(self.container.lock().collect_contents()?));
+        Ok(())
+    }
+
     fn base(&self) -> &BlockEntityBase {
         &self.base
     }

@@ -315,7 +315,7 @@ fn should_emit_consume_particles_and_sounds(consumable: &Consumable, ticks_remai
 fn emit_consume_particles_and_sounds(consumable: &Consumable, user: &dyn LivingEntity) {
     // TODO: spawn item-crumb particles when `has_consume_particles()` is set.
     let (volume, pitch) = if consumable.animation() == ItemUseAnimation::Drink {
-        (0.5, 0.9 + rand::random::<f32>() * 0.1)
+        (0.5, rand::random_range(0.9..1.0))
     } else {
         let volume = if rand::random::<bool>() { 0.5 } else { 1.0 };
         let pitch = 1.0 + 0.2 * (rand::random::<f32>() - rand::random::<f32>());
@@ -355,8 +355,7 @@ fn consume_effects(stack: &ItemStack, world: &Arc<World>, user: &dyn LivingEntit
                 SoundSource::Players,
                 player.position(),
                 0.5,
-                // Java `Mth.randomBetween(random, 0.9, 1.0)`.
-                0.9 + rand::random::<f32>() * 0.1,
+                rand::random_range(0.9..1.0),
                 None,
             );
         }

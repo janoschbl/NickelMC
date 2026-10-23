@@ -465,7 +465,7 @@ impl ItemBehaviorRegistry {
             match ItemStackTemplate::from_stack(stack).and_then(|item| item.to_hover_event()) {
                 Ok(hover) => result = result.hover_event(hover),
                 Err(error) => {
-                    tracing::error!("Failed to encode the item hover of {stack:?}: {error}")
+                    tracing::error!("Failed to encode the item hover of {stack:?}: {error}");
                 }
             }
         }

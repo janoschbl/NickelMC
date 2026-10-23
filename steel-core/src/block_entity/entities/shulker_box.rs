@@ -14,7 +14,9 @@ use steel_registry::{
     blocks::{
         behavior::PushReaction, block_state_ext::BlockStateExt, properties::BlockStateProperties,
     },
-    data_components::{DataComponentPatch, ItemContainerContents, vanilla_components::CONTAINER},
+    data_components::{
+        DataComponentMap, DataComponentPatch, ItemContainerContents, vanilla_components::CONTAINER,
+    },
     item_stack::ItemStack,
     vanilla_block_entity_types,
 };
@@ -27,11 +29,12 @@ use steel_utils::{
 
 use crate::{
     behavior::blocks::ShulkerBoxBlock,
-    block_entity::{BlockEntity, BlockEntityBase},
-    inventory::{
-        container::Container,
-        lock::{ContainerRef, SharedContainer},
+    block_entity::{
+        BlockEntity, BlockEntityBase, BlockEntityLifecycleExt, ImplicitComponentGetter,
+        RandomizableContainer, container_properties::ContainerProperties,
+        randomizable_container::RandomizableContainerStorage,
     },
+    inventory::{container::Container, lock::ContainerRef},
     physics::{CollisionWorld as _, MoverType, WorldCollisionProvider},
     world::World,
 };
@@ -71,26 +74,15 @@ impl ShulkerBoxAnimation {
 
 /// Block entity backing every shulker box color, including the undyed one.
 pub struct ShulkerBoxBlockEntity {
-    base: Arc<BlockEntityBase>,
-    container: Arc<SyncMutex<ShulkerBoxContainer>>,
-    container_ref: ContainerRef,
+    storage: RandomizableContainerStorage,
+    properties: ContainerProperties,
     animation: SyncMutex<ShulkerBoxAnimation>,
     open_count: AtomicI32,
-}
-
-struct ShulkerBoxContainer {
-    items: Vec<ItemStack>,
 }
 
 // SAFETY: This key is owned by Steel and uniquely identifies `ShulkerBoxEntity`.
 unsafe impl DowncastType for ShulkerBoxBlockEntity {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:block_entity/shulker_box");
-}
-
-// SAFETY: This key is owned by Steel and uniquely identifies the independently
-// lockable inventory data used by a shulker box block entity.
-unsafe impl DowncastType for ShulkerBoxContainer {
-    const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:container/shulker_box");
 }
 
 fn do_neighbor_updates(world: &Arc<World>, pos: BlockPos, state: BlockStateId) {
@@ -102,21 +94,15 @@ impl ShulkerBoxBlockEntity {
     /// Creates a new shulker box block entity.
     #[must_use]
     pub fn new(level: Weak<World>, pos: BlockPos, state: BlockStateId) -> Self {
-        let base = Arc::new(BlockEntityBase::new(
-            &vanilla_block_entity_types::SHULKER_BOX,
-            level,
-            pos,
-            state,
-        ));
-        let container = Arc::new(SyncMutex::new(ShulkerBoxContainer {
-            items: vec![ItemStack::empty(); SHULKER_BOX_SLOTS],
-        }));
-        let shared_container: SharedContainer =
-            Arc::<SyncMutex<ShulkerBoxContainer>>::clone(&container);
         Self {
-            container_ref: ContainerRef::owned_by_block_entity(shared_container, Arc::clone(&base)),
-            base,
-            container,
+            storage: RandomizableContainerStorage::new(
+                &vanilla_block_entity_types::SHULKER_BOX,
+                SHULKER_BOX_SLOTS,
+                level,
+                pos,
+                state,
+            ),
+            properties: ContainerProperties::default(),
             animation: SyncMutex::new(ShulkerBoxAnimation {
                 animation_status: AnimationStatus::Closed,
                 progress: 0,
@@ -193,18 +179,14 @@ impl ShulkerBoxBlockEntity {
         }
     }
 
-    /// Builds the item form of a placed, possibly-filled shulker box.
-    /// Vanilla `ShulkerBoxBlockEntity.collectComponents()` +
-    /// `BaseContainerBlockEntity.collectImplicitComponents(CONTAINER)`.
-    pub fn shulker_box_as_item(&self, state: BlockStateId) -> ItemStack {
+    /// Builds a shulker box item containing the stored inventory.
+    pub fn shulker_box_as_item(&self, state: BlockStateId) -> std::io::Result<ItemStack> {
         let block_item = REGISTRY.items.by_block(state.get_block());
-
-        let contents = self.collect_components();
-
         let mut patch = DataComponentPatch::new();
-        patch.set(CONTAINER, contents);
-
-        ItemStack::with_count_and_patch(block_item, 1, patch)
+        for (key, value) in self.collect_components()?.iter() {
+            patch.set_raw(key.clone(), value.clone());
+        }
+        Ok(ItemStack::with_count_and_patch(block_item, 1, patch))
     }
 
     /// Calculates the bounding box of a shulker during its opening animation.
@@ -268,34 +250,17 @@ impl ShulkerBoxBlockEntity {
         !collision.has_block_collision(&lid_open_bounding_box)
     }
 
+    /// Checks the lock and the spectator restriction on pending loot.
+    pub fn can_player_open(&self, player: &crate::player::Player) -> bool {
+        use crate::entity::Entity as _;
+        !(player.is_spectator() && self.storage.loot_table().is_some())
+            && self.properties.can_open(player)
+    }
+
     /// Checks if the block entity's container has any items
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.container.lock().is_empty()
-    }
-
-    /// Collect all the items inside the shulker box into an `ItemContainerContents`
-    ///
-    /// # Panics
-    /// Panics if shulker box somehow has more than 256 slots. This should never happen
-    #[must_use]
-    pub fn collect_components(&self) -> ItemContainerContents {
-        let container = self.container.lock();
-
-        let size = container.get_container_size();
-        let slots: Vec<Option<ItemStackTemplate>> = (0..size)
-            .map(|i| {
-                let item = container.get_item(i);
-                if item.is_empty() {
-                    None
-                } else {
-                    ItemStackTemplate::from_stack(item).ok()
-                }
-            })
-            .collect();
-
-        ItemContainerContents::new(slots)
-            .expect("shulker box slot count is always within the 256 container-contents limit")
+        self.storage.container.lock().is_empty()
     }
 
     /// Interpolated progress for smooth rendering between ticks.
@@ -314,13 +279,39 @@ impl ShulkerBoxBlockEntity {
     }
 }
 
+impl crate::nameable::Nameable for ShulkerBoxBlockEntity {
+    fn custom_name(&self) -> Option<text_components::TextComponent> {
+        self.properties.custom_name()
+    }
+
+    fn name(&self) -> text_components::TextComponent {
+        self.custom_name().unwrap_or_else(|| {
+            text_components::TextComponent::translated(
+                steel_utils::translations::CONTAINER_SHULKER_BOX.msg(),
+            )
+        })
+    }
+}
+
 impl BlockEntity for ShulkerBoxBlockEntity {
+    fn collect_implicit_components(
+        &self,
+        components: &mut steel_registry::data_components::DataComponentMap,
+    ) -> std::io::Result<()> {
+        self.properties.collect_components(components);
+        self.storage.collect_components(components)
+    }
+
     fn base(&self) -> &BlockEntityBase {
-        &self.base
+        &self.storage.base
     }
 
     fn tick(&self, world: &Arc<World>) {
-        self.update_animation(world, self.base.pos, self.base.block_state());
+        self.update_animation(
+            world,
+            self.storage.base.pos,
+            self.storage.base.block_state(),
+        );
     }
 
     fn trigger_event(&self, kind: i32, data: i32) -> bool {
@@ -341,99 +332,82 @@ impl BlockEntity for ShulkerBoxBlockEntity {
     }
 
     fn load_additional(&self, nbt: &BaseNbtCompound<'_>) {
-        let nbt_view: NbtCompoundView<'_, '_> = nbt.into();
-        let mut container = self.container.lock();
-        container.items.fill(ItemStack::empty());
-
-        let Some(items_list) = nbt_view.list("Items") else {
-            return;
-        };
-        let Some(compounds) = items_list.compounds() else {
-            return;
-        };
-
-        for compound in compounds {
-            let Some(slot) = compound.byte("Slot") else {
-                continue;
-            };
-            let slot = slot as usize;
-            if slot >= SHULKER_BOX_SLOTS {
-                continue;
-            }
-            if let Some(item) = ItemStack::from_borrowed_compound(&compound) {
-                container.items[slot] = item;
-            }
-        }
+        self.storage.load_additional(nbt);
+        self.properties.load(nbt);
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {
-        let container = self.container.lock();
-        let mut items: Vec<NbtCompound> = Vec::new();
-        for (slot, item) in container.items().iter().enumerate() {
-            if item.is_empty() {
-                continue;
-            }
-            let NbtTag::Compound(mut item_nbt) = item.clone().to_nbt_tag() else {
-                continue;
-            };
-            item_nbt.insert("Slot", slot as i8);
-            items.push(item_nbt);
-        }
-        nbt.insert("Items", NbtList::Compound(items));
+        self.storage.save_additional(nbt);
+        self.properties.save(nbt);
     }
 
-    fn apply_components_from_item(&self, item: &ItemStack) {
-        let Some(contents) = item.get(CONTAINER) else {
-            return;
-        };
+    fn apply_implicit_components(&self, components: &mut ImplicitComponentGetter<'_>) {
+        self.storage.apply_components(components);
+        self.properties.apply_components(components);
+    }
 
-        let mut container = self.container.lock();
-        container.items.fill(ItemStack::empty());
-        for (slot, template) in contents.items().iter().enumerate() {
-            if slot >= SHULKER_BOX_SLOTS {
-                break;
-            }
-            if let Some(template) = template {
-                container.items_mut()[slot] = ItemStack::with_count_and_patch(
-                    template.item(),
-                    template.count(),
-                    template.components().clone(),
-                );
-            }
-        }
+    fn as_randomizable_container(&self) -> Option<&dyn RandomizableContainer> {
+        Some(&self.storage)
+    }
+
+    fn as_nameable(&self) -> Option<&dyn crate::nameable::Nameable> {
+        Some(self)
     }
 
     fn container_ref(&self) -> Option<ContainerRef> {
-        Some(self.container_ref.clone())
+        Some(self.storage.container_ref.clone())
     }
 }
 
-impl Container for ShulkerBoxContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
-    }
+#[cfg(test)]
+mod tests {
+    use steel_registry::{init_vanilla_registry, vanilla_blocks, vanilla_items};
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
-    }
+    use super::*;
+    use crate::test_support::fresh_test_world;
 
-    fn get_container_size(&self) -> usize {
-        SHULKER_BOX_SLOTS
-    }
+    #[test]
+    fn applying_item_components_fills_the_slots_and_collects_them_back() {
+        init_vanilla_registry();
+        let world_fixture = fresh_test_world("shulker_box_apply_components");
+        let world = &world_fixture.world;
+        let shulker = ShulkerBoxBlockEntity::new(
+            Arc::downgrade(world),
+            BlockPos::new(8, 64, 8),
+            vanilla_blocks::SHULKER_BOX.default_state(),
+        );
+        let diamonds =
+            ItemStack::with_count_and_patch(&vanilla_items::DIAMOND, 5, DataComponentPatch::new());
+        let mut slots = vec![None; SHULKER_BOX_SLOTS];
+        slots[3] = Some(ItemStackTemplate::from_stack(&diamonds).expect("a plain stack converts"));
+        let contents = ItemContainerContents::new(slots).expect("27 slots fit the container limit");
+        let mut stack = ItemStack::new(&vanilla_items::SHULKER_BOX);
+        stack.set(CONTAINER, contents.clone());
 
-    fn set_item(&mut self, slot: usize, mut stack: ItemStack) {
-        if slot < SHULKER_BOX_SLOTS {
-            let max_stack_size = self.get_max_stack_size_for_item(&stack);
-            if !stack.is_empty() && stack.count() > max_stack_size {
-                stack.set_count(max_stack_size);
-            }
-            self.items[slot] = stack;
+        shulker.apply_components_from_item_stack(&stack);
+
+        {
+            let container = shulker.storage.container.lock();
+            assert!(container.items().get(3).is(&vanilla_items::DIAMOND));
+            assert_eq!(container.items().get(3).count(), 5);
+            assert!(
+                container
+                    .items()
+                    .iter()
+                    .enumerate()
+                    .all(|(slot, item)| slot == 3 || item.is_empty())
+            );
         }
+        assert!(
+            !shulker.base().stored_components().has(CONTAINER),
+            "an implicit component must not also be stored"
+        );
+        assert_eq!(
+            shulker
+                .collect_components()
+                .expect("valid components")
+                .get(CONTAINER),
+            Some(contents)
+        );
     }
-
-    fn get_max_stack_size(&self) -> i32 {
-        64
-    }
-
-    fn set_changed(&mut self) {}
 }

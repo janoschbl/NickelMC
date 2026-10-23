@@ -1,6 +1,8 @@
 //! Vanilla Sheep entity with wool color, shearing, and breeding parity.
 use std::sync::{Arc, Weak};
+use steel_utils::random::legacy_random::LegacyRandom;
 
+use crate::loot::vanilla_loot_tables;
 use glam::DVec3;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
@@ -16,10 +18,8 @@ use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_entity_data::SheepEntityData;
 use steel_registry::vanilla_game_events;
 use steel_registry::vanilla_item_tags::ItemTag;
-use steel_registry::vanilla_loot_tables;
 use steel_registry::{DyeColor, REGISTRY, TaggedRegistryExt, sound_events, vanilla_items};
 use steel_utils::locks::SyncMutex;
-use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, BlockStateId, Downcast as _, DowncastType, DowncastTypeKey};
 
@@ -29,11 +29,13 @@ use crate::entity::ai::goal::{
     RandomLookAroundGoal, TemptGoal, WaterAvoidingRandomStrollGoal,
 };
 use crate::entity::damage::DamageSource;
+use crate::entity::living_entity::shearing_loot_items;
+#[cfg(test)]
 use crate::entity::living_entity::shearing_loot_items_with_rng;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad, EntityPose,
     EntitySpawnReason, EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase,
-    PathfinderMob, SharedEntity, SpawnGroupData, sync_dirty_mob_effects,
+    PathfinderMob, SharedEntity, SpawnGroupData, SpawnRule, sync_dirty_mob_effects,
 };
 use crate::inventory::recipe_manager;
 use crate::physics::MoveResult;
@@ -60,7 +62,7 @@ const SHEARED_BIT: i8 = 0x10;
 const ATE_AGE_UP_SECONDS: i32 = 60;
 
 /// Vanilla sheep entity.
-#[entity_behavior(class = "Sheep")]
+#[entity_behavior(class = "Sheep", spawn_rule)]
 pub struct SheepEntity {
     base: EntityBase,
     entity_type: EntityTypeRef,
@@ -77,6 +79,9 @@ unsafe impl DowncastType for SheepEntity {
 }
 
 impl SheepEntity {
+    /// Vanilla `SpawnPlacements` predicate: `Animal.checkAnimalSpawnRules`.
+    pub(crate) const SPAWN_RULE: SpawnRule = <Self as Animal>::check_animal_spawn_rules;
+
     /// Creates a new sheep entity.
     #[must_use]
     pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {
@@ -209,10 +214,7 @@ impl SheepEntity {
             None,
         );
 
-        let mut rng = rand::rng();
-        for drop in
-            shearing_loot_items_with_rng(self, &vanilla_loot_tables::SHEARING_SHEEP, tool, &mut rng)
-        {
+        for drop in shearing_loot_items(self, &vanilla_loot_tables::SHEARING_SHEEP, tool) {
             self.spawn_shearing_drop(&drop);
         }
 

@@ -1,0 +1,16 @@
+[
+  {
+    "key": "minecraft:gameplay/villager_activity",
+    "default_value": "minecraft:idle",
+    "full_resolution_biomes": false,
+    "dimensions": [],
+    "biomes": []
+  },
+  {
+    "key": "minecraft:gameplay/baby_villager_activity",
+    "default_value": "minecraft:idle",
+    "full_resolution_biomes": false,
+    "dimensions": [],
+    "biomes": []
+  }
+]

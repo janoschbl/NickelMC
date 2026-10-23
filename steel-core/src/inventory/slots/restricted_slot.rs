@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 use std::sync::Arc;
 
 use steel_registry::item_stack::ItemStack;
@@ -102,11 +103,11 @@ impl Slot for RestrictedSlot {
         self.base.storage()
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         self.base.get_item(guard)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         self.base.get_item_mut(guard)
     }
 
@@ -122,7 +123,7 @@ impl Slot for RestrictedSlot {
         self.rules.may_pickup.as_ref().is_none_or(|it| {
             it(
                 self.base.get_container_slot(),
-                self.base.get_item(guard),
+                &self.base.get_item(guard),
                 guard,
                 player,
             )
@@ -144,6 +145,7 @@ impl Slot for RestrictedSlot {
 
 #[cfg(test)]
 mod tests {
+    use crate::inventory::stack_reference::{StackItems, StackItemsMut};
     use std::slice;
     use std::sync::Arc;
 
@@ -168,12 +170,12 @@ mod tests {
     }
 
     impl Container for SingleItemContainer {
-        fn items(&self) -> &[ItemStack] {
-            slice::from_ref(&self.item)
+        fn items(&self) -> StackItems<'_> {
+            StackItems::Owned(slice::from_ref(&self.item))
         }
 
-        fn items_mut(&mut self) -> &mut [ItemStack] {
-            slice::from_mut(&mut self.item)
+        fn items_mut(&mut self) -> StackItemsMut<'_> {
+            StackItemsMut::Owned(slice::from_mut(&mut self.item))
         }
 
         fn get_max_stack_size(&self) -> i32 {
@@ -192,7 +194,8 @@ mod tests {
         }));
         let capped_ref = ContainerRef::from(capped);
         let capped_slot = RestrictedSlot::new(capped_ref.clone(), 0, |_, _| true);
-        let mut capped_guard = ContainerLockGuard::lock_all(&[capped_ref]);
+        let mut capped_guard =
+            ContainerLockGuard::lock_all(&[capped_ref]).expect("container access should succeed");
         let capped_remainder = capped_slot.safe_insert(
             &mut capped_guard,
             ItemStack::with_count(&vanilla_items::STONE, 64),
@@ -204,7 +207,8 @@ mod tests {
         let default = SimpleContainer::new(1).into_shared();
         let default_ref = ContainerRef::from(default);
         let default_slot = RestrictedSlot::new(default_ref.clone(), 0, |_, _| true);
-        let mut default_guard = ContainerLockGuard::lock_all(&[default_ref]);
+        let mut default_guard =
+            ContainerLockGuard::lock_all(&[default_ref]).expect("container access should succeed");
         let mut stack = ItemStack::new(&vanilla_items::STONE);
         stack.set(MAX_STACK_SIZE, 99);
         stack.set_count(99);

@@ -2,6 +2,7 @@
 
 use std::mem;
 
+use super::stack_reference::{StackRead, StackWrite};
 use steel_registry::item_stack::ItemStack;
 
 pub use steel_registry::equipment::{EquipmentSlot, EquipmentSlotType};
@@ -9,10 +10,10 @@ pub use steel_registry::equipment::{EquipmentSlot, EquipmentSlotType};
 /// Equipment access shared by player inventories and owned entity storage.
 pub trait EntityEquipment: Send {
     /// Gets a reference to the item in a slot.
-    fn get_ref(&self, slot: EquipmentSlot) -> &ItemStack;
+    fn get_ref(&self, slot: EquipmentSlot) -> StackRead<'_>;
 
     /// Gets a mutable reference to the item in a slot.
-    fn get_mut(&mut self, slot: EquipmentSlot) -> &mut ItemStack;
+    fn get_mut(&mut self, slot: EquipmentSlot) -> StackWrite<'_>;
 
     /// Sets the item in a slot, returning the old item.
     fn set(&mut self, slot: EquipmentSlot, stack: ItemStack) -> ItemStack;
@@ -71,12 +72,12 @@ impl OwnedEntityEquipment {
 }
 
 impl EntityEquipment for OwnedEntityEquipment {
-    fn get_ref(&self, slot: EquipmentSlot) -> &ItemStack {
-        &self.slots[slot.index()]
+    fn get_ref(&self, slot: EquipmentSlot) -> StackRead<'_> {
+        StackRead::Borrowed(&self.slots[slot.index()])
     }
 
-    fn get_mut(&mut self, slot: EquipmentSlot) -> &mut ItemStack {
-        &mut self.slots[slot.index()]
+    fn get_mut(&mut self, slot: EquipmentSlot) -> StackWrite<'_> {
+        StackWrite::Borrowed(&mut self.slots[slot.index()])
     }
 
     fn set(&mut self, slot: EquipmentSlot, stack: ItemStack) -> ItemStack {

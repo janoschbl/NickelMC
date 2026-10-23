@@ -1,0 +1,807 @@
+[
+  {
+    "id": 0,
+    "key": "minecraft:dummy",
+    "field": "DUMMY",
+    "java_value_type": "java.lang.Void",
+    "can_serialize": false
+  },
+  {
+    "id": 1,
+    "key": "minecraft:home",
+    "field": "HOME",
+    "java_value_type": "net.minecraft.core.GlobalPos",
+    "can_serialize": true
+  },
+  {
+    "id": 2,
+    "key": "minecraft:job_site",
+    "field": "JOB_SITE",
+    "java_value_type": "net.minecraft.core.GlobalPos",
+    "can_serialize": true
+  },
+  {
+    "id": 3,
+    "key": "minecraft:potential_job_site",
+    "field": "POTENTIAL_JOB_SITE",
+    "java_value_type": "net.minecraft.core.GlobalPos",
+    "can_serialize": true
+  },
+  {
+    "id": 4,
+    "key": "minecraft:meeting_point",
+    "field": "MEETING_POINT",
+    "java_value_type": "net.minecraft.core.GlobalPos",
+    "can_serialize": true
+  },
+  {
+    "id": 5,
+    "key": "minecraft:secondary_job_site",
+    "field": "SECONDARY_JOB_SITE",
+    "java_value_type": "java.util.List<net.minecraft.core.GlobalPos>",
+    "can_serialize": false
+  },
+  {
+    "id": 6,
+    "key": "minecraft:mobs",
+    "field": "NEAREST_LIVING_ENTITIES",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.LivingEntity>",
+    "can_serialize": false
+  },
+  {
+    "id": 7,
+    "key": "minecraft:visible_mobs",
+    "field": "NEAREST_VISIBLE_LIVING_ENTITIES",
+    "java_value_type": "net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities",
+    "can_serialize": false
+  },
+  {
+    "id": 8,
+    "key": "minecraft:visible_villager_babies",
+    "field": "VISIBLE_VILLAGER_BABIES",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.LivingEntity>",
+    "can_serialize": false
+  },
+  {
+    "id": 9,
+    "key": "minecraft:nearest_players",
+    "field": "NEAREST_PLAYERS",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.player.Player>",
+    "can_serialize": false
+  },
+  {
+    "id": 10,
+    "key": "minecraft:nearest_visible_player",
+    "field": "NEAREST_VISIBLE_PLAYER",
+    "java_value_type": "net.minecraft.world.entity.player.Player",
+    "can_serialize": false
+  },
+  {
+    "id": 11,
+    "key": "minecraft:nearest_visible_targetable_player",
+    "field": "NEAREST_VISIBLE_ATTACKABLE_PLAYER",
+    "java_value_type": "net.minecraft.world.entity.player.Player",
+    "can_serialize": false
+  },
+  {
+    "id": 12,
+    "key": "minecraft:nearest_visible_targetable_players",
+    "field": "NEAREST_VISIBLE_ATTACKABLE_PLAYERS",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.player.Player>",
+    "can_serialize": false
+  },
+  {
+    "id": 13,
+    "key": "minecraft:walk_target",
+    "field": "WALK_TARGET",
+    "java_value_type": "net.minecraft.world.entity.ai.memory.WalkTarget",
+    "can_serialize": false
+  },
+  {
+    "id": 14,
+    "key": "minecraft:look_target",
+    "field": "LOOK_TARGET",
+    "java_value_type": "net.minecraft.world.entity.ai.behavior.PositionTracker",
+    "can_serialize": false
+  },
+  {
+    "id": 15,
+    "key": "minecraft:attack_target",
+    "field": "ATTACK_TARGET",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 16,
+    "key": "minecraft:attack_cooling_down",
+    "field": "ATTACK_COOLING_DOWN",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 17,
+    "key": "minecraft:interaction_target",
+    "field": "INTERACTION_TARGET",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 18,
+    "key": "minecraft:breed_target",
+    "field": "BREED_TARGET",
+    "java_value_type": "net.minecraft.world.entity.AgeableMob",
+    "can_serialize": false
+  },
+  {
+    "id": 19,
+    "key": "minecraft:ride_target",
+    "field": "RIDE_TARGET",
+    "java_value_type": "net.minecraft.world.entity.Entity",
+    "can_serialize": false
+  },
+  {
+    "id": 20,
+    "key": "minecraft:path",
+    "field": "PATH",
+    "java_value_type": "net.minecraft.world.level.pathfinder.Path",
+    "can_serialize": false
+  },
+  {
+    "id": 21,
+    "key": "minecraft:doors_to_close",
+    "field": "DOORS_TO_CLOSE",
+    "java_value_type": "java.util.Set<net.minecraft.core.GlobalPos>",
+    "can_serialize": false
+  },
+  {
+    "id": 22,
+    "key": "minecraft:nearest_bed",
+    "field": "NEAREST_BED",
+    "java_value_type": "net.minecraft.core.BlockPos",
+    "can_serialize": false
+  },
+  {
+    "id": 23,
+    "key": "minecraft:hurt_by",
+    "field": "HURT_BY",
+    "java_value_type": "net.minecraft.world.damagesource.DamageSource",
+    "can_serialize": false
+  },
+  {
+    "id": 24,
+    "key": "minecraft:hurt_by_entity",
+    "field": "HURT_BY_ENTITY",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 25,
+    "key": "minecraft:avoid_target",
+    "field": "AVOID_TARGET",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 26,
+    "key": "minecraft:nearest_hostile",
+    "field": "NEAREST_HOSTILE",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 27,
+    "key": "minecraft:nearest_attackable",
+    "field": "NEAREST_ATTACKABLE",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 28,
+    "key": "minecraft:hiding_place",
+    "field": "HIDING_PLACE",
+    "java_value_type": "net.minecraft.core.GlobalPos",
+    "can_serialize": false
+  },
+  {
+    "id": 29,
+    "key": "minecraft:heard_bell_time",
+    "field": "HEARD_BELL_TIME",
+    "java_value_type": "java.lang.Long",
+    "can_serialize": false
+  },
+  {
+    "id": 30,
+    "key": "minecraft:cant_reach_walk_target_since",
+    "field": "CANT_REACH_WALK_TARGET_SINCE",
+    "java_value_type": "java.lang.Long",
+    "can_serialize": false
+  },
+  {
+    "id": 31,
+    "key": "minecraft:golem_detected_recently",
+    "field": "GOLEM_DETECTED_RECENTLY",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 32,
+    "key": "minecraft:danger_detected_recently",
+    "field": "DANGER_DETECTED_RECENTLY",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 33,
+    "key": "minecraft:last_slept",
+    "field": "LAST_SLEPT",
+    "java_value_type": "java.lang.Long",
+    "can_serialize": true
+  },
+  {
+    "id": 34,
+    "key": "minecraft:last_woken",
+    "field": "LAST_WOKEN",
+    "java_value_type": "java.lang.Long",
+    "can_serialize": true
+  },
+  {
+    "id": 35,
+    "key": "minecraft:last_worked_at_poi",
+    "field": "LAST_WORKED_AT_POI",
+    "java_value_type": "java.lang.Long",
+    "can_serialize": true
+  },
+  {
+    "id": 36,
+    "key": "minecraft:nearest_visible_adult",
+    "field": "NEAREST_VISIBLE_ADULT",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 37,
+    "key": "minecraft:nearest_visible_wanted_item",
+    "field": "NEAREST_VISIBLE_WANTED_ITEM",
+    "java_value_type": "net.minecraft.world.entity.item.ItemEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 38,
+    "key": "minecraft:nearest_visible_nemesis",
+    "field": "NEAREST_VISIBLE_NEMESIS",
+    "java_value_type": "net.minecraft.world.entity.Mob",
+    "can_serialize": false
+  },
+  {
+    "id": 39,
+    "key": "minecraft:play_dead_ticks",
+    "field": "PLAY_DEAD_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 40,
+    "key": "minecraft:tempting_player",
+    "field": "TEMPTING_PLAYER",
+    "java_value_type": "net.minecraft.world.entity.player.Player",
+    "can_serialize": false
+  },
+  {
+    "id": 41,
+    "key": "minecraft:temptation_cooldown_ticks",
+    "field": "TEMPTATION_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 42,
+    "key": "minecraft:gaze_cooldown_ticks",
+    "field": "GAZE_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 43,
+    "key": "minecraft:long_jump_cooling_down",
+    "field": "LONG_JUMP_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 44,
+    "key": "minecraft:long_jump_mid_jump",
+    "field": "LONG_JUMP_MID_JUMP",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 45,
+    "key": "minecraft:has_hunting_cooldown",
+    "field": "HAS_HUNTING_COOLDOWN",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 46,
+    "key": "minecraft:ram_cooldown_ticks",
+    "field": "RAM_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 47,
+    "key": "minecraft:ram_target",
+    "field": "RAM_TARGET",
+    "java_value_type": "net.minecraft.world.phys.Vec3",
+    "can_serialize": false
+  },
+  {
+    "id": 48,
+    "key": "minecraft:is_in_water",
+    "field": "IS_IN_WATER",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 49,
+    "key": "minecraft:is_pregnant",
+    "field": "IS_PREGNANT",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 50,
+    "key": "minecraft:is_panicking",
+    "field": "IS_PANICKING",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 51,
+    "key": "minecraft:unreachable_tongue_targets",
+    "field": "UNREACHABLE_TONGUE_TARGETS",
+    "java_value_type": "java.util.List<java.util.UUID>",
+    "can_serialize": false
+  },
+  {
+    "id": 52,
+    "key": "minecraft:visited_block_positions",
+    "field": "VISITED_BLOCK_POSITIONS",
+    "java_value_type": "java.util.Set<net.minecraft.core.GlobalPos>",
+    "can_serialize": true
+  },
+  {
+    "id": 53,
+    "key": "minecraft:unreachable_transport_block_positions",
+    "field": "UNREACHABLE_TRANSPORT_BLOCK_POSITIONS",
+    "java_value_type": "java.util.Set<net.minecraft.core.GlobalPos>",
+    "can_serialize": true
+  },
+  {
+    "id": 54,
+    "key": "minecraft:transport_items_cooldown_ticks",
+    "field": "TRANSPORT_ITEMS_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": false
+  },
+  {
+    "id": 55,
+    "key": "minecraft:charge_cooldown_ticks",
+    "field": "CHARGE_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 56,
+    "key": "minecraft:attack_target_cooldown",
+    "field": "ATTACK_TARGET_COOLDOWN",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 57,
+    "key": "minecraft:spear_fleeing_time",
+    "field": "SPEAR_FLEEING_TIME",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": false
+  },
+  {
+    "id": 58,
+    "key": "minecraft:spear_fleeing_position",
+    "field": "SPEAR_FLEEING_POSITION",
+    "java_value_type": "net.minecraft.world.phys.Vec3",
+    "can_serialize": false
+  },
+  {
+    "id": 59,
+    "key": "minecraft:spear_charge_position",
+    "field": "SPEAR_CHARGE_POSITION",
+    "java_value_type": "net.minecraft.world.phys.Vec3",
+    "can_serialize": false
+  },
+  {
+    "id": 60,
+    "key": "minecraft:spear_engage_time",
+    "field": "SPEAR_ENGAGE_TIME",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": false
+  },
+  {
+    "id": 61,
+    "key": "minecraft:spear_status",
+    "field": "SPEAR_STATUS",
+    "java_value_type": "net.minecraft.world.entity.ai.behavior.SpearAttack$SpearStatus",
+    "can_serialize": false
+  },
+  {
+    "id": 62,
+    "key": "minecraft:angry_at",
+    "field": "ANGRY_AT",
+    "java_value_type": "java.util.UUID",
+    "can_serialize": true
+  },
+  {
+    "id": 63,
+    "key": "minecraft:universal_anger",
+    "field": "UNIVERSAL_ANGER",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 64,
+    "key": "minecraft:admiring_item",
+    "field": "ADMIRING_ITEM",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 65,
+    "key": "minecraft:time_trying_to_reach_admire_item",
+    "field": "TIME_TRYING_TO_REACH_ADMIRE_ITEM",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": false
+  },
+  {
+    "id": 66,
+    "key": "minecraft:disable_walk_to_admire_item",
+    "field": "DISABLE_WALK_TO_ADMIRE_ITEM",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 67,
+    "key": "minecraft:admiring_disabled",
+    "field": "ADMIRING_DISABLED",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 68,
+    "key": "minecraft:hunted_recently",
+    "field": "HUNTED_RECENTLY",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": true
+  },
+  {
+    "id": 69,
+    "key": "minecraft:celebrate_location",
+    "field": "CELEBRATE_LOCATION",
+    "java_value_type": "net.minecraft.core.BlockPos",
+    "can_serialize": false
+  },
+  {
+    "id": 70,
+    "key": "minecraft:dancing",
+    "field": "DANCING",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 71,
+    "key": "minecraft:nearest_visible_huntable_hoglin",
+    "field": "NEAREST_VISIBLE_HUNTABLE_HOGLIN",
+    "java_value_type": "net.minecraft.world.entity.monster.hoglin.Hoglin",
+    "can_serialize": false
+  },
+  {
+    "id": 72,
+    "key": "minecraft:nearest_visible_baby_hoglin",
+    "field": "NEAREST_VISIBLE_BABY_HOGLIN",
+    "java_value_type": "net.minecraft.world.entity.monster.hoglin.Hoglin",
+    "can_serialize": false
+  },
+  {
+    "id": 73,
+    "key": "minecraft:nearest_targetable_player_not_wearing_gold",
+    "field": "NEAREST_TARGETABLE_PLAYER_NOT_WEARING_GOLD",
+    "java_value_type": "net.minecraft.world.entity.player.Player",
+    "can_serialize": false
+  },
+  {
+    "id": 74,
+    "key": "minecraft:nearby_adult_piglins",
+    "field": "NEARBY_ADULT_PIGLINS",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.monster.piglin.AbstractPiglin>",
+    "can_serialize": false
+  },
+  {
+    "id": 75,
+    "key": "minecraft:nearest_visible_adult_piglins",
+    "field": "NEAREST_VISIBLE_ADULT_PIGLINS",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.monster.piglin.AbstractPiglin>",
+    "can_serialize": false
+  },
+  {
+    "id": 76,
+    "key": "minecraft:nearest_visible_adult_hoglins",
+    "field": "NEAREST_VISIBLE_ADULT_HOGLINS",
+    "java_value_type": "java.util.List<net.minecraft.world.entity.monster.hoglin.Hoglin>",
+    "can_serialize": false
+  },
+  {
+    "id": 77,
+    "key": "minecraft:nearest_visible_adult_piglin",
+    "field": "NEAREST_VISIBLE_ADULT_PIGLIN",
+    "java_value_type": "net.minecraft.world.entity.monster.piglin.AbstractPiglin",
+    "can_serialize": false
+  },
+  {
+    "id": 78,
+    "key": "minecraft:nearest_visible_zombified",
+    "field": "NEAREST_VISIBLE_ZOMBIFIED",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 79,
+    "key": "minecraft:visible_adult_piglin_count",
+    "field": "VISIBLE_ADULT_PIGLIN_COUNT",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": false
+  },
+  {
+    "id": 80,
+    "key": "minecraft:visible_adult_hoglin_count",
+    "field": "VISIBLE_ADULT_HOGLIN_COUNT",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": false
+  },
+  {
+    "id": 81,
+    "key": "minecraft:nearest_player_holding_wanted_item",
+    "field": "NEAREST_PLAYER_HOLDING_WANTED_ITEM",
+    "java_value_type": "net.minecraft.world.entity.player.Player",
+    "can_serialize": false
+  },
+  {
+    "id": 82,
+    "key": "minecraft:ate_recently",
+    "field": "ATE_RECENTLY",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 83,
+    "key": "minecraft:nearest_repellent",
+    "field": "NEAREST_REPELLENT",
+    "java_value_type": "net.minecraft.core.BlockPos",
+    "can_serialize": false
+  },
+  {
+    "id": 84,
+    "key": "minecraft:pacified",
+    "field": "PACIFIED",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 85,
+    "key": "minecraft:roar_target",
+    "field": "ROAR_TARGET",
+    "java_value_type": "net.minecraft.world.entity.LivingEntity",
+    "can_serialize": false
+  },
+  {
+    "id": 86,
+    "key": "minecraft:disturbance_location",
+    "field": "DISTURBANCE_LOCATION",
+    "java_value_type": "net.minecraft.core.BlockPos",
+    "can_serialize": false
+  },
+  {
+    "id": 87,
+    "key": "minecraft:recent_projectile",
+    "field": "RECENT_PROJECTILE",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 88,
+    "key": "minecraft:is_sniffing",
+    "field": "IS_SNIFFING",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 89,
+    "key": "minecraft:is_emerging",
+    "field": "IS_EMERGING",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 90,
+    "key": "minecraft:roar_sound_delay",
+    "field": "ROAR_SOUND_DELAY",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 91,
+    "key": "minecraft:dig_cooldown",
+    "field": "DIG_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 92,
+    "key": "minecraft:roar_sound_cooldown",
+    "field": "ROAR_SOUND_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 93,
+    "key": "minecraft:sniff_cooldown",
+    "field": "SNIFF_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 94,
+    "key": "minecraft:touch_cooldown",
+    "field": "TOUCH_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 95,
+    "key": "minecraft:vibration_cooldown",
+    "field": "VIBRATION_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 96,
+    "key": "minecraft:sonic_boom_cooldown",
+    "field": "SONIC_BOOM_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 97,
+    "key": "minecraft:sonic_boom_sound_cooldown",
+    "field": "SONIC_BOOM_SOUND_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 98,
+    "key": "minecraft:sonic_boom_sound_delay",
+    "field": "SONIC_BOOM_SOUND_DELAY",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 99,
+    "key": "minecraft:liked_player",
+    "field": "LIKED_PLAYER",
+    "java_value_type": "java.util.UUID",
+    "can_serialize": true
+  },
+  {
+    "id": 100,
+    "key": "minecraft:liked_noteblock",
+    "field": "LIKED_NOTEBLOCK_POSITION",
+    "java_value_type": "net.minecraft.core.GlobalPos",
+    "can_serialize": true
+  },
+  {
+    "id": 101,
+    "key": "minecraft:liked_noteblock_cooldown_ticks",
+    "field": "LIKED_NOTEBLOCK_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 102,
+    "key": "minecraft:item_pickup_cooldown_ticks",
+    "field": "ITEM_PICKUP_COOLDOWN_TICKS",
+    "java_value_type": "java.lang.Integer",
+    "can_serialize": true
+  },
+  {
+    "id": 103,
+    "key": "minecraft:sniffer_explored_positions",
+    "field": "SNIFFER_EXPLORED_POSITIONS",
+    "java_value_type": "java.util.List<net.minecraft.core.GlobalPos>",
+    "can_serialize": true
+  },
+  {
+    "id": 104,
+    "key": "minecraft:sniffer_sniffing_target",
+    "field": "SNIFFER_SNIFFING_TARGET",
+    "java_value_type": "net.minecraft.core.BlockPos",
+    "can_serialize": false
+  },
+  {
+    "id": 105,
+    "key": "minecraft:sniffer_digging",
+    "field": "SNIFFER_DIGGING",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 106,
+    "key": "minecraft:sniffer_happy",
+    "field": "SNIFFER_HAPPY",
+    "java_value_type": "java.lang.Boolean",
+    "can_serialize": false
+  },
+  {
+    "id": 107,
+    "key": "minecraft:breeze_jump_cooldown",
+    "field": "BREEZE_JUMP_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 108,
+    "key": "minecraft:breeze_shoot",
+    "field": "BREEZE_SHOOT",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 109,
+    "key": "minecraft:breeze_shoot_charging",
+    "field": "BREEZE_SHOOT_CHARGING",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 110,
+    "key": "minecraft:breeze_shoot_recover",
+    "field": "BREEZE_SHOOT_RECOVERING",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 111,
+    "key": "minecraft:breeze_shoot_cooldown",
+    "field": "BREEZE_SHOOT_COOLDOWN",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 112,
+    "key": "minecraft:breeze_jump_inhaling",
+    "field": "BREEZE_JUMP_INHALING",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  },
+  {
+    "id": 113,
+    "key": "minecraft:breeze_jump_target",
+    "field": "BREEZE_JUMP_TARGET",
+    "java_value_type": "net.minecraft.core.BlockPos",
+    "can_serialize": true
+  },
+  {
+    "id": 114,
+    "key": "minecraft:breeze_leaving_water",
+    "field": "BREEZE_LEAVING_WATER",
+    "java_value_type": "net.minecraft.util.Unit",
+    "can_serialize": true
+  }
+]

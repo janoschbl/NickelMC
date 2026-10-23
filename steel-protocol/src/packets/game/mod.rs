@@ -19,6 +19,7 @@ mod c_cooldown;
 mod c_damage_event;
 mod c_entity_event;
 mod c_entity_position_sync;
+mod c_explode;
 mod c_game_event;
 mod c_hurt_animation;
 mod c_level_event;
@@ -87,6 +88,7 @@ mod s_interact;
 mod s_move_player;
 mod s_move_vehicle;
 mod s_pick_item_from_block;
+mod s_pick_item_from_entity;
 mod s_player_abilities;
 mod s_player_action;
 mod s_player_command;
@@ -128,6 +130,9 @@ pub use c_cooldown::CCooldown;
 pub use c_damage_event::CDamageEvent;
 pub use c_entity_event::CEntityEvent;
 pub use c_entity_position_sync::{CEntityPositionSync, PositionPath, PositionStep};
+pub use c_explode::{
+    CExplode, ExplosionParticleInfo, ExplosionParticlePalette, ExplosionParticleWeightError,
+};
 pub use c_game_event::CGameEvent;
 pub use c_game_event::GameEventType;
 pub use c_hurt_animation::CHurtAnimation;
@@ -216,6 +221,7 @@ pub use s_move_player::{
 };
 pub use s_move_vehicle::SMoveVehicle;
 pub use s_pick_item_from_block::SPickItemFromBlock;
+pub use s_pick_item_from_entity::SPickItemFromEntity;
 pub use s_player_abilities::SPlayerAbilities;
 pub use s_player_action::{PlayerAction, SPlayerAction};
 pub use s_player_command::{PlayerCommandAction, SPlayerCommand};

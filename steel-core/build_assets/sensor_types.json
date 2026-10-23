@@ -1,0 +1,275 @@
+[
+  {
+    "id": 0,
+    "key": "minecraft:dummy",
+    "field": "DUMMY",
+    "java_class": "net.minecraft.world.entity.ai.sensing.DummySensor",
+    "scan_rate": 20,
+    "requires": []
+  },
+  {
+    "id": 1,
+    "key": "minecraft:nearest_items",
+    "field": "NEAREST_ITEMS",
+    "java_class": "net.minecraft.world.entity.ai.sensing.NearestItemSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:nearest_visible_wanted_item"
+    ]
+  },
+  {
+    "id": 2,
+    "key": "minecraft:nearest_living_entities",
+    "field": "NEAREST_LIVING_ENTITIES",
+    "java_class": "net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:mobs",
+      "minecraft:visible_mobs"
+    ]
+  },
+  {
+    "id": 3,
+    "key": "minecraft:nearest_players",
+    "field": "NEAREST_PLAYERS",
+    "java_class": "net.minecraft.world.entity.ai.sensing.PlayerSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:nearest_players",
+      "minecraft:nearest_visible_player",
+      "minecraft:nearest_visible_targetable_player",
+      "minecraft:nearest_visible_targetable_players"
+    ]
+  },
+  {
+    "id": 4,
+    "key": "minecraft:nearest_bed",
+    "field": "NEAREST_BED",
+    "java_class": "net.minecraft.world.entity.ai.sensing.NearestBedSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:nearest_bed"
+    ]
+  },
+  {
+    "id": 5,
+    "key": "minecraft:hurt_by",
+    "field": "HURT_BY",
+    "java_class": "net.minecraft.world.entity.ai.sensing.HurtBySensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:hurt_by",
+      "minecraft:hurt_by_entity"
+    ]
+  },
+  {
+    "id": 6,
+    "key": "minecraft:villager_hostiles",
+    "field": "VILLAGER_HOSTILES",
+    "java_class": "net.minecraft.world.entity.ai.sensing.VillagerHostilesSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_hostile"
+    ]
+  },
+  {
+    "id": 7,
+    "key": "minecraft:villager_babies",
+    "field": "VILLAGER_BABIES",
+    "java_class": "net.minecraft.world.entity.ai.sensing.VillagerBabiesSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_villager_babies"
+    ]
+  },
+  {
+    "id": 8,
+    "key": "minecraft:secondary_pois",
+    "field": "SECONDARY_POIS",
+    "java_class": "net.minecraft.world.entity.ai.sensing.SecondaryPoiSensor",
+    "scan_rate": 40,
+    "requires": [
+      "minecraft:secondary_job_site"
+    ]
+  },
+  {
+    "id": 9,
+    "key": "minecraft:golem_detected",
+    "field": "GOLEM_DETECTED",
+    "java_class": "net.minecraft.world.entity.ai.sensing.GolemSensor",
+    "scan_rate": 200,
+    "requires": [
+      "minecraft:mobs",
+      "minecraft:golem_detected_recently"
+    ]
+  },
+  {
+    "id": 10,
+    "key": "minecraft:armadillo_scare_detected",
+    "field": "ARMADILLO_SCARE_DETECTED",
+    "java_class": "net.minecraft.world.entity.ai.sensing.MobSensor",
+    "scan_rate": 5,
+    "requires": [
+      "minecraft:mobs"
+    ]
+  },
+  {
+    "id": 11,
+    "key": "minecraft:piglin_specific_sensor",
+    "field": "PIGLIN_SPECIFIC_SENSOR",
+    "java_class": "net.minecraft.world.entity.ai.sensing.PiglinSpecificSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:mobs",
+      "minecraft:visible_mobs",
+      "minecraft:nearest_visible_nemesis",
+      "minecraft:nearest_visible_huntable_hoglin",
+      "minecraft:nearest_visible_baby_hoglin",
+      "minecraft:nearest_targetable_player_not_wearing_gold",
+      "minecraft:nearby_adult_piglins",
+      "minecraft:nearest_visible_adult_piglins",
+      "minecraft:visible_adult_piglin_count",
+      "minecraft:visible_adult_hoglin_count",
+      "minecraft:nearest_player_holding_wanted_item",
+      "minecraft:nearest_repellent"
+    ]
+  },
+  {
+    "id": 12,
+    "key": "minecraft:piglin_brute_specific_sensor",
+    "field": "PIGLIN_BRUTE_SPECIFIC_SENSOR",
+    "java_class": "net.minecraft.world.entity.ai.sensing.PiglinBruteSpecificSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_visible_nemesis",
+      "minecraft:nearby_adult_piglins"
+    ]
+  },
+  {
+    "id": 13,
+    "key": "minecraft:hoglin_specific_sensor",
+    "field": "HOGLIN_SPECIFIC_SENSOR",
+    "java_class": "net.minecraft.world.entity.ai.sensing.HoglinSpecificSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_visible_adult_hoglins",
+      "minecraft:nearest_visible_adult_piglin",
+      "minecraft:visible_adult_piglin_count",
+      "minecraft:visible_adult_hoglin_count",
+      "minecraft:nearest_repellent"
+    ]
+  },
+  {
+    "id": 14,
+    "key": "minecraft:nearest_adult",
+    "field": "NEAREST_ADULT",
+    "java_class": "net.minecraft.world.entity.ai.sensing.AdultSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_visible_adult"
+    ]
+  },
+  {
+    "id": 15,
+    "key": "minecraft:nearest_adult_any_type",
+    "field": "NEAREST_ADULT_ANY_TYPE",
+    "java_class": "net.minecraft.world.entity.ai.sensing.AdultSensorAnyType",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_visible_adult"
+    ]
+  },
+  {
+    "id": 16,
+    "key": "minecraft:axolotl_attackables",
+    "field": "AXOLOTL_ATTACKABLES",
+    "java_class": "net.minecraft.world.entity.ai.sensing.AxolotlAttackablesSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_attackable",
+      "minecraft:has_hunting_cooldown"
+    ]
+  },
+  {
+    "id": 17,
+    "key": "minecraft:food_temptations",
+    "field": "FOOD_TEMPTATIONS",
+    "java_class": "net.minecraft.world.entity.ai.sensing.TemptingSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:tempting_player"
+    ]
+  },
+  {
+    "id": 18,
+    "key": "minecraft:frog_temptations",
+    "field": "FROG_TEMPTATIONS",
+    "java_class": "net.minecraft.world.entity.ai.sensing.TemptingSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:tempting_player"
+    ]
+  },
+  {
+    "id": 19,
+    "key": "minecraft:nautilus_temptations",
+    "field": "NAUTILUS_TEMPTATIONS",
+    "java_class": "net.minecraft.world.entity.ai.sensing.TemptingSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:tempting_player"
+    ]
+  },
+  {
+    "id": 20,
+    "key": "minecraft:frog_attackables",
+    "field": "FROG_ATTACKABLES",
+    "java_class": "net.minecraft.world.entity.ai.sensing.FrogAttackablesSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:visible_mobs",
+      "minecraft:nearest_attackable",
+      "minecraft:unreachable_tongue_targets"
+    ]
+  },
+  {
+    "id": 21,
+    "key": "minecraft:is_in_water",
+    "field": "IS_IN_WATER",
+    "java_class": "net.minecraft.world.entity.ai.sensing.IsInWaterSensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:is_in_water"
+    ]
+  },
+  {
+    "id": 22,
+    "key": "minecraft:warden_entity_sensor",
+    "field": "WARDEN_ENTITY_SENSOR",
+    "java_class": "net.minecraft.world.entity.ai.sensing.WardenEntitySensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:mobs",
+      "minecraft:visible_mobs",
+      "minecraft:nearest_attackable"
+    ]
+  },
+  {
+    "id": 23,
+    "key": "minecraft:breeze_attack_entity_sensor",
+    "field": "BREEZE_ATTACK_ENTITY_SENSOR",
+    "java_class": "net.minecraft.world.entity.ai.sensing.BreezeAttackEntitySensor",
+    "scan_rate": 20,
+    "requires": [
+      "minecraft:mobs",
+      "minecraft:visible_mobs",
+      "minecraft:nearest_attackable"
+    ]
+  }
+]

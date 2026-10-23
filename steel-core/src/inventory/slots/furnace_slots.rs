@@ -1,5 +1,6 @@
 //! Furnace-specific input, fuel, and result slots.
 
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_items;
 use steel_utils::{DowncastType, DowncastTypeKey};
@@ -36,11 +37,11 @@ impl Slot for FurnaceFuelSlot {
         self.base.storage()
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         self.base.get_item(guard)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         self.base.get_item_mut(guard)
     }
 
@@ -98,11 +99,11 @@ impl Slot for FurnaceResultSlot {
         self.base.storage()
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         self.base.get_item(guard)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         self.base.get_item_mut(guard)
     }
 

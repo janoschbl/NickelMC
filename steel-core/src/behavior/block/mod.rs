@@ -1,9 +1,10 @@
 //! Block behavior trait and registry.
 
 use std::sync::{Arc, Weak};
+use steel_utils::random::legacy_random::LegacyRandom;
 
+use crate::loot::{LootContext, LootTableRef};
 use glam::DVec3;
-use rand::rngs::ThreadRng;
 use smallvec::SmallVec;
 use steel_registry::DyeColor;
 use steel_registry::block_entity_type::BlockEntityTypeRef;
@@ -18,13 +19,11 @@ use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::{FluidRef, FluidState};
 use steel_registry::item_stack::ItemStack;
-use steel_registry::loot_table::{LootContext, LootTableRef};
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_entities;
 use steel_registry::{REGISTRY, RegistryEntry, RegistryExt, sound_events, vanilla_blocks};
 use steel_registry::{vanilla_damage_types, vanilla_items};
-use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::{GameType, InteractionHand, UpdateFlags};
 use steel_utils::value_providers::IntProvider;
 use steel_utils::{BlockLocalAabb, BlockPos, BlockStateId, Identifier, WorldAabb, axis::Axis};
@@ -45,8 +44,8 @@ use crate::physics::collide;
 use crate::player::Player;
 use crate::world::game_event::SharedGameEventListener;
 use crate::world::{
-    ClipHitResult, ConditionalBlockSetResult, LevelAccessor, LevelReader, ScheduledTickAccess,
-    SignalQueryContext, World,
+    BlockInteraction, ClipHitResult, ConditionalBlockSetResult, Explosion, LevelAccessor,
+    LevelReader, ScheduledTickAccess, SignalQueryContext, World,
 };
 use steel_registry::vanilla_fluids;
 
@@ -68,29 +67,46 @@ pub(crate) fn default_can_be_replaced(
 #[must_use]
 pub(crate) fn drop_from_block_interact_loot_table(
     key: LootTableRef,
+    world: &World,
+    pos: BlockPos,
     interacted_block_state: BlockStateId,
-    _interacted_block_entity: Option<SharedBlockEntity>,
     tool: Option<&ItemStack>,
     interacting_entity: Option<&dyn Entity>,
-    rng: &mut ThreadRng,
 ) -> Vec<ItemStack> {
-    let mut ctx = LootContext::new(rng).with_block_state(interacted_block_state);
+    match world.with_loot_random(key, 0, |loot_rng| {
+        let block_entity = world.get_block_entity(pos);
+        let mut ctx = LootContext::new(loot_rng)
+            .with_world(world)
+            .with_origin(
+                f64::from(pos.x()) + 0.5,
+                f64::from(pos.y()) + 0.5,
+                f64::from(pos.z()) + 0.5,
+            )
+            .with_block_state(interacted_block_state);
+        if let Some(block_entity) = block_entity.as_deref() {
+            ctx = ctx.with_block_entity(block_entity);
+        }
 
-    // TODO: Add the block entity to the context when it can be done.
+        let interacting_equipment = interacting_entity.and_then(loot_equipment);
+        if let Some(interacting_entity) = interacting_entity {
+            ctx = ctx.with_interacting_entity(entity_loot_ref(
+                interacting_entity,
+                interacting_equipment.as_ref(),
+            ));
+        }
 
-    let interacting_equipment = interacting_entity.and_then(loot_equipment);
-    if let Some(interacting_entity) = interacting_entity {
-        ctx = ctx.with_interacting_entity(entity_loot_ref(
-            interacting_entity,
-            interacting_equipment.as_ref(),
-        ));
+        if let Some(tool) = tool {
+            ctx = ctx.with_tool(tool);
+        }
+
+        key.get_random_items(&mut ctx)
+    }) {
+        Ok(items) => items,
+        Err(error) => {
+            log::error!("Failed to generate interaction loot {}: {error}", key.key);
+            Vec::new()
+        }
     }
-
-    if let Some(tool) = tool {
-        ctx = ctx.with_tool(tool);
-    }
-
-    key.get_random_items(&mut ctx)
 }
 
 /// Samples and applies enchantment effects to a block experience drop.
@@ -400,6 +416,79 @@ pub trait BlockBehavior: Send + Sync {
     ) {
     }
 
+    /// Applies Vanilla's default block response to an explosion.
+    fn on_explosion_hit(
+        &self,
+        state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        explosion: &dyn Explosion,
+        on_hit: &mut dyn FnMut(ItemStack, BlockPos),
+    ) {
+        self.default_on_explosion_hit(state, world, pos, explosion, on_hit);
+    }
+
+    /// Applies the default response from an overriding explosion hook.
+    fn default_on_explosion_hit(
+        &self,
+        state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        explosion: &dyn Explosion,
+        on_hit: &mut dyn FnMut(ItemStack, BlockPos),
+    ) {
+        if state.is_air() || explosion.block_interaction() == BlockInteraction::TriggerBlock {
+            return;
+        }
+
+        if self.drop_from_explosion(explosion) {
+            let empty_tool = ItemStack::empty();
+            let block_entity = if state.has_block_entity() {
+                world.get_block_entity(pos)
+            } else {
+                None
+            };
+            let context = BlockLootContext::new(world, pos)
+                .with_block_entity(block_entity.as_deref())
+                .with_entity(explosion.direct_source_entity())
+                .with_tool(&empty_tool);
+            let context = if explosion.block_interaction() == BlockInteraction::DestroyWithDecay {
+                context.with_explosion(explosion.radius())
+            } else {
+                context
+            };
+            let drop_experience = explosion
+                .indirect_source_entity()
+                .is_some_and(|entity| entity.as_player().is_some());
+            self.spawn_after_break(state, world, pos, &empty_tool, drop_experience);
+            for stack in World::block_drops(state, &context) {
+                on_hit(stack, pos);
+            }
+        }
+
+        world.set_block(
+            pos,
+            vanilla_blocks::AIR.default_state(),
+            UpdateFlags::UPDATE_ALL,
+        );
+        self.was_exploded(state, world, pos, explosion);
+    }
+
+    /// Called after this block is removed by an explosion.
+    fn was_exploded(
+        &self,
+        _state: BlockStateId,
+        _world: &Arc<World>,
+        _pos: BlockPos,
+        _explosion: &dyn Explosion,
+    ) {
+    }
+
+    /// Returns whether this block contributes normal explosion loot.
+    fn drop_from_explosion(&self, _explosion: &dyn Explosion) -> bool {
+        true
+    }
+
     /// Called after this block is removed from the world, to affect neighbors.
     ///
     /// This is used for things like rails notifying neighbors when removed.
@@ -570,6 +659,11 @@ pub trait BlockBehavior: Send + Sync {
         _pos: BlockPos,
     ) -> bool {
         state.is_static_redstone_conductor()
+    }
+
+    /// Chest opener sounds, when this block has chest behavior.
+    fn chest_sounds(&self) -> Option<(SoundEventRef, SoundEventRef)> {
+        None
     }
 
     /// Handles a queued server block event.

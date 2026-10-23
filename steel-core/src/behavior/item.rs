@@ -1,5 +1,6 @@
 //! Item behavior trait and registry.
 
+use crate::inventory::stack_reference::StackReference;
 use crate::player::player_inventory::Prediction;
 use std::sync::Arc;
 
@@ -28,6 +29,19 @@ use crate::player::{Player, player_inventory::EquipmentSwapResult};
 use crate::world::World;
 
 pub use steel_registry::data_components::vanilla_components::ItemUseAnimation;
+
+/// What [`ItemBehavior::finish_using`] leaves in the user's hand.
+///
+/// Vanilla writes the result back only when `finishUsingItem` returned a different
+/// object than the used stack. The two cases keep that identity distinction explicit.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FinishUseResult {
+    /// The stack passed to `finish_using`, including any in-place changes, stays the result.
+    /// Slot replacement during the callback does not replace this object.
+    InPlace,
+    /// A different stack replaces whatever is in the hand.
+    Replaced(ItemStack),
+}
 
 /// Item capability applied by a sign before its editor fallback.
 pub trait SignApplicator: Send + Sync {
@@ -103,9 +117,19 @@ pub trait ItemBehavior: Send + Sync {
             if consume_ticks > 0 {
                 context.player.start_using_item(context.hand);
             } else {
-                let stack = context.inv.with_item(|item| item.clone());
+                let stack = context
+                    .inv
+                    .with_inventory(|inventory| inventory.item_in_hand_reference(context.hand));
+                let before = stack.snapshot();
                 let result = finish_consuming_stack(&stack, context.world, context.player.as_ref());
-                context.inv.with_item(|item| *item = result);
+                let result =
+                    apply_finish_remainder(&before, &stack, result, context.player.as_ref());
+                context.inv.with_inventory(|inventory| {
+                    if let FinishUseResult::Replaced(result) = result {
+                        inventory.set_item_in_hand(context.hand, result);
+                    }
+                    inventory.record_stack_change(&stack, &before);
+                });
             }
             return InteractionResult::Consume;
         }
@@ -171,13 +195,14 @@ pub trait ItemBehavior: Send + Sync {
         &self,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         ticks_remaining: i32,
     ) {
-        if let Some(consumable) = stack.get(CONSUMABLE)
-            && should_emit_consume_particles_and_sounds(consumable, ticks_remaining)
+        let consumable = stack.read().get(CONSUMABLE).cloned();
+        if let Some(consumable) = consumable
+            && should_emit_consume_particles_and_sounds(&consumable, ticks_remaining)
         {
-            emit_consume_particles_and_sounds(consumable, user.living());
+            emit_consume_particles_and_sounds(&consumable, user.living());
         }
     }
 
@@ -186,7 +211,7 @@ pub trait ItemBehavior: Send + Sync {
     /// Returns whether vanilla should apply the stack's after-use component side effects.
     fn release_using(
         &self,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         _user: &dyn LivingEntity,
         _time_left: i32,
@@ -202,10 +227,10 @@ pub trait ItemBehavior: Send + Sync {
     /// Called when active use reaches its full duration.
     fn finish_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         world: &Arc<World>,
         user: LivingEntityRef<'_>,
-    ) -> ItemStack {
+    ) -> FinishUseResult {
         finish_consuming_stack(stack, world, user.living())
     }
 
@@ -296,7 +321,7 @@ fn should_emit_consume_particles_and_sounds(consumable: &Consumable, ticks_remai
 fn emit_consume_particles_and_sounds(consumable: &Consumable, user: &dyn LivingEntity) {
     // TODO: spawn item-crumb particles when `has_consume_particles()` is set.
     let (volume, pitch) = if consumable.animation() == ItemUseAnimation::Drink {
-        (0.5, 0.9 + rand::random::<f32>() * 0.1)
+        (0.5, rand::random_range(0.9..1.0))
     } else {
         let volume = if rand::random::<bool>() { 0.5 } else { 1.0 };
         let pitch = 1.0 + 0.2 * (rand::random::<f32>() - rand::random::<f32>());
@@ -307,16 +332,9 @@ fn emit_consume_particles_and_sounds(consumable: &Consumable, user: &dyn LivingE
     }
 }
 
-/// Applies vanilla `Consumable.onConsume`'s shared tail: runs
-/// `on_consume_effects`, plays the consume sound, then shrinks the stack by
-/// one (creative mode leaves it untouched).
-pub(crate) fn finish_consuming_stack(
-    stack: &ItemStack,
-    world: &Arc<World>,
-    user: &dyn LivingEntity,
-) -> ItemStack {
+fn consume_effects(stack: &ItemStack, world: &Arc<World>, user: &dyn LivingEntity) {
     let Some(consumable) = stack.get(CONSUMABLE) else {
-        return apply_use_remainder(stack, stack.copy_with_count(stack.count()), user);
+        return;
     };
 
     emit_consume_particles_and_sounds(consumable, user);
@@ -343,8 +361,7 @@ pub(crate) fn finish_consuming_stack(
                 SoundSource::Players,
                 player.position(),
                 0.5,
-                // Java `Mth.randomBetween(random, 0.9, 1.0)`.
-                0.9 + rand::random::<f32>() * 0.1,
+                rand::random_range(0.9..1.0),
                 None,
             );
         }
@@ -366,35 +383,64 @@ pub(crate) fn finish_consuming_stack(
     // TODO: Spawn item-crumb particles when `has_consume_particles()` is set.
     // TODO: Trigger CriteriaTriggers.CONSUME_ITEM once the advancement-criteria
     // foundation exists.
-
-    let mut used_stack = stack.copy_with_count(stack.count());
-    if !user.has_infinite_materials() {
-        used_stack.shrink(1);
-    }
-
-    apply_use_remainder(stack, used_stack, user)
 }
 
-/// Applies vanilla `UseRemainder.convertIntoRemainder`: if the original stack
-/// had a `use_remainder` and was actually consumed, either swap the fully
-/// emptied stack for the remainder, or — for a stack that still has items
-/// left (e.g. one honey bottle out of several)
-pub(crate) fn apply_use_remainder(
-    original_stack: &ItemStack,
-    mut used_stack: ItemStack,
+/// Consumes the live object, releasing its lock before any entity/world callback.
+pub(crate) fn finish_consuming_stack(
+    stack: &StackReference,
+    world: &Arc<World>,
     user: &dyn LivingEntity,
-) -> ItemStack {
-    let Some(remainder) = original_stack.get(USE_REMAINDER) else {
-        return used_stack;
+) -> FinishUseResult {
+    let initial = stack.snapshot();
+    if !initial.has(CONSUMABLE) {
+        return FinishUseResult::InPlace;
+    }
+    consume_effects(&initial, world, user);
+    if !user.has_infinite_materials() {
+        stack.write().shrink(1);
+    }
+    FinishUseResult::InPlace
+}
+
+pub(crate) fn apply_finish_remainder(
+    original: &ItemStack,
+    stack: &StackReference,
+    result: FinishUseResult,
+    user: &dyn LivingEntity,
+) -> FinishUseResult {
+    let FinishUseResult::Replaced(mut result) = result else {
+        return reference_use_remainder(original, stack, user);
     };
-    if let Some(extra) = remainder.convert_into_remainder(
-        &mut used_stack,
-        original_stack.count(),
-        user.has_infinite_materials(),
-    ) {
+    if let Some(remainder) = original.get(USE_REMAINDER)
+        && let Some(extra) = remainder.convert_into_remainder(
+            &mut result,
+            original.count(),
+            user.has_infinite_materials(),
+        )
+    {
         user.handle_extra_items_created_on_use(extra);
     }
-    used_stack
+    FinishUseResult::Replaced(result)
+}
+
+pub(crate) fn reference_use_remainder(
+    original: &ItemStack,
+    stack: &StackReference,
+    user: &dyn LivingEntity,
+) -> FinishUseResult {
+    let Some(remainder) = original.get(USE_REMAINDER) else {
+        return FinishUseResult::InPlace;
+    };
+    let should_convert = !user.has_infinite_materials() && stack.read().count() < original.count();
+    if !should_convert {
+        return FinishUseResult::InPlace;
+    }
+    let replacement = remainder.convert_into().create();
+    if stack.read().is_empty() {
+        return FinishUseResult::Replaced(replacement);
+    }
+    user.handle_extra_items_created_on_use(replacement);
+    FinishUseResult::InPlace
 }
 
 /// Registry for item behaviors.
@@ -501,6 +547,7 @@ impl Default for ItemBehaviorRegistry {
 
 #[cfg(test)]
 mod tests {
+    use crate::inventory::stack_reference::StackReference;
     use std::sync::Arc;
 
     use steel_registry::data_components::{Consumable, vanilla_components};
@@ -510,7 +557,7 @@ mod tests {
     use steel_utils::types::InteractionHand;
     use steel_utils::{ChunkPos, Downcast as _, WorldAabb};
 
-    use super::finish_consuming_stack;
+    use super::{FinishUseResult, apply_finish_remainder, finish_consuming_stack};
     use crate::behavior::{ITEM_BEHAVIORS, InteractionResult, UseItemContext, init_behaviors};
     use crate::entity::entities::ItemEntity;
     use crate::inventory::container::Container as _;
@@ -576,10 +623,15 @@ mod tests {
         }
 
         let stack = ItemStack::with_count(&vanilla_items::HONEY_BOTTLE, 5);
-        let result = finish_consuming_stack(&stack, world, player.as_ref());
+        let reference = StackReference::new(stack);
+        let before = reference.snapshot();
+        let result = finish_consuming_stack(&reference, world, player.as_ref());
+        let result = apply_finish_remainder(&before, &reference, result, player.as_ref());
+        let stack = reference.snapshot();
 
-        assert!(result.is(&vanilla_items::HONEY_BOTTLE));
-        assert_eq!(result.count(), 4);
+        assert_eq!(result, FinishUseResult::InPlace);
+        assert!(stack.is(&vanilla_items::HONEY_BOTTLE));
+        assert_eq!(stack.count(), 4);
 
         let dropped = world.get_entities_in_aabb_matching(
             &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),
@@ -655,7 +707,7 @@ mod tests {
                 .items()
                 .iter()
                 .filter(|item| item.is(&vanilla_items::GLASS_BOTTLE))
-                .map(ItemStack::count)
+                .map(|stack| stack.count())
                 .sum()
         };
         assert_eq!(
@@ -682,7 +734,8 @@ mod tests {
         }
 
         let stack = ItemStack::new(&vanilla_items::APPLE);
-        let _ = finish_consuming_stack(&stack, world, player.as_ref());
+        let reference = StackReference::new(stack);
+        let _ = finish_consuming_stack(&reference, world, player.as_ref());
 
         let food = player.food_data.lock();
         // Vanilla apple: nutrition 4, saturation 2.4.
@@ -702,7 +755,8 @@ mod tests {
         player.set_client_loaded(true);
 
         let stack = ItemStack::new(&vanilla_items::APPLE);
-        let _ = finish_consuming_stack(&stack, world, player.as_ref());
+        let reference = StackReference::new(stack);
+        let _ = finish_consuming_stack(&reference, world, player.as_ref());
 
         let apple_used = vanilla_stat_types::ITEM_USED.get(&vanilla_items::APPLE);
         assert_eq!(

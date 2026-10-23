@@ -48,7 +48,7 @@ fn small_fireball_accelerates_before_moving_and_wraps_rotation() {
     assert!((fireball.velocity().x - expected).abs() < 1.0e-12);
     assert!((fireball.position().x - position.x - expected).abs() < 1.0e-12);
     assert_eq!(fireball.position().y, position.y);
-    assert_eq!(fireball.rotation(), (-197.2, 0.0));
+    assert_eq!(fireball.rotation(), (162.8, 0.0));
     assert!(fireball.has_been_shot());
 }
 

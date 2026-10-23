@@ -5,13 +5,15 @@ use steel_registry::{
     data_components::vanilla_components::CUSTOM_NAME, init_vanilla_registry, item_stack::ItemStack,
     vanilla_damage_types, vanilla_entities, vanilla_items,
 };
-use text_components::{TextComponent, content::Content, interactivity::HoverEvent};
+use text_components::{
+    TextComponent, content::Content, interactivity::HoverEvent, translation::TranslatedMessage,
+};
 
 use super::*;
 use crate::behavior::init_behaviors;
-use crate::entity::{Entity, SharedEntity, entities::PigEntity};
+use crate::entity::{Entity, RemovalReason, SharedEntity, entities::PigEntity};
 use crate::inventory::equipment::EquipmentSlot;
-use crate::test_support::{TestPlayerBuilder, fresh_test_world};
+use crate::test_support::{TestEntity, TestPlayerBuilder, fresh_test_world};
 
 fn entry(source: DamageSource) -> CombatEntry {
     CombatEntry {
@@ -22,7 +24,7 @@ fn entry(source: DamageSource) -> CombatEntry {
     }
 }
 
-fn translation(message: &TextComponent) -> &text_components::translation::TranslatedMessage {
+fn translation(message: &TextComponent) -> &TranslatedMessage {
     let Content::Translate(translation) = &message.content else {
         panic!("expected a translated death message");
     };
@@ -92,7 +94,7 @@ fn removed_named_attacker_is_retained_and_assisted_fall_uses_its_weapon() {
     tracker.record_damage(entry(source), 0, true);
     weak.upgrade()
         .expect("retained attacker")
-        .set_removed(crate::entity::RemovalReason::Discarded);
+        .set_removed(RemovalReason::Discarded);
     let generic = tracker
         .death_message(victim.as_ref())
         .expect("named weapon death message");
@@ -132,12 +134,7 @@ fn indirect_damage_names_the_causing_entity_instead_of_the_projectile() {
     let mut weapon = ItemStack::new(&vanilla_items::BOW);
     weapon.set(CUSTOM_NAME, TextComponent::const_plain("Named bow"));
     attacker.with_equipment_slot_mut(EquipmentSlot::MainHand, &mut |item| *item = weapon.clone());
-    let projectile = crate::test_support::TestEntity::shared(
-        3,
-        DVec3::ZERO,
-        Weak::new(),
-        &vanilla_entities::ARROW,
-    );
+    let projectile = TestEntity::shared(3, DVec3::ZERO, Weak::new(), &vanilla_entities::ARROW);
     let source = DamageSource::environment(&vanilla_damage_types::ARROW)
         .with_causing_entity(Arc::clone(&attacker) as SharedEntity)
         .with_direct_entity(projectile);

@@ -1,5 +1,4 @@
 use crate::loot::LOOT_TABLES;
-use std::io;
 use steel_math::DEGREE_90;
 use steel_registry::data_components::vanilla_components::{DEATH_PROTECTION, USE_EFFECTS};
 use steel_registry::stat::vanilla_stat_types;

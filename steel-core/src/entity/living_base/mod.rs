@@ -632,7 +632,6 @@ struct LivingEntityState {
     death_processed: bool,
     invulnerable_time: i32,
     hurt_time: i32,
-    hurt_duration: i32,
     last_hurt: f32,
     last_hurt_by_player: Option<Uuid>,
     last_hurt_by_player_entity: Option<WeakEntity>,
@@ -669,7 +668,6 @@ impl LivingEntityState {
             death_processed: false,
             invulnerable_time: 0,
             hurt_time: 0,
-            hurt_duration: 0,
             last_hurt: 0.0,
             last_hurt_by_player: None,
             last_hurt_by_player_entity: None,
@@ -1537,9 +1535,7 @@ impl LivingEntityBase {
 
     /// Starts the hurt animation.
     pub fn begin_hurt_animation(&self) {
-        let mut state = self.state.lock();
-        state.hurt_duration = HURT_DURATION_TICKS;
-        state.hurt_time = state.hurt_duration;
+        self.state.lock().hurt_time = HURT_DURATION_TICKS;
     }
 
     /// Counts the hurt animation down by one tick.
@@ -1559,12 +1555,6 @@ impl LivingEntityBase {
     /// Restores the saved hurt animation timer without restarting the animation.
     pub fn set_hurt_time(&self, hurt_time: i16) {
         self.state.lock().hurt_time = i32::from(hurt_time);
-    }
-
-    /// Returns the current hurt duration.
-    #[must_use]
-    pub fn hurt_duration(&self) -> i32 {
-        self.state.lock().hurt_duration
     }
 
     /// Applies vanilla hurt cooldown bookkeeping.

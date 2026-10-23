@@ -15,10 +15,14 @@ are preserved.
 Upstream contributors
 ---------------------
 Work in this fork builds on the SteelMC project and its contributors; see
-`git log` for the full author list. In addition, NickelMC carries commits
-from the following open upstream pull requests, with original authorship kept:
+`git log` for the full author list. NickelMC also carries commits from open
+upstream pull requests, with the original authorship kept (no squash, no
+rewritten authors). The names below are the commit authors found in the git
+history; the history is authoritative.
 
-JosepBove, SomeYellowGuy, NotGhoull, quaid-perkins (Quaddle), Purdze, Julien, coco875,
-teknostom, tangjuyo, AnthonyDuong1, kdcokenny (Kenny), NandoBF (nabattis), JunkyDeveloper,
-CuzImClicks, lazy-importer, brandnakash-code.
-(Taken from commit authors on the dev/feat-* branches; the git history is authoritative.)
+Carried on master:
+NotGhoull, quaid-perkins (Quaddle), Purdze, JunkyDeveloper, brandnakash-code.
+
+Carried on dev/feat-* branches that are not merged to master yet:
+JosepBove, SomeYellowGuy, Julien, coco875, teknostom, tangjuyo, AnthonyDuong1,
+kdcokenny (Kenny), NandoBF (nabattis), CuzImClicks, lazy-importer.

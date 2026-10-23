@@ -1,5 +1,3 @@
-use std::io;
-
 use steel_registry::{
     damage_type::DeathMessageType, data_components::vanilla_components::CUSTOM_NAME,
     vanilla_damage_type_tags::DamageTypeTag,
@@ -25,12 +23,12 @@ fn translated(key: String, args: Vec<TextComponent>) -> TextComponent {
 }
 
 impl CombatTracker {
-    pub fn death_message(&self, victim: &dyn LivingEntity) -> io::Result<TextComponent> {
+    pub fn death_message(&self, victim: &dyn LivingEntity) -> TextComponent {
         let Some(killing_blow) = self.entries.last() else {
-            return Ok(translated(
+            return translated(
                 "death.attack.generic".to_owned(),
                 vec![victim.display_name()],
-            ));
+            );
         };
         let source = &killing_blow.source;
         match source.damage_type.death_message_type {
@@ -52,10 +50,7 @@ impl CombatTracker {
                         "https://bugs.mojang.com/browse/MCPE-28723",
                     ))
                     .hover_event(HoverEvent::show_text("MCPE-28723"));
-                return Ok(translated(
-                    format!("{base}.message"),
-                    vec![victim.display_name(), link],
-                ));
+                return translated(format!("{base}.message"), vec![victim.display_name(), link]);
             }
             DeathMessageType::Default => {}
         }
@@ -64,14 +59,14 @@ impl CombatTracker {
             let killer = victim
                 .level()
                 .and_then(|world| get_kill_credit(victim, &world));
-            return Ok(if let Some(killer) = killer {
+            return if let Some(killer) = killer {
                 translated(
                     format!("{key}.player"),
                     vec![victim.display_name(), killer.display_name()],
                 )
             } else {
                 translated(key, vec![victim.display_name()])
-            });
+            };
         }
         let attacker = source.causing_entity().or(source.direct_entity());
         let mut args = vec![victim.display_name()];
@@ -81,15 +76,14 @@ impl CombatTracker {
         if let Some(item_name) = source
             .causing_entity()
             .and_then(|entity| Self::named_weapon(entity.as_ref()))
-            .transpose()?
         {
             args.push(item_name);
-            return Ok(translated(format!("{key}.item"), args));
+            return translated(format!("{key}.item"), args);
         }
-        Ok(translated(key, args))
+        translated(key, args)
     }
 
-    fn named_weapon(attacker: &dyn Entity) -> Option<io::Result<TextComponent>> {
+    fn named_weapon(attacker: &dyn Entity) -> Option<TextComponent> {
         let living = attacker.as_living_entity()?;
         let mut result = None;
         living.with_equipment_slot(EquipmentSlot::MainHand, &mut |item| {
@@ -104,19 +98,19 @@ impl CombatTracker {
         victim: &dyn LivingEntity,
         entry: &CombatEntry,
         killer: Option<&dyn Entity>,
-    ) -> io::Result<TextComponent> {
+    ) -> TextComponent {
         if entry.source.is(&DamageTypeTag::IS_FALL)
             || entry
                 .source
                 .is(&DamageTypeTag::ALWAYS_MOST_SIGNIFICANT_FALL)
         {
-            return Ok(translated(
+            return translated(
                 format!(
                     "death.fell.accident.{}",
                     entry.fall_location.unwrap_or("generic")
                 ),
                 vec![victim.display_name()],
-            ));
+            );
         }
         let attacker = entry.source.causing_entity();
         let attacker_name = attacker.map(|entity| entity.display_name());
@@ -130,20 +124,17 @@ impl CombatTracker {
         } else if killer_name.is_some() {
             ("death.fell.finish", killer, killer_name)
         } else {
-            return Ok(translated(
-                "death.fell.killer".to_owned(),
-                vec![victim.display_name()],
-            ));
+            return translated("death.fell.killer".to_owned(), vec![victim.display_name()]);
         };
         let mut args = vec![victim.display_name()];
         if let Some(name) = name {
             args.push(name);
         }
-        if let Some(item_name) = entity.and_then(Self::named_weapon).transpose()? {
+        if let Some(item_name) = entity.and_then(Self::named_weapon) {
             args.push(item_name);
-            return Ok(translated(format!("{key}.item"), args));
+            return translated(format!("{key}.item"), args);
         }
-        Ok(translated(key.to_owned(), args))
+        translated(key.to_owned(), args)
     }
 
     fn most_significant_fall(&self) -> Option<&CombatEntry> {

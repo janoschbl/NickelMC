@@ -11,7 +11,7 @@ use steel_registry::{
 use steel_utils::{DowncastType, DowncastTypeKey, locks::SyncMutex, types::UpdateFlags};
 
 use crate::{
-    behavior::blocks::portal::FireBlock,
+    behavior::blocks::FireBlock,
     entity::{
         Entity, EntityBase, EntityBaseLoad, EntitySyncedData, Projectile, ProjectileBase,
         ProjectileHit, RemovalReason, SharedEntity,

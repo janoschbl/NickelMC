@@ -74,7 +74,10 @@ pub trait AbstractHurtingProjectile: Projectile {
 
         let Some(world) = self.level() else { return };
         if self.get_owner().is_some_and(|owner| owner.is_removed())
-            || !world.has_full_chunk(ChunkPos::from_block_pos(self.block_position()))
+            || world
+                .chunk_map
+                .with_full_chunk(ChunkPos::from_block_pos(self.block_position()), |_| ())
+                .is_none()
         {
             self.set_removed(RemovalReason::Discarded);
             return;
@@ -111,11 +114,11 @@ pub trait AbstractHurtingProjectile: Projectile {
         if movement.length_squared() == 0.0 {
             return;
         }
-        let yaw = (steel_math::atan2(movement.z, movement.x) * 180.0
+        let yaw = (steel_math::trig::atan2(movement.z, movement.x) * 180.0
             / f64::from(std::f32::consts::PI)) as f32
             + 90.0;
         let horizontal = (movement.x * movement.x + movement.z * movement.z).sqrt();
-        let pitch = (steel_math::atan2(horizontal, movement.y) * 180.0
+        let pitch = (steel_math::trig::atan2(horizontal, movement.y) * 180.0
             / f64::from(std::f32::consts::PI)) as f32
             - 90.0;
         let (mut old_yaw, mut old_pitch) = self.base().old_rotation();

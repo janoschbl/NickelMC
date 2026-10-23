@@ -1,5 +1,6 @@
 //! Chiseled bookshelf block entity implementation.
 
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use std::io;
 use std::mem;
 use std::sync::{Arc, Weak};
@@ -293,12 +294,12 @@ impl BlockEntity for ChiseledBookShelfBlockEntity {
 }
 
 impl Container for ChiseledBookShelfContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn set_item(&mut self, slot: usize, stack: ItemStack) {
@@ -348,9 +349,9 @@ impl Container for ChiseledBookShelfContainer {
     fn can_take_item(&self, destination: &dyn Container, _slot: usize, stack: &ItemStack) -> bool {
         destination.items().iter().any(|destination_item| {
             destination_item.is_empty()
-                || (ItemStack::is_same_item_same_components(stack, destination_item)
+                || (ItemStack::is_same_item_same_components(stack, &destination_item)
                     && destination_item.count() + stack.count()
-                        <= destination.get_max_stack_size_for_item(destination_item))
+                        <= destination.get_max_stack_size_for_item(&destination_item))
         })
     }
 }

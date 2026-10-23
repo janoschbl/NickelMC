@@ -4,6 +4,7 @@
 //! beacon's pyramid level and configured effects, matching vanilla's
 //! `DATA_LEVELS`, `DATA_PRIMARY`, and `DATA_SECONDARY`.
 
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use crate::player::player_inventory::Prediction;
 use std::slice;
 use std::sync::Arc;
@@ -42,12 +43,12 @@ impl PaymentContainer {
 }
 
 impl Container for PaymentContainer {
-    fn items(&self) -> &[ItemStack] {
-        slice::from_ref(&self.item)
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(slice::from_ref(&self.item))
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        slice::from_mut(&mut self.item)
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(slice::from_mut(&mut self.item))
     }
 
     fn get_max_stack_size(&self) -> i32 {

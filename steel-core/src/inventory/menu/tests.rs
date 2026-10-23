@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 use std::sync::Arc;
 
 use super::{MenuBuilder, kinds::BasicKind};
@@ -38,11 +39,11 @@ impl Slot for SingleItemSlot {
         self.base.storage()
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         self.base.get_item(guard)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         self.base.get_item_mut(guard)
     }
 

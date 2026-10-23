@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::StackReference;
 use std::io::Cursor;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -14,7 +15,9 @@ use super::{
     player_inventory::MenuItemDisposition,
     sleep::BedSleepingProblem,
 };
-use crate::behavior::{FinishUseResult, InteractionResult, ItemBehavior, init_behaviors};
+use crate::behavior::{
+    FinishUseResult, ITEM_BEHAVIORS, InteractionResult, ItemBehavior, init_behaviors,
+};
 use crate::chunk_saver::PersistentEntity;
 use crate::entity::{
     ActiveItemUseState, DEFAULT_MAX_AIR_SUPPLY, Entity, EntitySyncedData, LivingEntity,
@@ -894,7 +897,7 @@ fn end_credits_removes_all_menus_before_detaching() {
             .items()
             .iter()
             .filter(|stack| stack.is(item))
-            .map(ItemStack::count)
+            .map(|stack| stack.count())
             .sum();
         assert_eq!(count, expected);
     }
@@ -1199,7 +1202,7 @@ fn living_tick_detects_raw_inventory_equipment_mutation() {
 
     {
         let mut inventory = player.inventory.lock();
-        inventory.items_mut()[39] = ItemStack::new(&vanilla_items::DIAMOND_HELMET);
+        inventory.set_item(39, ItemStack::new(&vanilla_items::DIAMOND_HELMET));
     }
 
     LivingEntity::detect_equipment_updates(player.as_ref());
@@ -1975,10 +1978,10 @@ impl ItemBehavior for ShrinkOnUseTick {
         &self,
         _world: &Arc<World>,
         _user: LivingEntityRef<'_>,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _ticks_remaining: i32,
     ) {
-        stack.shrink(1);
+        stack.write().shrink(1);
     }
 }
 
@@ -1990,7 +1993,7 @@ impl ItemBehavior for TamperOnUseTick {
         &self,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _ticks_remaining: i32,
     ) {
         tamper_hand(user.living());
@@ -2005,10 +2008,10 @@ impl ItemBehavior for ShrinkAndStopUse {
         &self,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _ticks_remaining: i32,
     ) {
-        stack.shrink(1);
+        stack.write().shrink(1);
         let Some(player) = user.living().as_player() else {
             return;
         };
@@ -2022,7 +2025,7 @@ struct TamperOnFinish;
 impl ItemBehavior for TamperOnFinish {
     fn finish_using(
         &self,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
     ) -> FinishUseResult {
@@ -2037,11 +2040,11 @@ struct TamperOnFinishInPlace;
 impl ItemBehavior for TamperOnFinishInPlace {
     fn finish_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
     ) -> FinishUseResult {
-        stack.shrink(1);
+        stack.write().shrink(1);
         tamper_hand(user.living());
         FinishUseResult::InPlace
     }
@@ -2053,12 +2056,12 @@ struct ShrinkOnRelease;
 impl ItemBehavior for ShrinkOnRelease {
     fn release_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _world: &Arc<World>,
         _user: &dyn LivingEntity,
         _time_left: i32,
     ) -> bool {
-        stack.shrink(1);
+        stack.write().shrink(1);
         false
     }
 }
@@ -2069,7 +2072,7 @@ struct TamperOnRelease;
 impl ItemBehavior for TamperOnRelease {
     fn release_using(
         &self,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         user: &dyn LivingEntity,
         _time_left: i32,
@@ -2086,12 +2089,13 @@ struct ConsumeAndTamperOnRelease;
 impl ItemBehavior for ConsumeAndTamperOnRelease {
     fn release_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _world: &Arc<World>,
         user: &dyn LivingEntity,
         _time_left: i32,
     ) -> bool {
-        stack.shrink(stack.count());
+        let count = stack.read().count();
+        stack.write().shrink(count);
         tamper_hand(user);
         true
     }
@@ -2105,7 +2109,7 @@ impl ItemBehavior for SwitchToOffhandOnUseTick {
         &self,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _ticks_remaining: i32,
     ) {
         let Some(player) = user.living().as_player() else {
@@ -2124,11 +2128,11 @@ impl ItemBehavior for ShrinkAndInstallEqualHandOnUseTick {
         &self,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _ticks_remaining: i32,
     ) {
         install_equal_hand(user.living());
-        stack.shrink(1);
+        stack.write().shrink(1);
     }
 }
 
@@ -2138,12 +2142,12 @@ struct ShrinkAndInstallEqualHandOnFinish;
 impl ItemBehavior for ShrinkAndInstallEqualHandOnFinish {
     fn finish_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
     ) -> FinishUseResult {
         install_equal_hand(user.living());
-        stack.shrink(1);
+        stack.write().shrink(1);
         FinishUseResult::InPlace
     }
 }
@@ -2154,13 +2158,13 @@ struct ShrinkAndInstallEqualHandOnRelease;
 impl ItemBehavior for ShrinkAndInstallEqualHandOnRelease {
     fn release_using(
         &self,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         _world: &Arc<World>,
         user: &dyn LivingEntity,
         _time_left: i32,
     ) -> bool {
         install_equal_hand(user);
-        stack.shrink(1);
+        stack.write().shrink(1);
         false
     }
 }
@@ -2184,6 +2188,169 @@ fn install_equal_hand(user: &dyn LivingEntity) {
         .get_item_in_hand(InteractionHand::MainHand)
         .clone();
     inventory.set_item_in_hand(InteractionHand::MainHand, stack);
+}
+
+struct MutateThroughBothReferences;
+
+impl ItemBehavior for MutateThroughBothReferences {
+    fn on_use_tick(
+        &self,
+        _world: &Arc<World>,
+        user: LivingEntityRef<'_>,
+        stack: &StackReference,
+        _ticks_remaining: i32,
+    ) {
+        stack.write().shrink(1);
+        let player = user.living().as_player().expect("player user");
+        player
+            .inventory
+            .lock()
+            .mutate_item_in_hand(InteractionHand::MainHand, |held| held.shrink(1));
+        stack.write().grow(3);
+    }
+}
+
+#[test]
+fn tick_use_observes_combined_live_inventory_and_callback_mutations() {
+    let world = fresh_test_world("use_live_references");
+    let player = test_player(Arc::clone(&world.world));
+    let active = start_using_fixture_item(&player, &vanilla_items::STICK, 5, 3);
+    player.tick_active_item_use_with_behavior(
+        &shared_entity(&player),
+        &MutateThroughBothReferences,
+        active,
+    );
+    assert_eq!(hand_stack(&player).count(), 6);
+    assert_eq!(
+        player
+            .living_base
+            .active_item_use()
+            .expect("active use")
+            .remaining_ticks(),
+        2
+    );
+}
+
+struct ReplaceThenMutateOldObject;
+
+impl ItemBehavior for ReplaceThenMutateOldObject {
+    fn finish_using(
+        &self,
+        _stack: &StackReference,
+        _world: &Arc<World>,
+        _user: LivingEntityRef<'_>,
+    ) -> FinishUseResult {
+        panic!("a replaced use object must be released, not finished")
+    }
+
+    fn on_use_tick(
+        &self,
+        _world: &Arc<World>,
+        user: LivingEntityRef<'_>,
+        stack: &StackReference,
+        _ticks_remaining: i32,
+    ) {
+        let player = user.living().as_player().expect("player user");
+        let replacement = stack.snapshot();
+        player.inventory.lock().set_item(0, replacement);
+        stack.write().shrink(1);
+        assert_eq!(player.inventory.lock().get_item(0).count(), 5);
+    }
+}
+
+#[test]
+fn equal_container_replacement_is_a_distinct_live_object() {
+    let world = fresh_test_world("use_equal_container_replacement");
+    let player = test_player(Arc::clone(&world.world));
+    let active = start_using_fixture_item(&player, &vanilla_items::STICK, 5, 3);
+    let original = player
+        .inventory
+        .lock()
+        .item_in_hand_reference(InteractionHand::MainHand);
+    player.tick_active_item_use_with_behavior(
+        &shared_entity(&player),
+        &ReplaceThenMutateOldObject,
+        active,
+    );
+    assert_eq!(original.read().count(), 4);
+    assert_eq!(hand_stack(&player).count(), 5);
+    assert!(
+        !original.is_same(
+            &player
+                .inventory
+                .lock()
+                .item_in_hand_reference(InteractionHand::MainHand)
+        )
+    );
+}
+
+#[test]
+fn same_item_replacement_rebinds_on_the_next_tick() {
+    let world = fresh_test_world("use_same_item_rebind");
+    let player = test_player(Arc::clone(&world.world));
+    let active = start_using_fixture_item(&player, &vanilla_items::STICK, 5, 2);
+    player.tick_active_item_use_with_behavior(
+        &shared_entity(&player),
+        &ReplaceThenMutateOldObject,
+        active,
+    );
+    let active = player
+        .living_base
+        .active_item_use()
+        .expect("same-item replacement continues use");
+    assert_eq!(active.remaining_ticks(), 1);
+    player.tick_active_item_use_with_behavior(&shared_entity(&player), &ShrinkOnUseTick, active);
+    assert_eq!(hand_stack(&player).count(), 4);
+    assert_use_finished(&player);
+}
+
+struct TickOnRelease;
+
+impl ItemBehavior for TickOnRelease {
+    fn use_on_release(&self, _stack: &ItemStack) -> bool {
+        true
+    }
+
+    fn on_use_tick(
+        &self,
+        _world: &Arc<World>,
+        _user: LivingEntityRef<'_>,
+        stack: &StackReference,
+        _ticks_remaining: i32,
+    ) {
+        stack.write().grow(1);
+    }
+}
+
+#[test]
+fn use_on_release_ticks_once_more_and_does_not_finish_at_zero() {
+    let world = fresh_test_world("use_on_release_timing");
+    let player = test_player(Arc::clone(&world.world));
+    let active = start_using_fixture_item(&player, &vanilla_items::STICK, 1, 1);
+    player.tick_active_item_use_with_behavior(&shared_entity(&player), &TickOnRelease, active);
+    let active = player
+        .living_base
+        .active_item_use()
+        .expect("release-only use remains active at zero");
+    assert_eq!(active.remaining_ticks(), 0);
+    assert_eq!(hand_stack(&player).count(), 2);
+    player.release_using_item_with_behavior(&shared_entity(&player), &TickOnRelease, active);
+    assert_eq!(hand_stack(&player).count(), 3);
+    assert_use_finished(&player);
+}
+
+#[test]
+fn equal_replacement_at_completion_releases_instead_of_finishing() {
+    let world = fresh_test_world("use_equal_replacement_at_completion");
+    let player = test_player(Arc::clone(&world.world));
+    let active = start_using_fixture_item(&player, &vanilla_items::STICK, 5, 1);
+    player.tick_active_item_use_with_behavior(
+        &shared_entity(&player),
+        &ReplaceThenMutateOldObject,
+        active,
+    );
+    assert_eq!(hand_stack(&player).count(), 5);
+    assert_use_finished(&player);
 }
 
 // Covers a vanilla-accurate branch that no vanilla item can replicate: a
@@ -2295,6 +2462,9 @@ fn tick_active_item_use_preserves_offhand_session_started_by_behavior() {
         .lock()
         .set_offhand_item(ItemStack::new(&vanilla_items::COOKIE));
     let active = start_using_fixture_item(&player, &vanilla_items::STICK, 1, 1);
+    let full_duration = ITEM_BEHAVIORS
+        .get_behavior(&vanilla_items::COOKIE)
+        .get_use_duration(&ItemStack::new(&vanilla_items::COOKIE), player.as_ref());
 
     player.tick_active_item_use_with_behavior(
         &shared_entity(&player),
@@ -2310,6 +2480,14 @@ fn tick_active_item_use_preserves_offhand_session_started_by_behavior() {
     assert!(
         using_item_flag(&player),
         "USING_ITEM_FLAG must track the offhand session"
+    );
+    assert_eq!(
+        player
+            .living_base
+            .active_item_use()
+            .expect("offhand use")
+            .remaining_ticks(),
+        full_duration - 1
     );
 }
 

@@ -618,9 +618,9 @@ pub trait Mob: LivingEntity + Leashable {
         if item.key == vanilla_items::NAME_TAG.key {
             let name_tag_result = {
                 let mut inventory = player.inventory.lock();
-                let item_stack = inventory.get_item_in_hand_mut(hand);
+                let mut item_stack = inventory.get_item_in_hand_mut(hand);
                 ITEM_BEHAVIORS.get_behavior(item).interact_living_entity(
-                    item_stack,
+                    &mut item_stack,
                     player,
                     living_entity,
                     hand,
@@ -634,8 +634,8 @@ pub trait Mob: LivingEntity + Leashable {
         if ITEM_BEHAVIORS.get_behavior(item).as_spawn_egg().is_some() {
             let spawn_egg_result = {
                 let mut inventory = player.inventory.lock();
-                let item_stack = inventory.get_item_in_hand_mut(hand);
-                SpawnEggItem::interact_with_mob(item_stack, player, self)
+                let mut item_stack = inventory.get_item_in_hand_mut(hand);
+                SpawnEggItem::interact_with_mob(&mut item_stack, player, self)
             };
             if spawn_egg_result.consumes_action() {
                 return spawn_egg_result;
@@ -1615,7 +1615,7 @@ pub trait Mob: LivingEntity + Leashable {
             }
             if equipment.get_ref(slot).is_damageable_item() {
                 let item = equipment.get_ref(slot).item();
-                let sun_blocker = equipment.get_mut(slot);
+                let mut sun_blocker = equipment.get_mut(slot);
                 if sun_blocker.hurt_and_break(
                     rand::random_range(0..SUN_BURN_DURABILITY_ROLL_BOUND),
                     has_infinite_materials,

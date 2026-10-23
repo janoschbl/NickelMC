@@ -3,6 +3,7 @@
 //! Barrels are container block entities with 27 slots (3x9 grid),
 //! functioning similarly to chests but without double-chest behavior.
 
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use std::{
     mem,
     sync::{Arc, Weak},
@@ -141,12 +142,12 @@ impl BlockEntity for BarrelBlockEntity {
 }
 
 impl Container for BarrelContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn get_container_size(&self) -> usize {
@@ -211,6 +212,6 @@ mod tests {
 
         let container = barrel.container.lock();
         assert_eq!(container.items.len(), BARREL_SLOTS);
-        assert!(container.items.iter().all(ItemStack::is_empty));
+        assert!(container.items.iter().all(|stack| stack.is_empty()));
     }
 }

@@ -276,7 +276,7 @@ impl InvseeMenuKind {
             .enumerate()
             .filter_map(|(slot, previous)| {
                 let current = inventory.get_item(slot);
-                (!ItemStack::matches(previous, current)).then_some(slot)
+                (!ItemStack::matches(previous, &current)).then_some(slot)
             })
             .collect::<Vec<_>>();
         if changed_slots.is_empty() {

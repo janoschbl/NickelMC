@@ -44,7 +44,7 @@ impl MenuLayout {
         for range in &self.drain_sections {
             for slot_index in *range {
                 let slot = &behavior.slots()[slot_index];
-                let item = mem::take(slot.get_item_mut(&mut guard));
+                let item = mem::take(&mut *slot.get_item_mut(&mut guard));
                 if item.is_empty() {
                     continue;
                 }

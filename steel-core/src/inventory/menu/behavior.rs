@@ -438,7 +438,7 @@ impl MenuBehavior {
         let mut changed: Vec<(usize, ItemStack)> = Vec::new();
         for index in 0..self.slots.len() {
             let item = self.slots[index].get_item(&guard);
-            if self.remote_slots[index].matches(item) {
+            if self.remote_slots[index].matches(&item) {
                 // Cache a matched hash as Known to avoid re-hashing next tick.
                 if matches!(self.remote_slots[index], RemoteSlot::Hashed(_)) {
                     self.remote_slots[index] = RemoteSlot::Known(item.clone());
@@ -1014,6 +1014,7 @@ fn validate_component_hashes(hashed: &HashedPatchMap, patch: &DataComponentPatch
 
 #[cfg(test)]
 mod tests {
+    use crate::inventory::stack_reference::{StackItems, StackItemsMut};
     use std::slice;
     use std::sync::Arc;
 
@@ -1047,12 +1048,12 @@ mod tests {
     }
 
     impl Container for RecordingContainer {
-        fn items(&self) -> &[ItemStack] {
-            slice::from_ref(&self.item)
+        fn items(&self) -> StackItems<'_> {
+            StackItems::Owned(slice::from_ref(&self.item))
         }
 
-        fn items_mut(&mut self) -> &mut [ItemStack] {
-            slice::from_mut(&mut self.item)
+        fn items_mut(&mut self) -> StackItemsMut<'_> {
+            StackItemsMut::Owned(slice::from_mut(&mut self.item))
         }
 
         fn set_item(&mut self, _slot: usize, stack: ItemStack) {

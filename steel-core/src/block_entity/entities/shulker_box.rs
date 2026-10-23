@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, Ordering},
@@ -289,7 +290,7 @@ impl ShulkerBoxBlockEntity {
                 if item.is_empty() {
                     None
                 } else {
-                    ItemStackTemplate::from_stack(item).ok()
+                    ItemStackTemplate::from_stack(&item).ok()
                 }
             })
             .collect();
@@ -394,10 +395,13 @@ impl BlockEntity for ShulkerBoxBlockEntity {
                 break;
             }
             if let Some(template) = template {
-                container.items_mut()[slot] = ItemStack::with_count_and_patch(
-                    template.item(),
-                    template.count(),
-                    template.components().clone(),
+                container.set_item(
+                    slot,
+                    ItemStack::with_count_and_patch(
+                        template.item(),
+                        template.count(),
+                        template.components().clone(),
+                    ),
                 );
             }
         }
@@ -409,12 +413,12 @@ impl BlockEntity for ShulkerBoxBlockEntity {
 }
 
 impl Container for ShulkerBoxContainer {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn get_container_size(&self) -> usize {

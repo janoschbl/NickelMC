@@ -195,7 +195,7 @@ fn add_merges_into_existing_offhand_stack_before_main_inventory() {
 
     assert!(stack.is_empty());
     assert_eq!(inventory.get_ref(EquipmentSlot::OffHand).count(), 64);
-    assert!(inventory.get_items().iter().all(ItemStack::is_empty));
+    assert!(inventory.get_items().iter().all(|stack| stack.is_empty()));
 }
 
 #[test]
@@ -379,7 +379,7 @@ fn container_traversal_matches_visible_slot_indices() {
         );
     }
 
-    let iterated_counts: Vec<_> = inventory.iter().map(ItemStack::count).collect();
+    let iterated_counts: Vec<_> = inventory.iter().map(|stack| stack.count()).collect();
     let indexed_counts: Vec<_> = (0..size)
         .map(|slot| inventory.get_item(slot).count())
         .collect();
@@ -439,9 +439,9 @@ fn mutable_container_slice_exposes_all_logical_slots() {
 
     let mut inventory = PlayerInventory::new();
     {
-        let items = inventory.items_mut();
-        items[0] = ItemStack::new(&vanilla_items::STICK);
-        items[39] = ItemStack::new(&vanilla_items::DIAMOND_HELMET);
+        let mut items = inventory.items_mut();
+        items.set(0, ItemStack::new(&vanilla_items::STICK));
+        items.set(39, ItemStack::new(&vanilla_items::DIAMOND_HELMET));
     }
     inventory.set_changed();
 
@@ -1641,7 +1641,7 @@ fn terminal_menu_removal_returns_carried_item_and_rejects_replacement() {
         .items()
         .iter()
         .filter(|item| item.is(&vanilla_items::STONE))
-        .map(ItemStack::count)
+        .map(|stack| stack.count())
         .sum();
     assert_eq!(stone_count, 3);
 }
@@ -1683,7 +1683,7 @@ fn terminal_menu_removal_skips_queued_factory_and_drains_base_menu() {
             .items()
             .iter()
             .filter(|stack| stack.is(item))
-            .map(ItemStack::count)
+            .map(|stack| stack.count())
             .sum();
         assert_eq!(count, expected);
     }
@@ -1716,7 +1716,7 @@ fn pending_terminal_removal_preserves_drop_disposition() {
             .lock()
             .items()
             .iter()
-            .all(ItemStack::is_empty)
+            .all(|stack| stack.is_empty())
     );
     let dropped = world.get_entities_in_aabb_matching(
         &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),
@@ -1790,7 +1790,7 @@ fn prepared_menu_is_cleaned_when_replacement_removal_turns_terminal() {
             .lock()
             .items()
             .iter()
-            .all(ItemStack::is_empty)
+            .all(|stack| stack.is_empty())
     );
     let dropped = world.get_entities_in_aabb_matching(
         &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),
@@ -1835,7 +1835,7 @@ fn deferred_factory_is_not_run_when_earlier_close_turns_terminal() {
             .lock()
             .items()
             .iter()
-            .all(ItemStack::is_empty)
+            .all(|stack| stack.is_empty())
     );
     let dropped = world.get_entities_in_aabb_matching(
         &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),

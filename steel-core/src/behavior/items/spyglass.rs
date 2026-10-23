@@ -1,5 +1,6 @@
 //! Spyglass item behavior.
 
+use crate::inventory::stack_reference::StackReference;
 use std::sync::Arc;
 
 use steel_macros::item_behavior;
@@ -49,7 +50,7 @@ impl ItemBehavior for SpyglassItem {
 
     fn finish_using(
         &self,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
     ) -> FinishUseResult {
@@ -59,7 +60,7 @@ impl ItemBehavior for SpyglassItem {
 
     fn release_using(
         &self,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         user: &dyn LivingEntity,
         _time_left: i32,

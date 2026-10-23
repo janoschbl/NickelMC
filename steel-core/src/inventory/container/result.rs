@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackItems, StackItemsMut, StackRead, StackWrite};
 use core::slice;
 use std::mem;
 
@@ -37,12 +38,12 @@ impl Container for ResultContainer {
         1
     }
 
-    fn get_item(&self, _slot: usize) -> &ItemStack {
-        &self.result
+    fn get_item(&self, _slot: usize) -> StackRead<'_> {
+        StackRead::Borrowed(&self.result)
     }
 
-    fn get_item_mut(&mut self, _slot: usize) -> &mut ItemStack {
-        &mut self.result
+    fn get_item_mut(&mut self, _slot: usize) -> StackWrite<'_> {
+        StackWrite::Borrowed(&mut self.result)
     }
 
     fn set_item(&mut self, _slot: usize, stack: ItemStack) {
@@ -65,11 +66,11 @@ impl Container for ResultContainer {
         // Result container doesn't track dirty state.
     }
 
-    fn items(&self) -> &[ItemStack] {
-        slice::from_ref(&self.result)
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(slice::from_ref(&self.result))
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        slice::from_mut(&mut self.result)
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(slice::from_mut(&mut self.result))
     }
 }

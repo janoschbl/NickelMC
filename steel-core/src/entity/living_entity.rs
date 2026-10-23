@@ -1736,7 +1736,7 @@ pub trait LivingEntity: Entity {
     /// Visits the item in a vanilla living-entity equipment slot.
     fn with_equipment_slot(&self, slot: EquipmentSlot, visitor: &mut dyn FnMut(&ItemStack)) {
         let equipment = self.living_base().equipment().lock();
-        visitor(equipment.get_ref(slot));
+        visitor(&equipment.get_ref(slot));
     }
 
     /// Returns whether the item in this entity's main hand matches `predicate`.
@@ -1770,7 +1770,7 @@ pub trait LivingEntity: Entity {
         visitor: &mut dyn FnMut(&mut ItemStack),
     ) {
         let mut equipment = self.living_base().equipment().lock();
-        visitor(equipment.get_mut(slot));
+        visitor(&mut equipment.get_mut(slot));
     }
 
     /// Returns whether this entity currently has an item in `slot`.
@@ -1864,7 +1864,7 @@ pub trait LivingEntity: Entity {
             }
 
             let mut inventory = player.inventory.lock();
-            if !self.is_equippable_in_slot(inventory.get_item_in_hand(hand), slot) {
+            if !self.is_equippable_in_slot(&inventory.get_item_in_hand(hand), slot) {
                 return InteractionResult::Pass;
             }
 

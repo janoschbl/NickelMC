@@ -279,6 +279,8 @@ impl BlockBehavior for ChestBlock {
                     1.0,
                     None,
                 );
+            } else {
+                player.send_spectator_cant_open_message();
             }
             return InteractionResult::Success;
         }

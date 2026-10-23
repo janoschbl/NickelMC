@@ -661,6 +661,7 @@ struct LivingFluidTestEntity {
     in_wall_for_base_tick: bool,
     flying_player: bool,
     rejects_wither: bool,
+    omnidirectional_air_mover: bool,
 }
 
 impl LivingFluidTestEntity {
@@ -692,6 +693,7 @@ impl LivingFluidTestEntity {
             in_wall_for_base_tick: false,
             flying_player: false,
             rejects_wither: false,
+            omnidirectional_air_mover: false,
         }
     }
 
@@ -736,6 +738,11 @@ impl LivingFluidTestEntity {
         self
     }
 
+    const fn with_omnidirectional_air_mover(mut self) -> Self {
+        self.omnidirectional_air_mover = true;
+        self
+    }
+
     const fn rejecting_wither(mut self) -> Self {
         self.rejects_wither = true;
         self
@@ -773,6 +780,10 @@ impl LivingFluidTestEntity {
 crate::entity::impl_test_downcast_type!(LivingFluidTestEntity);
 
 impl Entity for LivingFluidTestEntity {
+    fn omnidirectional_air_mover(&self) -> bool {
+        self.omnidirectional_air_mover
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }

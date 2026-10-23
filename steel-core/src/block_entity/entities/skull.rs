@@ -1,6 +1,8 @@
 use crate::behavior::blocks::{SkullData, SkullType};
 use crate::behavior::skull_types;
-use crate::block_entity::{BlockEntity, BlockEntityBase};
+#[cfg(test)]
+use crate::block_entity::BlockEntityLifecycleExt as _;
+use crate::block_entity::{BlockEntity, BlockEntityBase, ImplicitComponentGetter};
 use crate::world::World;
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::NbtCompound;
@@ -8,6 +10,7 @@ use simdnbt::{FromNbtTag, ToNbtTag};
 use std::sync::Weak;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::data_components::DataComponentPatch;
+use steel_registry::data_components::vanilla_components::{CUSTOM_NAME, NOTE_BLOCK_SOUND, PROFILE};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, ResolvableProfile, vanilla_block_entity_types};
 use steel_utils::locks::SyncMutex;
@@ -145,8 +148,48 @@ impl BlockEntity for SkullBlockEntity {
         Some(self.save_custom_only())
     }
 
-    fn apply_components_from_item(&self, item: &ItemStack) {
+    fn apply_implicit_components(&self, components: &mut ImplicitComponentGetter<'_>) {
         let mut state = self.state.lock();
-        *state = SkullData::from_item(item);
+        state.owner = components.get(PROFILE);
+        state.note_block_sound = components.get(NOTE_BLOCK_SOUND);
+        state.custom_name = components.get(CUSTOM_NAME);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use steel_registry::data_components::vanilla_components::REPAIR_COST;
+    use steel_registry::{init_vanilla_registry, sound_events, vanilla_blocks, vanilla_items};
+
+    #[test]
+    fn implicit_skull_components_are_collected_not_duplicated_and_clear_on_replacement() {
+        init_vanilla_registry();
+        let skull = SkullBlockEntity::new(
+            Weak::new(),
+            BlockPos::new(0, 64, 0),
+            vanilla_blocks::PLAYER_HEAD.default_state(),
+        );
+        let mut stack = ItemStack::new(&vanilla_items::PLAYER_HEAD);
+        let name = TextComponent::plain("Named Head");
+        let sound = sound_events::BLOCK_NOTE_BLOCK_BANJO.key.clone();
+        stack.set(CUSTOM_NAME, name.clone());
+        stack.set(NOTE_BLOCK_SOUND, sound.clone());
+        stack.set(REPAIR_COST, 7);
+
+        skull.apply_components_from_item_stack(&stack);
+
+        let stored = skull.base().stored_components();
+        assert_eq!(stored.get(REPAIR_COST), Some(7));
+        assert!(!stored.has(CUSTOM_NAME));
+        assert!(!stored.has(NOTE_BLOCK_SOUND));
+        let collected = skull.collect_components().expect("valid components");
+        assert_eq!(collected.get(CUSTOM_NAME), Some(name));
+        assert_eq!(collected.get(NOTE_BLOCK_SOUND), Some(sound));
+
+        skull.apply_components_from_item_stack(&ItemStack::new(&vanilla_items::PLAYER_HEAD));
+        assert_eq!(skull.data().custom_name, None);
+        assert_eq!(skull.get_note_block_sound(), None);
+        assert!(skull.base().stored_components().is_empty());
     }
 }

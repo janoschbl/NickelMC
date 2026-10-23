@@ -109,6 +109,9 @@ pub struct PersistentPlayerData {
     /// Vanilla `Player.totalExperience`, updated by point grants but independent of level/progress.
     pub experience_total: i32,
 
+    /// Saved enchantment seed (`XpSeed`); zero is rerolled when loaded.
+    pub enchantment_seed: i32,
+
     /// Vanilla death-screen score. Point grants change it with Java `int` wrapping.
     pub score: i32,
 
@@ -228,9 +231,14 @@ impl PersistentPlayerData {
             }
         }
 
-        let (experience_level, experience_progress, experience_total) = {
+        let (experience_level, experience_progress, experience_total, enchantment_seed) = {
             let lock = player.experience.lock();
-            (lock.level(), lock.progress(), lock.total_points())
+            (
+                lock.level(),
+                lock.progress(),
+                lock.total_points(),
+                lock.enchantment_seed(),
+            )
         };
         let score = player.score();
         let root_vehicle = Self::root_vehicle_from_player(player)
@@ -275,6 +283,7 @@ impl PersistentPlayerData {
             experience_level,
             experience_progress,
             experience_total,
+            enchantment_seed,
             score,
             seen_credits: player.has_seen_credits(),
             root_vehicle,
@@ -509,7 +518,8 @@ impl PersistentPlayerData {
                 self.experience_level,
                 self.experience_progress,
                 self.experience_total,
-            );
+            )
+            .with_loaded_enchantment_seed(self.enchantment_seed, rand::random);
         }
         player.set_score(self.score);
         player.set_seen_credits(self.seen_credits);

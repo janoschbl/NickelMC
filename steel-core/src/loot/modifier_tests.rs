@@ -245,7 +245,7 @@ fn copy_components_preserves_stored_bees_through_item_placement() {
         steel_utils::BlockPos::ZERO,
         vanilla_blocks::BEE_NEST.default_state(),
     );
-    placed.apply_components_from_item(&items[0]);
+    placed.apply_components_from_item_stack(&items[0]);
     assert_eq!(placed.save_custom_only(), source.save_custom_only());
 }
 

@@ -47,16 +47,7 @@ pub(crate) fn enchant_randomly(
 }
 
 fn primary_item(enchantment: EnchantmentRef, item: &ItemStack) -> bool {
-    enchantment.can_enchant(item.item)
-        && enchantment.primary_items.is_none_or(|primary| {
-            let Some(tag) = primary.strip_prefix('#') else {
-                return false;
-            };
-            let Ok(tag) = tag.parse::<Identifier>() else {
-                return false;
-            };
-            REGISTRY.items.is_in_tag(item.item, &tag)
-        })
+    enchantment.is_primary_item(item.item)
 }
 
 fn weighted_choice(

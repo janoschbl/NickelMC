@@ -66,8 +66,11 @@ impl BlockEntity for BarrelBlockEntity {
     fn pre_remove_side_effects(&self, pos: BlockPos, _state: BlockStateId) {
         self.storage.pre_remove_side_effects(pos);
     }
-    fn apply_components_from_item(&self, item: &ItemStack) {
-        self.storage.apply_components_from_item(item);
+    fn apply_implicit_components(
+        &self,
+        components: &mut crate::block_entity::ImplicitComponentGetter<'_>,
+    ) {
+        self.storage.apply_components(components);
     }
     fn container_ref(&self) -> Option<ContainerRef> {
         Some(self.storage.container_ref.clone())

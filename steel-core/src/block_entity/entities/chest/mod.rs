@@ -172,9 +172,12 @@ impl BlockEntity for ChestBlockEntity {
         self.properties.save(nbt);
         self.storage.save_additional(nbt);
     }
-    fn apply_components_from_item(&self, item: &ItemStack) {
-        self.properties.apply_components(item);
-        self.storage.apply_components_from_item(item);
+    fn apply_implicit_components(
+        &self,
+        components: &mut crate::block_entity::ImplicitComponentGetter<'_>,
+    ) {
+        self.properties.apply_components(components);
+        self.storage.apply_components(components);
     }
     fn pre_remove_side_effects(&self, pos: BlockPos, _state: BlockStateId) {
         self.storage.pre_remove_side_effects(pos);

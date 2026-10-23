@@ -195,10 +195,13 @@ impl RandomizableContainerStorage {
         nbt.insert("Items", NbtList::Compound(items));
     }
 
-    pub(crate) fn apply_components_from_item(&self, item: &ItemStack) {
+    pub(crate) fn apply_components(
+        &self,
+        components: &mut crate::block_entity::ImplicitComponentGetter<'_>,
+    ) {
         let mut container = self.container.lock();
-        if let Some(contents) = item.get(CONTAINER) {
-            container.items.fill(ItemStack::empty());
+        container.items.fill(ItemStack::empty());
+        if let Some(contents) = components.get(CONTAINER) {
             for (slot, template) in contents
                 .items()
                 .iter()
@@ -214,10 +217,8 @@ impl RandomizableContainerStorage {
                 }
             }
         }
-        if let Some(loot) = item.get(CONTAINER_LOOT) {
-            container.loot_table = Some(loot.clone());
-            container.generation = container.generation.wrapping_add(1);
-        }
+        container.loot_table = components.get(CONTAINER_LOOT);
+        container.generation = container.generation.wrapping_add(1);
     }
 }
 

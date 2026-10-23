@@ -8,7 +8,6 @@ use steel_registry::{
     data_components::vanilla_components::{CUSTOM_NAME, LOCK},
     equipment::EquipmentSlot,
     item_predicate::LockCode,
-    item_stack::ItemStack,
 };
 use steel_utils::locks::SyncRwLock;
 use text_components::TextComponent;
@@ -82,10 +81,10 @@ impl ContainerProperties {
         }
     }
 
-    pub(crate) fn apply_components(&self, item: &ItemStack) {
+    pub(crate) fn apply_components(&self, components: &mut super::ImplicitComponentGetter<'_>) {
         *self.properties.write() = Arc::new(Properties {
-            name: item.get(CUSTOM_NAME).cloned(),
-            lock: item.get(LOCK).cloned().unwrap_or(LockCode::NO_LOCK),
+            name: components.get(CUSTOM_NAME),
+            lock: components.get(LOCK).unwrap_or(LockCode::NO_LOCK),
         });
     }
 

@@ -169,10 +169,14 @@ impl BlockEntity for BeehiveBlockEntity {
         Ok(())
     }
 
-    fn apply_components_from_item(&self, item: &ItemStack) {
+    fn apply_implicit_components(
+        &self,
+        components: &mut crate::block_entity::ImplicitComponentGetter<'_>,
+    ) {
         use simdnbt::ToNbtTag as _;
-        self.state.lock().stored = item
+        self.state.lock().stored = components
             .get(BEES)
+            .as_ref()
             .into_iter()
             .flat_map(|bees| bees.bees())
             .map(|bee| {

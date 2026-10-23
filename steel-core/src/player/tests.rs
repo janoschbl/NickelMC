@@ -77,15 +77,15 @@ fn hurt_time_survives_player_restore_and_counts_down_in_shared_base_tick() {
     let saved = PersistentPlayerData::from_player(&player);
     let restored = TestPlayerBuilder::new(Arc::clone(world), "Restored", 2).build();
     saved.apply_to_player(&restored);
-    assert_eq!(restored.hurt_time(), 10);
-    assert_eq!(restored.living_base().hurt_duration(), 0);
+    assert_eq!(restored.living_base().hurt_time(), 10);
+    assert_eq!(restored.nbt_for_data_compare().short("HurtTime"), Some(10));
 
     for remaining in (0..10).rev() {
         restored.base_tick();
-        assert_eq!(restored.hurt_time(), remaining);
+        assert_eq!(restored.living_base().hurt_time(), remaining);
     }
     restored.base_tick();
-    assert_eq!(restored.hurt_time(), 0);
+    assert_eq!(restored.living_base().hurt_time(), 0);
 }
 const HUMANOID_ARM_ENTITY_DATA_SERIALIZER_ID: i32 = 42;
 

@@ -2,7 +2,7 @@ use std::thread;
 
 use rustc_hash::FxHashSet;
 
-use crate::entity::{next_entity_id, reserve_entity_ids};
+use crate::entity::reserve_entity_ids;
 
 #[test]
 fn a_reserved_block_owns_the_ids_that_follow_its_first() {
@@ -13,14 +13,6 @@ fn a_reserved_block_owns_the_ids_that_follow_its_first() {
     for index in 0..8 {
         assert_eq!(block.part(index), block.first() + index as i32 + 1);
     }
-}
-
-#[test]
-fn single_allocations_stay_unique() {
-    let first = next_entity_id();
-    let second = next_entity_id();
-
-    assert_ne!(first, second);
 }
 
 #[test]

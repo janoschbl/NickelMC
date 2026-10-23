@@ -10,6 +10,7 @@ use serde::Deserialize;
 use std::{env, fs, path::Path, process::Command};
 use syn::Ident;
 
+mod advancement_triggers;
 mod blocks;
 mod candle_cakes;
 mod common;
@@ -28,6 +29,11 @@ struct Classes {
 }
 
 pub fn main() {
+    let out = env::var("OUT_DIR").expect("OUT_DIR not set");
+    write_if_changed(
+        format!("{out}/advancement_triggers.rs"),
+        advancement_triggers::build(),
+    );
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let behavior_out_dir = format!("{manifest_dir}/src/behavior/generated");
     let entity_out_dir = format!("{manifest_dir}/src/entity/generated");

@@ -15,6 +15,16 @@ pub(crate) struct CriterionJson {
 
 impl ToTokens for CriterionJson {
     fn to_tokens(&self, tokens: &mut TokenStream) {
+        if matches!(
+            self.trigger.to_string().as_str(),
+            "minecraft:enchanted_item" | "minecraft:effects_changed"
+        ) {
+            let trigger = crate::generator_functions::generate_identifier(&self.trigger);
+            tokens.extend(quote! {
+                Box::new(crate::advancement::criterion::CompiledCriterion { trigger: #trigger }) as Box<dyn AnyCriterion>
+            });
+            return;
+        }
         tokens.extend(quote! {
             Box::new(Criterion::<ImpossibleInstance, ImpossibleTrigger>::default()) as Box<dyn AnyCriterion> // TODO when predicate are implemented
         });

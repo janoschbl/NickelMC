@@ -333,12 +333,21 @@ impl MenuKind for EnchantmentKind {
         let Some(container) = guard.get_mut(container_id) else {
             return false;
         };
+        // Event callbacks can grant inventory rewards, so dispatch from a stable stack snapshot without container locks.
+        let trigger_stack = enchanted.clone();
         container.set_item(ITEM_SLOT, enchanted);
         container.set_item(LAPIS_SLOT, currency);
         container.set_changed();
 
         player.award_custom_stat(&vanilla_custom_stats::ENCHANT_ITEM);
-        // TODO: Dispatch ENCHANTED_ITEM when shared criterion-trigger listeners are available.
+        guard.run_unlocked(|| {
+            player.trigger_criterion(
+                crate::player::advancement::triggers::CriterionEvent::EnchantedItem {
+                    item: &trigger_stack,
+                    levels: enchantment_cost,
+                },
+            )
+        });
 
         self.update_offers(behavior, &mut guard);
         drop(guard);

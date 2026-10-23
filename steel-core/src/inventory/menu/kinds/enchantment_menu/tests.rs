@@ -38,6 +38,10 @@ fn test_table(key: &'static str, seed: i32) -> (TestWorld, Arc<Player>, BlockPos
     init_block_entities();
     let world_fixture = fresh_test_world(key);
     let world = &world_fixture.world;
+    world.set_game_rule(
+        &steel_registry::vanilla_game_rules::SHOW_ADVANCEMENT_MESSAGES,
+        false,
+    );
     let pos = BlockPos::new(8, 64, 8);
     insert_ready_full_chunk(world, ChunkPos::from_block_pos(pos));
     assert!(world.set_block(
@@ -351,6 +355,14 @@ fn button_is_rejected_without_lapis_or_levels() {
     );
 
     assert!(!table_item(&menu).is_enchanted());
+    assert!(
+        player
+            .advancements
+            .lock()
+            .progress
+            .get_progress(&steel_registry::vanilla_advancements::STORY_ENCHANT_ITEM)
+            .is_none()
+    );
     assert_eq!(table_lapis(&menu).count(), HIGH_OFFER_LAPIS_COST);
     assert_eq!(kind(&menu).enchantment_seed, SEED);
 }
@@ -426,6 +438,14 @@ fn enchanting_spends_levels_and_lapis_and_rerolls_the_seed() {
     player.experience.lock().set_levels(FULL_POWER_LEVELS);
 
     assert!(menu.click_menu_button(HIGH_OFFER_INDEX as i32, &player));
+    assert!(
+        player
+            .advancements
+            .lock()
+            .progress
+            .get_progress(&steel_registry::vanilla_advancements::STORY_ENCHANT_ITEM)
+            .is_some_and(|progress| progress.is_done())
+    );
 
     assert!(table_item(&menu).is_enchanted());
     assert!(table_lapis(&menu).is_empty());

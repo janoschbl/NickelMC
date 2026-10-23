@@ -89,7 +89,7 @@ fn modifiers_run_per_stack_in_entry_pool_table_order() {
         .get_random_items(&mut ctx)
         .expect("modified loot");
     assert_eq!(
-        items.iter().map(ItemStack::count).collect::<Vec<_>>(),
+        items.iter().map(|stack| stack.count()).collect::<Vec<_>>(),
         expected_counts
     );
     assert_eq!(rng.next_i64(), expected.next_i64());
@@ -154,7 +154,7 @@ fn nested_raw_output_is_modified_before_stack_normalization() {
     assert_eq!(items[0].count(), 10);
     let items = generate(&fixtures::OVERSIZED, 12345);
     assert_eq!(
-        items.iter().map(ItemStack::count).collect::<Vec<_>>(),
+        items.iter().map(|stack| stack.count()).collect::<Vec<_>>(),
         [64, 64, 2]
     );
 }
@@ -294,7 +294,7 @@ fn container_fill_matches_java_split_shuffle_and_random_state() {
         container
             .items()
             .iter()
-            .map(ItemStack::count)
+            .map(|stack| stack.count())
             .collect::<Vec<_>>(),
         [62, 1, 2, 2, 62, 2]
     );
@@ -324,7 +324,7 @@ fn container_fill_handles_overflow_zero_capacity_and_occupied_slots() {
             container
                 .items()
                 .iter()
-                .map(ItemStack::count)
+                .map(|stack| stack.count())
                 .collect::<Vec<_>>(),
             counts
         );

@@ -506,7 +506,7 @@ impl FishingHookEntity {
                 let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
                 let offhand_item = inventory.get_offhand_item();
 
-                !Self::should_stop_fishing(self, player, mainhand_item, offhand_item)
+                !Self::should_stop_fishing(self, player, &mainhand_item, &offhand_item)
             };
 
             if can_retrieve {
@@ -842,7 +842,7 @@ impl FishingHookEntity {
         let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
         let offhand_item = inventory.get_offhand_item();
 
-        !self.should_stop_fishing(player, mainhand_item, offhand_item)
+        !self.should_stop_fishing(player, &mainhand_item, &offhand_item)
     }
 }
 

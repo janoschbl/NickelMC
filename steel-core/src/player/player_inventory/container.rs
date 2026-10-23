@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use std::sync::LazyLock;
 
 use steel_registry::item_stack::ItemStack;
@@ -6,6 +7,7 @@ use steel_utils::types::InteractionHand;
 use crate::inventory::{
     container::Container,
     equipment::{EntityEquipment, EquipmentSlot},
+    stack_reference::{StackRead, StackReference, StackWrite},
 };
 
 use super::core::PlayerInventory;
@@ -91,12 +93,12 @@ static EMPTY_ITEM: LazyLock<ItemStack> = LazyLock::new(ItemStack::empty);
 pub struct InvalidHotbarSlot;
 
 impl Container for PlayerInventory {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Shared(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Shared(&mut self.items)
     }
 
     fn get_container_size(&self) -> usize {
@@ -127,8 +129,8 @@ impl Container for PlayerInventory {
                     }
                     return true;
                 }
-                let existing = &mut self.items[slot];
-                if !existing.is_empty() && ItemStack::is_same_item_same_components(existing, stack)
+                let mut existing = self.items[slot].write();
+                if !existing.is_empty() && ItemStack::is_same_item_same_components(&existing, stack)
                 {
                     let space = max_size - existing.count();
                     if space > 0 {
@@ -150,8 +152,8 @@ impl Container for PlayerInventory {
                 if slot == selected {
                     continue;
                 }
-                let existing = &mut self.items[slot];
-                if !existing.is_empty() && ItemStack::is_same_item_same_components(existing, stack)
+                let mut existing = self.items[slot].write();
+                if !existing.is_empty() && ItemStack::is_same_item_same_components(&existing, stack)
                 {
                     let space = max_size - existing.count();
                     if space > 0 {
@@ -172,9 +174,9 @@ impl Container for PlayerInventory {
                 }
                 return true;
             }
-            if self.items[slot].is_empty() {
+            if self.items[slot].read().is_empty() {
                 let to_place = stack.count().min(max_size);
-                self.items[slot] = stack.split(to_place);
+                self.items[slot] = StackReference::new(stack.split(to_place));
                 changed = true;
             }
         }
@@ -185,17 +187,17 @@ impl Container for PlayerInventory {
         stack.is_empty()
     }
 
-    fn get_item(&self, slot: usize) -> &ItemStack {
+    fn get_item(&self, slot: usize) -> StackRead<'_> {
         if slot < Self::CONTAINER_SIZE {
-            &self.items[slot]
+            self.items[slot].read()
         } else {
-            &EMPTY_ITEM
+            StackRead::Borrowed(&EMPTY_ITEM)
         }
     }
 
-    fn get_item_mut(&mut self, slot: usize) -> &mut ItemStack {
+    fn get_item_mut(&mut self, slot: usize) -> StackWrite<'_> {
         assert!(slot < Self::CONTAINER_SIZE, "Invalid slot index: {slot}");
-        &mut self.items[slot]
+        self.items[slot].write()
     }
 
     fn set_item(&mut self, slot: usize, stack: ItemStack) {
@@ -208,24 +210,32 @@ impl Container for PlayerInventory {
             return;
         }
         if slot < Self::INVENTORY_SIZE {
-            self.items[slot] = stack;
+            self.items[slot] = StackReference::new(stack);
         }
         self.set_changed();
     }
 
     fn is_empty(&self) -> bool {
-        self.items.iter().all(ItemStack::is_empty)
+        self.items.iter().all(|item| item.read().is_empty())
     }
 
     fn set_changed(&mut self) {
         self.times_changed = self.times_changed.wrapping_add(1);
     }
 
+    fn remove_item_no_update(&mut self, slot: usize) -> ItemStack {
+        let previous = std::mem::replace(
+            &mut self.items[slot],
+            StackReference::new(ItemStack::empty()),
+        );
+        previous.snapshot()
+    }
+
     fn clear_content(&mut self) -> i32 {
         let mut count = 0;
         for item in &mut self.items {
-            count += item.count();
-            *item = ItemStack::empty();
+            count += item.read().count();
+            *item = StackReference::new(ItemStack::empty());
         }
         if count > 0 {
             self.set_changed();
@@ -236,9 +246,10 @@ impl Container for PlayerInventory {
     fn clear_content_matching(&mut self, predicate: &mut dyn FnMut(&mut ItemStack) -> bool) -> i32 {
         let mut count = 0;
         for item in &mut self.items {
-            if predicate(item) {
-                count += item.count();
-                *item = ItemStack::empty();
+            let matches = predicate(&mut item.write());
+            if matches {
+                count += item.read().count();
+                *item = StackReference::new(ItemStack::empty());
             }
         }
         if count > 0 {

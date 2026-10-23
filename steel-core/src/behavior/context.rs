@@ -727,7 +727,7 @@ impl<'a> InventoryTickContext<'a> {
         for index in 0..PlayerInventory::INVENTORY_SIZE {
             let (item, selected) = {
                 let inventory = player.inventory.lock();
-                let stack = &inventory.get_items()[index];
+                let stack = inventory.get_items().get(index);
                 if stack.is_empty() {
                     continue;
                 }

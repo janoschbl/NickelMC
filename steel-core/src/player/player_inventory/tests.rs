@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     entity::{Entity, LivingEntity as _, RemovalReason, entities::ItemEntity, next_entity_id},
+    inventory::stack_reference::StackReference,
     inventory::{
         click::{Click, ClickOutcome, DragKind, MouseButton, QuickCraft},
         container::{Container, SimpleContainer},
@@ -60,7 +61,7 @@ fn death_drops_destroy_vanishing_items() {
 fn vanilla_inventory_nbt_contains_main_slots_only() {
     init_vanilla_registry();
     let mut inventory = PlayerInventory::new();
-    inventory.items[2] = ItemStack::new(&vanilla_items::STONE);
+    inventory.items[2] = StackReference::new(ItemStack::new(&vanilla_items::STONE));
     inventory.set(
         EquipmentSlot::Head,
         ItemStack::new(&vanilla_items::DIAMOND_HELMET),
@@ -140,14 +141,14 @@ fn add_marks_changed_when_stack_fills_existing_slot() {
     init_vanilla_registry();
 
     let mut inventory = PlayerInventory::new();
-    inventory.items[0] = ItemStack::with_count(&vanilla_items::OAK_LOG, 63);
+    inventory.items[0] = StackReference::new(ItemStack::with_count(&vanilla_items::OAK_LOG, 63));
     let before = inventory.get_times_changed();
 
     let mut stack = ItemStack::new(&vanilla_items::OAK_LOG);
     assert!(inventory.add(&mut stack));
 
     assert!(stack.is_empty());
-    assert_eq!(inventory.items[0].count(), 64);
+    assert_eq!(inventory.items[0].read().count(), 64);
     assert_ne!(inventory.get_times_changed(), before);
 }
 
@@ -156,7 +157,7 @@ fn add_to_selected_existing_slot_marks_inventory_changed() {
     init_vanilla_registry();
 
     let mut inventory = PlayerInventory::new();
-    inventory.items[0] = ItemStack::with_count(&vanilla_items::OAK_LOG, 63);
+    inventory.items[0] = StackReference::new(ItemStack::with_count(&vanilla_items::OAK_LOG, 63));
     let before = inventory.get_times_changed();
 
     let mut stack = ItemStack::new(&vanilla_items::OAK_LOG);
@@ -195,7 +196,7 @@ fn add_merges_into_existing_offhand_stack_before_main_inventory() {
 
     assert!(stack.is_empty());
     assert_eq!(inventory.get_ref(EquipmentSlot::OffHand).count(), 64);
-    assert!(inventory.get_items().iter().all(ItemStack::is_empty));
+    assert!(inventory.get_items().iter().all(|stack| stack.is_empty()));
 }
 
 #[test]
@@ -205,7 +206,7 @@ fn contains_stack_compares_components() {
     let mut inventory = PlayerInventory::new();
     let mut damaged_in_inventory = ItemStack::new(&vanilla_items::DIAMOND_PICKAXE);
     damaged_in_inventory.set_damage_value(3);
-    inventory.items[0] = damaged_in_inventory;
+    inventory.items[0] = StackReference::new(damaged_in_inventory);
 
     let mut damaged_search = ItemStack::new(&vanilla_items::DIAMOND_PICKAXE);
     damaged_search.set_damage_value(3);
@@ -282,7 +283,7 @@ fn filled_result_creative_limited_keeps_matching_held_stack() {
     );
     assert_eq!(
         (0..PlayerInventory::INVENTORY_SIZE)
-            .filter(|&slot| !inventory.items[slot].is_empty())
+            .filter(|&slot| !inventory.items[slot].read().is_empty())
             .count(),
         1
     );
@@ -334,7 +335,7 @@ fn filled_result_creative_unlimited_returns_unadded_result_to_drop() {
     let mut inventory = PlayerInventory::new();
     inventory.set_selected_item(ItemStack::new(&vanilla_items::LAVA_BUCKET));
     for item in &mut inventory.items[1..PlayerInventory::INVENTORY_SIZE] {
-        *item = ItemStack::with_count(&vanilla_items::OAK_LOG, 64);
+        *item = StackReference::new(ItemStack::with_count(&vanilla_items::OAK_LOG, 64));
     }
 
     let overflow = inventory.apply_filled_result(
@@ -356,7 +357,7 @@ fn clear_content_counts_equipment_items() {
     init_vanilla_registry();
 
     let mut inventory = PlayerInventory::new();
-    inventory.items[0] = ItemStack::with_count(&vanilla_items::OAK_LOG, 3);
+    inventory.items[0] = StackReference::new(ItemStack::with_count(&vanilla_items::OAK_LOG, 3));
     inventory.set(
         EquipmentSlot::Head,
         ItemStack::new(&vanilla_items::DIAMOND_HELMET),
@@ -379,7 +380,7 @@ fn container_traversal_matches_visible_slot_indices() {
         );
     }
 
-    let iterated_counts: Vec<_> = inventory.iter().map(ItemStack::count).collect();
+    let iterated_counts: Vec<_> = inventory.iter().map(|stack| stack.count()).collect();
     let indexed_counts: Vec<_> = (0..size)
         .map(|slot| inventory.get_item(slot).count())
         .collect();
@@ -387,7 +388,7 @@ fn container_traversal_matches_visible_slot_indices() {
     assert_eq!(iterated_counts.len(), size);
 
     let mut mutable_count = 0;
-    for (slot, item) in inventory.iter_mut().enumerate() {
+    for (slot, mut item) in inventory.iter_mut().enumerate() {
         mutable_count += 1;
         item.set_count((size - slot) as i32);
     }
@@ -413,8 +414,8 @@ fn equipment_trait_aliases_vanilla_container_indices() {
         PlayerInventory::CONTAINER_SIZE
     );
     assert!(ptr::eq(
-        inventory.get_ref(EquipmentSlot::MainHand),
-        inventory.get_item(0)
+        &*inventory.get_ref(EquipmentSlot::MainHand),
+        &*inventory.get_item(0)
     ));
 
     for (equipment_slot, container_slot) in [
@@ -427,8 +428,8 @@ fn equipment_trait_aliases_vanilla_container_indices() {
         (EquipmentSlot::Saddle, 42),
     ] {
         assert!(ptr::eq(
-            inventory.get_ref(equipment_slot),
-            inventory.get_item(container_slot)
+            &*inventory.get_ref(equipment_slot),
+            &*inventory.get_item(container_slot)
         ));
     }
 }
@@ -439,9 +440,9 @@ fn mutable_container_slice_exposes_all_logical_slots() {
 
     let mut inventory = PlayerInventory::new();
     {
-        let items = inventory.items_mut();
-        items[0] = ItemStack::new(&vanilla_items::STICK);
-        items[39] = ItemStack::new(&vanilla_items::DIAMOND_HELMET);
+        let mut items = inventory.items_mut();
+        items.set(0, ItemStack::new(&vanilla_items::STICK));
+        items.set(39, ItemStack::new(&vanilla_items::DIAMOND_HELMET));
     }
     inventory.set_changed();
 
@@ -463,7 +464,7 @@ fn main_inventory_search_does_not_use_equipment_slots() {
 
     let mut inventory = PlayerInventory::new();
     for item in &mut inventory.items[..PlayerInventory::INVENTORY_SIZE] {
-        *item = ItemStack::with_count(&vanilla_items::OAK_LOG, 64);
+        *item = StackReference::new(ItemStack::with_count(&vanilla_items::OAK_LOG, 64));
     }
     inventory.set(EquipmentSlot::Head, ItemStack::new(&vanilla_items::STONE));
 
@@ -479,8 +480,8 @@ fn equipment_main_hand_follows_selected_slot() {
     init_vanilla_registry();
 
     let mut inventory = PlayerInventory::new();
-    inventory.items[0] = ItemStack::new(&vanilla_items::STICK);
-    inventory.items[1] = ItemStack::new(&vanilla_items::OAK_LOG);
+    inventory.items[0] = StackReference::new(ItemStack::new(&vanilla_items::STICK));
+    inventory.items[1] = StackReference::new(ItemStack::new(&vanilla_items::OAK_LOG));
 
     assert!(
         inventory
@@ -493,7 +494,7 @@ fn equipment_main_hand_follows_selected_slot() {
             .get_ref(EquipmentSlot::MainHand)
             .is(&vanilla_items::OAK_LOG)
     );
-    assert!(inventory.items[0].is(&vanilla_items::STICK));
+    assert!(inventory.items[0].read().is(&vanilla_items::STICK));
 }
 
 #[test]
@@ -503,7 +504,7 @@ fn non_empty_equipment_items_uses_selected_item_as_main_hand() {
     let mut inventory = PlayerInventory::new();
     let main_hand = ItemStack::with_count(&vanilla_items::OAK_LOG, 2);
     let head = ItemStack::new(&vanilla_items::DIAMOND_HELMET);
-    inventory.items[0] = main_hand.clone();
+    inventory.items[0] = StackReference::new(main_hand.clone());
     inventory.set(EquipmentSlot::Head, head.clone());
 
     let items = inventory.non_empty_items();
@@ -1641,7 +1642,7 @@ fn terminal_menu_removal_returns_carried_item_and_rejects_replacement() {
         .items()
         .iter()
         .filter(|item| item.is(&vanilla_items::STONE))
-        .map(ItemStack::count)
+        .map(|stack| stack.count())
         .sum();
     assert_eq!(stone_count, 3);
 }
@@ -1683,7 +1684,7 @@ fn terminal_menu_removal_skips_queued_factory_and_drains_base_menu() {
             .items()
             .iter()
             .filter(|stack| stack.is(item))
-            .map(ItemStack::count)
+            .map(|stack| stack.count())
             .sum();
         assert_eq!(count, expected);
     }
@@ -1716,7 +1717,7 @@ fn pending_terminal_removal_preserves_drop_disposition() {
             .lock()
             .items()
             .iter()
-            .all(ItemStack::is_empty)
+            .all(|stack| stack.is_empty())
     );
     let dropped = world.get_entities_in_aabb_matching(
         &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),
@@ -1790,7 +1791,7 @@ fn prepared_menu_is_cleaned_when_replacement_removal_turns_terminal() {
             .lock()
             .items()
             .iter()
-            .all(ItemStack::is_empty)
+            .all(|stack| stack.is_empty())
     );
     let dropped = world.get_entities_in_aabb_matching(
         &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),
@@ -1835,7 +1836,7 @@ fn deferred_factory_is_not_run_when_earlier_close_turns_terminal() {
             .lock()
             .items()
             .iter()
-            .all(ItemStack::is_empty)
+            .all(|stack| stack.is_empty())
     );
     let dropped = world.get_entities_in_aabb_matching(
         &WorldAabb::new(-2.0, -1.0, -2.0, 2.0, 3.0, 2.0),

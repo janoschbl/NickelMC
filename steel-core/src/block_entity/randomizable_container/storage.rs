@@ -17,6 +17,7 @@ use crate::block_entity::{BlockEntityBase, RandomizableContainer};
 use crate::entity::{LivingEntity, entity_loot_ref, living_loot_equipment};
 use crate::inventory::container::Container;
 use crate::inventory::lock::{ContainerRef, SharedContainer};
+use crate::inventory::stack_reference::{StackItems, StackItemsMut};
 use crate::loot::generation_guard::LootGenerationGuard;
 use crate::loot::{LOOT_TABLES, LootContext, LootError, LootResult};
 use crate::player::Player;
@@ -297,12 +298,12 @@ impl RandomizableContainerStorage {
 }
 
 impl Container for RandomizableContainerInventory {
-    fn items(&self) -> &[ItemStack] {
-        &self.items
+    fn items(&self) -> StackItems<'_> {
+        StackItems::Owned(&self.items)
     }
 
-    fn items_mut(&mut self) -> &mut [ItemStack] {
-        &mut self.items
+    fn items_mut(&mut self) -> StackItemsMut<'_> {
+        StackItemsMut::Owned(&mut self.items)
     }
 
     fn set_item(&mut self, slot: usize, mut stack: ItemStack) {

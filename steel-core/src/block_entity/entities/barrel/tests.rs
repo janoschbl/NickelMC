@@ -326,5 +326,5 @@ fn pre_remove_preserves_slots_for_existing_menu_references() {
 
     let container = barrel.storage.container.lock();
     assert_eq!(container.items().len(), BARREL_SLOTS);
-    assert!(container.items().iter().all(ItemStack::is_empty));
+    assert!(container.items().iter().all(|stack| stack.is_empty()));
 }

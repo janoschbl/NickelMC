@@ -1,5 +1,16 @@
 //! Brain sensors: what a mob perceives, written into its memories.
 
+mod registry;
+pub mod targeting;
+mod vanilla;
+pub use registry::{SENSOR_TYPES, SensorTypeRegistry, init_sensor_types_with};
+pub mod vanilla_sensors {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/entity/generated/sensors.rs"
+    ));
+}
+
 #[cfg(test)]
 mod tests;
 

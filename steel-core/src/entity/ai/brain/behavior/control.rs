@@ -54,8 +54,8 @@ impl<B: Behavior> TimedBehavior<B> {
     }
 
     /// Vanilla `Behavior.timedOut`.
-    const fn timed_out(&self, time: i64) -> bool {
-        time > self.end_timestamp
+    fn timed_out(&self, time: i64) -> bool {
+        self.behavior.timed_out(time, self.end_timestamp)
     }
 
     fn has_required_memories(&self, context: &BrainContext<'_>) -> bool {

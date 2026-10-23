@@ -16,6 +16,7 @@ mod common;
 mod entities;
 mod items;
 mod memories;
+mod sensors;
 mod skull_type;
 mod waxables;
 mod weathering;
@@ -41,6 +42,7 @@ pub fn main() {
     fs::create_dir_all(&behavior_out_dir).expect("Failed to create behavior output directory");
     fs::create_dir_all(&entity_out_dir).expect("Failed to create entity output directory");
     write_if_changed(format!("{entity_out_dir}/memories.rs"), memories::build());
+    write_if_changed(format!("{entity_out_dir}/sensors.rs"), sensors::build());
 
     write_if_changed(
         format!("{behavior_out_dir}/blocks.rs"),

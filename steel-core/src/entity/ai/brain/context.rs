@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use super::memory::Memories;
 use super::Activities;
-use crate::entity::PathfinderMob;
+use super::memory::Memories;
+use crate::entity::Entity;
 use crate::world::World;
 
 /// The mob a brain is running on, its memories, and the current tick.
@@ -12,7 +12,7 @@ pub struct BrainContext<'brain> {
     /// The world the mob is in.
     pub level: &'brain Arc<World>,
     /// The mob whose brain is running.
-    pub mob: &'brain dyn PathfinderMob,
+    pub mob: &'brain dyn Entity,
     /// The mob's memories.
     pub memories: &'brain mut Memories,
     /// The mob's activities, which behaviors may switch.
@@ -25,7 +25,7 @@ impl<'brain> BrainContext<'brain> {
     /// A context for `mob` at the level's current game time.
     pub fn new(
         level: &'brain Arc<World>,
-        mob: &'brain dyn PathfinderMob,
+        mob: &'brain dyn Entity,
         memories: &'brain mut Memories,
         activities: &'brain mut Activities,
     ) -> Self {

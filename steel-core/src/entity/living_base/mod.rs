@@ -20,6 +20,7 @@ use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::items::ItemRef;
 use steel_registry::mob_effect::MobEffectRef;
+use steel_registry::mob_effect_instance::INFINITE_EFFECT_DURATION;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_entity_data::VanillaLivingEntityData;
 use steel_registry::vanilla_mob_effects;
@@ -42,7 +43,6 @@ pub const DEATH_DURATION: i32 = 20;
 pub const HURT_DURATION_TICKS: i32 = 10;
 /// Vanilla default `SwingAnimation` duration in ticks.
 pub const DEFAULT_SWING_DURATION: i32 = 6;
-const INFINITE_EFFECT_DURATION: i32 = -1;
 const MIN_EFFECT_AMPLIFIER: i32 = 0;
 const MAX_EFFECT_AMPLIFIER: i32 = 255;
 const SPRINT_SPEED_MODIFIER_AMOUNT: f64 = 0.3;
@@ -149,6 +149,22 @@ impl MobEffectInstance {
     #[must_use]
     pub const fn is_infinite_duration(&self) -> bool {
         self.duration == INFINITE_EFFECT_DURATION
+    }
+
+    /// Checks whether the duration is at most `ticks` infinite effects never qualify
+    #[must_use]
+    pub const fn ends_within(&self, ticks: i32) -> bool {
+        !self.is_infinite_duration() && self.duration <= ticks
+    }
+
+    /// Maps the duration leaving zero and infinite durations unchanged
+    #[must_use]
+    fn map_duration(&self, mapper: impl FnOnce(i32) -> i32) -> i32 {
+        if self.is_infinite_duration() || self.duration == 0 {
+            self.duration
+        } else {
+            mapper(self.duration)
+        }
     }
 
     /// Serializes this effect with vanilla's `MobEffectInstance.CODEC` shape.
@@ -280,9 +296,7 @@ impl MobEffectInstance {
             hidden_effect.tick_down_duration();
         }
 
-        if !self.is_infinite_duration() && self.duration != 0 {
-            self.duration -= 1;
-        }
+        self.duration = self.map_duration(|duration| duration - 1);
     }
 
     fn downgrade_to_hidden_effect(&mut self) -> bool {
@@ -1100,6 +1114,14 @@ impl LivingEntityBase {
 
     /// Adds or updates active vanilla mob-effect state.
     pub fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
+        self.update_mob_effect(effect).is_some()
+    }
+
+    /// Returns the committed instance and whether it was inserted rather than updated.
+    pub(crate) fn update_mob_effect(
+        &self,
+        effect: MobEffectInstance,
+    ) -> Option<(MobEffectInstance, bool)> {
         let effect_key = effect.effect;
         let mut existing_effect = None;
         let mut changed_effect = None;
@@ -1119,23 +1141,23 @@ impl LivingEntityBase {
             self.add_effect_attribute_modifiers(&effect);
             self.mark_effects_dirty();
             self.queue_mob_effect_sync(MobEffectSyncChange::Update {
-                effect,
+                effect: effect.clone(),
                 blend_for_self: true,
             });
-            return true;
+            return Some((effect, true));
         }
 
         if let Some(effect) = changed_effect {
             self.refresh_effect_attribute_modifiers(&effect);
             self.mark_effects_dirty();
             self.queue_mob_effect_sync(MobEffectSyncChange::Update {
-                effect,
+                effect: effect.clone(),
                 blend_for_self: false,
             });
-            return true;
+            return Some((effect, false));
         }
 
-        false
+        None
     }
 
     /// Sets active vanilla mob-effect state.

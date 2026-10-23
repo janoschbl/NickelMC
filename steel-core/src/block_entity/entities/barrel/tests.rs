@@ -161,7 +161,7 @@ fn concurrent_first_loot_access_generates_and_fills_exactly_once() {
 }
 
 #[test]
-fn unregistered_table_unpacks_as_empty_like_vanilla() {
+fn unregistered_loot_table_unpacks_as_empty_like_vanilla() {
     let fixture = fresh_test_world("unregistered_barrel_loot");
     let barrel = BarrelBlockEntity::new(
         Arc::downgrade(&fixture.world),

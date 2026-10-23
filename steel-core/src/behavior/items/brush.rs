@@ -1,5 +1,6 @@
 //! Brush item behavior for continuous archaeology brushing.
 
+use crate::inventory::stack_reference::StackReference;
 use std::sync::Arc;
 
 use steel_macros::item_behavior;
@@ -46,7 +47,7 @@ impl ItemBehavior for BrushItem {
         &self,
         world: &Arc<World>,
         user: LivingEntityRef<'_>,
-        stack: &mut ItemStack,
+        stack: &StackReference,
         ticks_remaining: i32,
     ) {
         if ticks_remaining < 0 {
@@ -82,13 +83,17 @@ impl ItemBehavior for BrushItem {
         let Some(brushable) = block_entity.downcast_ref::<BrushableBlockEntity>() else {
             return;
         };
-        let outcome = brushable.brush(world.game_time(), world, player, direction, stack);
+        let tool = stack.snapshot();
+        let outcome = brushable.brush(world.game_time(), world, player, direction, &tool);
         outcome.mutation.apply(world, pos);
 
         if outcome.durability_damage {
-            let slot = equipped_brush_slot(player, stack);
-            let item_ref = stack.item;
-            if stack.hurt_and_break(1, player.has_infinite_materials()) {
+            let slot = equipped_brush_slot(player, &stack.read());
+            let item_ref = stack.read().item;
+            let broken = stack
+                .write()
+                .hurt_and_break(1, player.has_infinite_materials());
+            if broken {
                 player.on_equipped_item_broken(item_ref, slot);
             }
         }

@@ -1,5 +1,6 @@
 //! Spyglass item behavior.
 
+use crate::inventory::stack_reference::StackReference;
 use std::sync::Arc;
 
 use steel_macros::item_behavior;
@@ -7,7 +8,9 @@ use steel_registry::item_stack::ItemStack;
 use steel_registry::sound_events;
 use steel_registry::stat::vanilla_stat_types;
 
-use crate::behavior::{InteractionResult, ItemBehavior, ItemUseAnimation, UseItemContext};
+use crate::behavior::{
+    FinishUseResult, InteractionResult, ItemBehavior, ItemUseAnimation, UseItemContext,
+};
 use crate::entity::{Entity, LivingEntity, LivingEntityRef};
 use crate::world::World;
 
@@ -47,17 +50,17 @@ impl ItemBehavior for SpyglassItem {
 
     fn finish_using(
         &self,
-        stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         user: LivingEntityRef<'_>,
-    ) -> ItemStack {
+    ) -> FinishUseResult {
         Self::stop_using(user.living());
-        stack.copy_with_count(stack.count())
+        FinishUseResult::InPlace
     }
 
     fn release_using(
         &self,
-        _stack: &mut ItemStack,
+        _stack: &StackReference,
         _world: &Arc<World>,
         user: &dyn LivingEntity,
         _time_left: i32,

@@ -613,7 +613,7 @@ impl InventoryAccess {
     /// must interoperate with APIs that require `ContainerLockGuard`.
     pub fn with_guard<R>(&self, f: impl FnOnce(&mut ContainerLockGuard) -> R) -> R {
         let inv_ref = ContainerRef::from(Arc::clone(&self.inventory));
-        let mut guard = ContainerLockGuard::lock_all(&[&inv_ref]);
+        let mut guard = ContainerLockGuard::lock_storage(&[&inv_ref]);
         f(&mut guard)
     }
 }
@@ -727,7 +727,7 @@ impl<'a> InventoryTickContext<'a> {
         for index in 0..PlayerInventory::INVENTORY_SIZE {
             let (item, selected) = {
                 let inventory = player.inventory.lock();
-                let stack = &inventory.get_items()[index];
+                let stack = inventory.get_items().get(index);
                 if stack.is_empty() {
                     continue;
                 }

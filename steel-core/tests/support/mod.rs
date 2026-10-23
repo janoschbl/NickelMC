@@ -347,7 +347,7 @@ pub(crate) fn create_test_world_with_damage_history(
         OverworldNoiseSettings::SEA_LEVEL
     };
 
-    resources
+    let world = resources
         .runtime
         .block_on(World::new_with_config(
             Arc::clone(&resources.runtime),
@@ -372,7 +372,15 @@ pub(crate) fn create_test_world_with_damage_history(
             },
             Arc::clone(&resources.generation_pool),
         ))
-        .expect("test world should initialize")
+        .expect("test world should initialize");
+    *world.random_sequences.write() = Some(Arc::new(
+        crate::loot::random_sequences::RandomSequences::from_persistent(
+            world.level_data.read().seed(),
+            Default::default(),
+        )
+        .expect("default test-world sequence settings"),
+    ));
+    world
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

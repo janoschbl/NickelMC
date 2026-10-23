@@ -1,3 +1,4 @@
+use crate::inventory::stack_reference::{StackRead, StackWrite};
 use std::{mem, sync::Arc};
 
 use steel_registry::item_stack::ItemStack;
@@ -48,14 +49,14 @@ impl Slot for ResultSlot {
         &self.storage
     }
 
-    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> &'a ItemStack {
+    fn get_item<'a>(&self, guard: &'a ContainerLockGuard) -> StackRead<'a> {
         guard
             .get(self.result_container().container_id())
             .expect("failed to get item from result container")
             .get_item(0)
     }
 
-    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> &'a mut ItemStack {
+    fn get_item_mut<'a>(&self, guard: &'a mut ContainerLockGuard) -> StackWrite<'a> {
         guard
             .get_mut(self.result_container().container_id())
             .expect("failed to get item mutabily from result container")
@@ -98,7 +99,7 @@ impl Slot for ResultSlot {
     }
 
     fn remove(&self, guard: &mut ContainerLockGuard, _amount: i32) -> ItemStack {
-        mem::take(self.get_item_mut(guard))
+        mem::take(&mut *self.get_item_mut(guard))
     }
 
     fn is_fake(&self) -> bool {

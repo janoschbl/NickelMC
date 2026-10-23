@@ -43,6 +43,7 @@ use steel_protocol::{
     packets::game::CSetTime,
 };
 
+use crate::loot::{LootContext, random_sequences::RandomSequences};
 use rustc_hash::{FxHashMap, FxHashSet};
 use simdnbt::owned::NbtCompound;
 use steel_registry::biome::{BiomeRef, TemperatureModifier};
@@ -57,7 +58,6 @@ use steel_registry::game_events::GameEventRef;
 use steel_registry::game_rules::{ErasedGameRuleRef, GameRule, GameRuleValue, GameRuleValueType};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::level_events;
-use steel_registry::loot_table::LootContext;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -116,7 +116,7 @@ mod broadcasts;
 pub(crate) mod clock;
 mod domain_entity_directory;
 mod entity_management;
-mod environment;
+pub mod environment;
 mod events;
 pub mod explosion;
 /// Vanilla game-event contexts, listeners, and dispatch storage.
@@ -270,9 +270,8 @@ pub struct World {
     pub(crate) game_time: Arc<GameTime>,
     /// Per-world saved data storage.
     pub(crate) saved_data: SavedDataManager,
-    /// Named sequences shared across the domain; the primary world persists them.
-    loot_random_sequences: SyncRwLock<Arc<SyncMutex<loot_random::LootRandomSequences>>>,
-    level_random: SyncMutex<LegacyRandom>,
+    pub(crate) random_sequences: SyncRwLock<Option<Arc<RandomSequences>>>,
+    pub(crate) loot_random: SyncMutex<RandomSource>,
     /// Runtime world border state.
     world_border: SyncMutex<WorldBorder>,
     /// Vanilla sleeping player counts for night-skip checks.
@@ -459,10 +458,10 @@ impl World {
                 game_time: level_data.game_time_handle(),
                 level_data: SyncRwLock::new(level_data),
                 saved_data,
-                loot_random_sequences: SyncRwLock::new(Arc::new(SyncMutex::new(
-                    loot_random::LootRandomSequences::new(seed, persisted_loot_sequences),
+                random_sequences: SyncRwLock::new(None),
+                loot_random: SyncMutex::new(RandomSource::Legacy(LegacyRandom::from_seed(
+                    rand::random(),
                 ))),
-                level_random: SyncMutex::new(LegacyRandom::from_seed(rand::random::<u64>())),
                 world_border: SyncMutex::new(world_border),
                 sleep_status: SyncMutex::new(sleep_status::SleepStatus::default()),
                 view_distance,

@@ -95,8 +95,8 @@ use text_components::{
 use text_components::{content::Resolvable, custom::CustomData};
 
 use crate::behavior::{
-    BlockStateBehaviorExt as _, ITEM_BEHAVIORS, InteractionResult, InventoryTickContext,
-    ItemBehavior, apply_use_remainder,
+    BlockStateBehaviorExt as _, FinishUseResult, ITEM_BEHAVIORS, InteractionResult,
+    InventoryTickContext, ItemBehavior,
 };
 use crate::chunk::chunk_request::{ChunkRequestHandle, ChunkRequestState};
 use crate::config::RuntimeConfig;
@@ -364,6 +364,8 @@ impl Player {
             .get_behavior(item.item())
             .get_use_duration(&item, self);
         if self.living_base.start_using_item(hand, &item, duration) {
+            self.living_base
+                .rebind_use_item(self.inventory.lock().item_in_hand_reference(hand));
             let mut entity_data = self.entity_data.lock();
             let flags = entity_data.living_entity().living_entity_flags.get();
             let mut flags = *flags | Self::USING_ITEM_FLAG;
@@ -405,35 +407,54 @@ impl Player {
         active: ActiveItemUseState,
     ) {
         let hand = active.hand();
-        let item_matches = {
-            let inventory = self.inventory.lock();
-            inventory.get_item_in_hand(hand).item() == active.item()
+        let item = self.inventory.lock().item_in_hand_reference(hand);
+        let can_release = {
+            let item = item.read();
+            item.item() == active.item() && !item.is_empty()
         };
-        if !item_matches {
-            self.stop_using_item();
-            return;
-        }
-        // Read a copy rather than clearing the slot,
-        // so any inventory-touching side effect from
-        // `release_using` never sees the hand as vacant.
-        let mut item = {
-            let inventory = self.inventory.lock();
-            let current = inventory.get_item_in_hand(hand);
-            current.clone()
-        };
-        let stack_before_using = item.clone();
-        let world = self.get_world();
-        let apply_side_effects =
-            behavior.release_using(&mut item, &world, self, active.remaining_ticks());
-        let use_on_release = behavior.use_on_release(&item);
-        if apply_side_effects {
-            item = apply_use_remainder(&stack_before_using, item, self);
-            self.apply_item_use_cooldown(&stack_before_using);
-        }
-        self.inventory.lock().set_item_in_hand(hand, item);
-        // we re-read active here since behavior.release_using might have already ended the use
-        if use_on_release && let Some(active) = self.living_base.active_item_use() {
-            self.tick_active_item_use_with_behavior(entity, behavior, active);
+        if can_release {
+            self.living_base.rebind_use_item(item.clone());
+            let before = item.snapshot();
+            let effects =
+                behavior.release_using(&item, &self.get_world(), self, active.remaining_ticks());
+            if effects {
+                if let FinishUseResult::Replaced(result) =
+                    crate::behavior::reference_use_remainder(&before, &item, self)
+                {
+                    let flags = *self
+                        .entity_data
+                        .lock()
+                        .living_entity()
+                        .living_entity_flags
+                        .get();
+                    let hand = if flags & Self::OFF_HAND_ACTIVE_ITEM_FLAG != 0 {
+                        InteractionHand::OffHand
+                    } else {
+                        InteractionHand::MainHand
+                    };
+                    self.inventory.lock().set_item_in_hand(hand, result);
+                }
+                self.apply_item_use_cooldown(&before);
+            }
+            self.inventory.lock().record_stack_change(&item, &before);
+            let current_use = self.living_base.use_item_reference();
+            let use_on_release = current_use.as_ref().is_some_and(|current| {
+                let current = current.read();
+                let behavior = if current.item() == active.item() {
+                    behavior
+                } else {
+                    ITEM_BEHAVIORS.get_behavior(current.item())
+                };
+                behavior.use_on_release(&current)
+            });
+            if use_on_release && let Some(current) = self.living_base.active_item_use() {
+                let behavior = if current.item() == active.item() {
+                    behavior
+                } else {
+                    ITEM_BEHAVIORS.get_behavior(current.item())
+                };
+                self.tick_active_item_use_with_behavior(entity, behavior, current);
+            }
         }
         self.stop_using_item();
     }
@@ -452,43 +473,56 @@ impl Player {
         behavior: &dyn ItemBehavior,
         active: ActiveItemUseState,
     ) {
-        let hand = active.hand();
-        let item_matches = {
-            let inventory = self.inventory.lock();
-            inventory.get_item_in_hand(hand).item() == active.item()
-        };
-        if !item_matches {
+        let item = self.inventory.lock().item_in_hand_reference(active.hand());
+        if item.read().item() != active.item() {
             self.stop_using_item();
             return;
         }
-        let mut item = {
-            let inventory = self.inventory.lock();
-            let current = inventory.get_item_in_hand(hand);
-            current.clone()
-        };
+        self.living_base.rebind_use_item(item.clone());
+        let before_tick = item.snapshot();
         let world = self.get_world();
         let Some(user) = LivingEntityRef::new(entity) else {
             panic!("active item use requires a living entity");
         };
-        behavior.on_use_tick(&world, user, &mut item, active.remaining_ticks());
-
-        if self.active_item_use_hand() != Some(hand) {
-            self.inventory.lock().set_item_in_hand(hand, item);
-            return;
-        }
-        let Some(active) = self.living_base.decrement_active_item_use() else {
-            self.inventory.lock().set_item_in_hand(hand, item);
+        behavior.on_use_tick(&world, user, &item, active.remaining_ticks());
+        self.inventory
+            .lock()
+            .record_stack_change(&item, &before_tick);
+        let Some(current) = self.living_base.decrement_active_item_use() else {
             return;
         };
-        let use_on_release = behavior.use_on_release(&item);
-        if active.remaining_ticks() == 0 && !use_on_release && !item.is_empty() {
-            let stack_before_finish = item.clone();
-            item = behavior.finish_using(&mut item, &world, user);
-            self.apply_item_use_cooldown(&stack_before_finish);
-            self.stop_using_item();
+        if current.remaining_ticks() != 0 || behavior.use_on_release(&item.read()) {
+            return;
         }
-
-        self.inventory.lock().set_item_in_hand(hand, item);
+        let Some(used) = self.living_base.use_item_reference() else {
+            return;
+        };
+        let held = self.inventory.lock().item_in_hand_reference(current.hand());
+        if !used.is_same(&held) {
+            self.release_using_item(entity);
+            return;
+        }
+        if used.read().is_empty() {
+            return;
+        }
+        let before = used.snapshot();
+        let finish_behavior = ITEM_BEHAVIORS.get_behavior(used.read().item());
+        // The explicit behavior is also used by direct lifecycle regression tests.
+        let finish_behavior = if used.is_same(&item) {
+            behavior
+        } else {
+            finish_behavior
+        };
+        let result = finish_behavior.finish_using(&used, &world, user);
+        let result = crate::behavior::apply_finish_remainder(&before, &used, result, self);
+        self.apply_item_use_cooldown(&before);
+        if let FinishUseResult::Replaced(result) = result {
+            self.inventory
+                .lock()
+                .set_item_in_hand(current.hand(), result);
+        }
+        self.inventory.lock().record_stack_change(&used, &before);
+        self.stop_using_item();
     }
 
     /// Returns the player's configured main arm.
@@ -1381,6 +1415,7 @@ impl Entity for Player {
             return;
         };
 
+        self.dismount_vehicle(old_vehicle.as_ref());
         self.remove_active_effects_for_vehicle(old_vehicle.as_ref());
         self.send_packet(CSetPassengers::new(
             old_vehicle.id(),
@@ -1710,6 +1745,14 @@ const fn protocol_look_at_anchor(anchor: EntityAnchor) -> LookAtAnchor {
 }
 
 impl LivingEntity for Player {
+    fn dismount_poses(&self) -> &'static [EntityPose] {
+        &[
+            EntityPose::Standing,
+            EntityPose::Sneaking,
+            EntityPose::Swimming,
+        ]
+    }
+
     fn tick_death(&self) {
         let death_time = self.living_base.increment_death_time();
         if death_time >= DEATH_DURATION && !self.is_removed() {
@@ -1946,7 +1989,7 @@ impl LivingEntity for Player {
 
     fn with_equipment_slot(&self, slot: EquipmentSlot, visitor: &mut dyn FnMut(&ItemStack)) {
         let inventory = self.inventory.lock();
-        visitor(inventory.get_ref(slot));
+        visitor(&inventory.get_ref(slot));
     }
 
     fn with_equipment_slot_mut(
@@ -1991,7 +2034,7 @@ impl LivingEntity for Player {
         let target_ref = ContainerRef::from(Arc::clone(&self.inventory));
         let source_id = source_ref.container_id();
         let target_id = target_ref.container_id();
-        let mut guard = ContainerLockGuard::lock_all(&[source_ref, target_ref]);
+        let mut guard = ContainerLockGuard::lock_storage(&[source_ref, target_ref]);
         let source_slot = match hand {
             InteractionHand::MainHand => EquipmentSlot::MainHand,
             InteractionHand::OffHand => EquipmentSlot::OffHand,
@@ -2001,7 +2044,8 @@ impl LivingEntity for Player {
             let Some(inventory) = guard.get_typed_mut::<PlayerInventory>(source_id) else {
                 unreachable!("player inventory container retains its concrete type");
             };
-            if !can_equip(inventory.get_item_in_hand(hand)) || !inventory.get_ref(slot).is_empty() {
+            if !can_equip(&inventory.get_item_in_hand(hand)) || !inventory.get_ref(slot).is_empty()
+            {
                 return InteractionResult::Pass;
             }
 
@@ -2018,7 +2062,7 @@ impl LivingEntity for Player {
             else {
                 unreachable!("player inventory containers retain their concrete type");
             };
-            if !can_equip(source_inventory.get_item_in_hand(hand))
+            if !can_equip(&source_inventory.get_item_in_hand(hand))
                 || !target_inventory.get_ref(slot).is_empty()
             {
                 return InteractionResult::Pass;

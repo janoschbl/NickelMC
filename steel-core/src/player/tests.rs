@@ -14,10 +14,11 @@ use super::{
     player_inventory::MenuItemDisposition,
     sleep::BedSleepingProblem,
 };
-use crate::behavior::{InteractionResult, init_behaviors};
+use crate::behavior::{InteractionResult, ItemBehavior, init_behaviors};
 use crate::chunk_saver::PersistentEntity;
 use crate::entity::{
-    DEFAULT_MAX_AIR_SUPPLY, Entity, EntitySyncedData, LivingEntity, SharedEntity,
+    ActiveItemUseState, DEFAULT_MAX_AIR_SUPPLY, Entity, EntitySyncedData, LivingEntity,
+    LivingEntityRef, SharedEntity,
     damage::DamageSource,
     entities::{EndermiteEntity, ItemEntity},
     next_entity_id,
@@ -1824,4 +1825,152 @@ fn sword_does_not_destroy_blocks_in_creative() {
         dirt,
         "swords should not destroy blocks when player is in creative mode."
     );
+}
+
+const SCENARIO_USE_DURATION: i32 = 5;
+
+fn hand_stack(player: &Player) -> ItemStack {
+    player
+        .inventory
+        .lock()
+        .get_item_in_hand(InteractionHand::MainHand)
+        .clone()
+}
+
+/// Starts a main-hand use of a stack of sticks with a fixed duration, since no
+/// vanilla stick has a use duration.
+fn start_scenario_use(player: &Player, count: i32) -> ActiveItemUseState {
+    let stack = ItemStack::with_count(&vanilla_items::STICK, count);
+    player
+        .inventory
+        .lock()
+        .set_item_in_hand(InteractionHand::MainHand, stack.clone());
+    assert!(
+        player.living_base.start_using_item(
+            InteractionHand::MainHand,
+            &stack,
+            SCENARIO_USE_DURATION
+        ),
+        "scenario use should start"
+    );
+    player
+        .living_base
+        .active_item_use()
+        .expect("scenario use should be active")
+}
+
+/// Shrinks the working copy and replaces the hand with a different stack.
+struct ShrinkAndReplaceHand;
+
+impl ItemBehavior for ShrinkAndReplaceHand {
+    fn on_use_tick(
+        &self,
+        _world: &Arc<World>,
+        user: LivingEntityRef<'_>,
+        stack: &mut ItemStack,
+        _ticks_remaining: i32,
+    ) {
+        stack.shrink(1);
+        let player = user.living().as_player().expect("player user");
+        player.inventory.lock().set_item_in_hand(
+            InteractionHand::MainHand,
+            ItemStack::with_count(&vanilla_items::STICK, 7),
+        );
+    }
+}
+
+/// Shrinks the working copy and ends the use.
+struct ShrinkAndStop;
+
+impl ItemBehavior for ShrinkAndStop {
+    fn on_use_tick(
+        &self,
+        _world: &Arc<World>,
+        user: LivingEntityRef<'_>,
+        stack: &mut ItemStack,
+        _ticks_remaining: i32,
+    ) {
+        stack.shrink(1);
+        let player = user.living().as_player().expect("player user");
+        player.stop_using_item();
+    }
+}
+
+/// Ends the use and starts a new one in the same hand with a full timer.
+struct RestartUse;
+
+impl ItemBehavior for RestartUse {
+    fn on_use_tick(
+        &self,
+        _world: &Arc<World>,
+        user: LivingEntityRef<'_>,
+        stack: &mut ItemStack,
+        _ticks_remaining: i32,
+    ) {
+        stack.shrink(1);
+        let player = user.living().as_player().expect("player user");
+        player.stop_using_item();
+        assert!(player.living_base.start_using_item(
+            InteractionHand::MainHand,
+            stack,
+            SCENARIO_USE_DURATION
+        ));
+    }
+}
+
+// A replaced hand stack must survive the tick instead of being overwritten by the
+// stale working copy, and use keeps ticking down like vanilla's `--useItemRemaining`.
+#[test]
+fn tick_active_item_use_keeps_stack_replaced_by_callback() {
+    init_vanilla_registry();
+    init_behaviors();
+    let world_fixture = fresh_test_world("tick_keeps_replaced_stack");
+    let player = test_player(Arc::clone(&world_fixture.world));
+    let active = start_scenario_use(&player, 3);
+    let entity = shared_entity(&player);
+
+    player.tick_active_item_use_with_behavior(&entity, &ShrinkAndReplaceHand, active);
+
+    assert_eq!(hand_stack(&player).count(), 7);
+    let active = player.living_base.active_item_use().expect("use continues");
+    assert_eq!(active.remaining_ticks(), SCENARIO_USE_DURATION - 1);
+}
+
+// Changes made to the working copy are still written when the callback ends the use.
+#[test]
+fn tick_active_item_use_writes_working_copy_when_callback_stops_use() {
+    init_vanilla_registry();
+    init_behaviors();
+    let world_fixture = fresh_test_world("tick_writes_on_stop");
+    let player = test_player(Arc::clone(&world_fixture.world));
+    let active = start_scenario_use(&player, 3);
+    let entity = shared_entity(&player);
+
+    player.tick_active_item_use_with_behavior(&entity, &ShrinkAndStop, active);
+
+    assert_eq!(hand_stack(&player).count(), 2);
+    assert!(player.living_base.active_item_use().is_none());
+}
+
+// Vanilla decrements the timer of whichever use is active after the callback,
+// so a use restarted by the callback must not keep a stale timer.
+#[test]
+fn tick_active_item_use_ticks_down_use_restarted_by_callback() {
+    init_vanilla_registry();
+    init_behaviors();
+    let world_fixture = fresh_test_world("tick_restart");
+    let player = test_player(Arc::clone(&world_fixture.world));
+    let active = start_scenario_use(&player, 3);
+    let entity = shared_entity(&player);
+
+    player.tick_active_item_use_with_behavior(&entity, &RestartUse, active);
+
+    assert_eq!(hand_stack(&player).count(), 2);
+    let active = player.living_base.active_item_use().expect("restarted use");
+    assert_eq!(active.remaining_ticks(), SCENARIO_USE_DURATION - 1);
+}
+
+fn shared_entity(player: &Arc<Player>) -> SharedEntity {
+    let player: Arc<Player> = Arc::clone(player);
+    player
 }

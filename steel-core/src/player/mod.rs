@@ -461,34 +461,55 @@ impl Player {
             self.stop_using_item();
             return;
         }
-        let mut item = {
+
+        let stack_before_tick = {
             let inventory = self.inventory.lock();
             let current = inventory.get_item_in_hand(hand);
             current.clone()
         };
+        let mut item = stack_before_tick.clone();
+
         let world = self.get_world();
         let Some(user) = LivingEntityRef::new(entity) else {
             panic!("active item use requires a living entity");
         };
+
         behavior.on_use_tick(&world, user, &mut item, active.remaining_ticks());
 
-        if self.active_item_use_hand() != Some(hand) {
-            self.inventory.lock().set_item_in_hand(hand, item);
-            return;
-        }
-        let Some(active) = self.living_base.decrement_active_item_use() else {
-            self.inventory.lock().set_item_in_hand(hand, item);
-            return;
-        };
-        let use_on_release = behavior.use_on_release(&item);
-        if active.remaining_ticks() == 0 && !use_on_release && !item.is_empty() {
-            let stack_before_finish = item.clone();
-            item = behavior.finish_using(&mut item, &world, user);
-            self.apply_item_use_cooldown(&stack_before_finish);
-            self.stop_using_item();
+        // Vanilla ticks the hand stack itself. Steel ticks a copy, so a stack that was
+        // replaced during the callback must not be overwritten.
+        let hand_replaced = !ItemStack::matches(
+            self.inventory.lock().get_item_in_hand(hand),
+            &stack_before_tick,
+        );
+        if !hand_replaced {
+            self.inventory
+                .lock()
+                .mutate_item_in_hand(hand, |current| *current = item.clone());
         }
 
-        self.inventory.lock().set_item_in_hand(hand, item);
+        let Some(current) = self.living_base.decrement_active_item_use() else {
+            return;
+        };
+        if current.hand() != hand
+            || current.remaining_ticks() != 0
+            || behavior.use_on_release(&item)
+        {
+            return;
+        }
+
+        if hand_replaced {
+            self.release_using_item(entity);
+            return;
+        }
+        if item.is_empty() {
+            return;
+        }
+        let stack_before_finish = item.clone();
+        let result = behavior.finish_using(&mut item, &world, user);
+        self.apply_item_use_cooldown(&stack_before_finish);
+        self.stop_using_item();
+        self.inventory.lock().set_item_in_hand(hand, result);
     }
 
     /// Returns the player's configured main arm.

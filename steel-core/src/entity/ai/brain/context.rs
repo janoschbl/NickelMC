@@ -7,7 +7,7 @@ use super::memory::Memories;
 use crate::entity::Entity;
 use crate::world::World;
 
-/// The mob a brain is running on, its memories, and the current tick.
+/// The mob a brain is running on, its memories and activities, and the current tick.
 pub struct BrainContext<'brain> {
     /// The world the mob is in.
     pub level: &'brain Arc<World>,

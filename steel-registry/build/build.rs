@@ -34,6 +34,7 @@ use std::{env, fs, path::Path};
 mod structure_processor_data;
 
 mod activities;
+mod activity_environment_attributes;
 mod attributes;
 mod banner_patterns;
 mod biomes;
@@ -194,6 +195,10 @@ pub fn main() {
 
     let vanilla_builds = [
         (activities::build(), ACTIVITIES),
+        (
+            activity_environment_attributes::build(),
+            "environment_attributes",
+        ),
         (attributes::build(), ATTRIBUTES),
         (blocks::build(), BLOCKS),
         (tags::block(), BLOCK_TAGS),

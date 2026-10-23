@@ -116,7 +116,7 @@ mod broadcasts;
 pub(crate) mod clock;
 mod domain_entity_directory;
 mod entity_management;
-mod environment;
+pub mod environment;
 mod events;
 /// Vanilla game-event contexts, listeners, and dispatch storage.
 pub mod game_event;

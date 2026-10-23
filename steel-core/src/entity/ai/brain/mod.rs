@@ -2,6 +2,7 @@
 
 mod activities;
 pub mod behavior;
+pub mod container;
 pub mod context;
 pub mod memory;
 pub mod sensor;
@@ -10,6 +11,7 @@ pub mod sensor;
 mod test_support;
 
 pub use activities::{Activities, ActivityData, ActivityRequirements};
+pub use container::{Brain, BrainProvider};
 pub use context::BrainContext;
 
 /// Initialize the brain registries.

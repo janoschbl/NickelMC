@@ -12,7 +12,7 @@ use super::context::BrainContext;
 use super::memory::{Memories, MemoryModuleType, MemoryValue, PersistentMemoryValue};
 use crate::bootstrap::init_globals;
 use crate::entity::registry::ENTITIES;
-use crate::entity::{SharedEntity, next_entity_id};
+use crate::entity::{PathfinderMob, SharedEntity, next_entity_id};
 use crate::test_support::test_world;
 
 /// A memory value for tests.
@@ -84,6 +84,12 @@ impl TestBrain {
 
     pub(super) const fn memories(&mut self) -> &mut Memories {
         &mut self.memories
+    }
+
+    pub(super) fn mob(&self) -> &dyn PathfinderMob {
+        self.entity
+            .as_pathfinder_mob()
+            .expect("pig should be a pathfinder mob")
     }
 
     pub(super) const fn set_time(&mut self, time: i64) {

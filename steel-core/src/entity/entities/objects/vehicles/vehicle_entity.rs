@@ -1,4 +1,4 @@
-//! Shared vanilla `VehicleEntity` damage handling.
+//! Shared damage and destruction handling for vehicles.
 
 use crate::entity::{DamageSource, Entity, RemovalReason};
 use crate::world::World;
@@ -97,11 +97,6 @@ pub trait VehicleEntity: Entity {
             }
             self.spawn_at_location(item, 0.0);
         }
-    }
-
-    /// Returns the default dimension changing delay for vehicles.
-    fn vehicle_dimension_changing_delay(&self) -> i32 {
-        10
     }
 
     // TODO: Implement ignoreExplosion.

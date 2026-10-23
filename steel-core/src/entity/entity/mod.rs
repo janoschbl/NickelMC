@@ -581,7 +581,30 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
 
     /// Stops riding the current vehicle, if any.
     fn stop_riding(&self) {
+        let old_vehicle = self.vehicle();
         self.base().stop_riding();
+        if let (Some(living), Some(vehicle)) = (self.as_living_entity(), old_vehicle) {
+            living.dismount_vehicle(vehicle.as_ref());
+        }
+    }
+
+    /// Returns the fallback dismount position above this vehicle.
+    fn dismount_location_for_passenger(&self, _passenger: &dyn LivingEntity) -> DVec3 {
+        self.default_dismount_location()
+    }
+
+    /// Returns the top-center fallback used when no side exit is safe.
+    fn default_dismount_location(&self) -> DVec3 {
+        DVec3::new(
+            self.position().x,
+            self.bounding_box().max_y(),
+            self.position().z,
+        )
+    }
+
+    /// Returns the item selected by the pick-item action, if supported.
+    fn pick_result(&self) -> Option<ItemStack> {
+        None
     }
 
     /// Dismounts every passenger from this entity.
@@ -3332,6 +3355,11 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         }
         self.base().clear_collision_flags();
 
+        // Minecarts retain their pre-move water state on waterlogged slopes.
+        if self.as_abstract_minecart().is_none() {
+            self.refresh_fluid_contact();
+        }
+
         Some(MoveResult {
             final_position,
             actual_movement: delta,
@@ -3401,6 +3429,9 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
                 self.remove_latest_movement_recording();
                 return None;
             }
+        }
+        if self.as_abstract_minecart().is_none() {
+            self.refresh_fluid_contact();
         }
         let vertical_state_update =
             EntityVerticalMovementStateUpdate::for_move(movement, self.is_server_driven_movement());

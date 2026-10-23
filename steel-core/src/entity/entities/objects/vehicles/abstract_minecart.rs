@@ -1,12 +1,16 @@
-//! Shared vanilla `AbstractMinecart` state and behavior.
+//! State and rail behavior shared by minecart variants.
 use std::sync::Arc;
 
+use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
+use crate::entity::{LivingEntity, dismount_helper};
 use glam::DVec3;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_math::trig;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::blocks::properties::RailShape;
+use steel_registry::blocks::shapes::OffsetVoxelShape;
+use steel_registry::entity_data::EntityPose;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -14,13 +18,13 @@ use steel_registry::{vanilla_blocks, vanilla_entities};
 use steel_utils::axis::Axis;
 use steel_utils::block_util::FoundRectangle;
 use steel_utils::locks::SyncMutex;
-use steel_utils::{BlockPos, BlockStateId};
+use steel_utils::{BlockPos, BlockStateId, WorldAabb};
 
 use super::minecart_behavior::MinecartBehavior;
 use super::vehicle_entity::VehicleEntity;
 use crate::block_entity::block_state_nbt;
+use crate::entity::Entity;
 use crate::entity::reset_forward_direction_of_relative_portal_position;
-use crate::entity::{Entity, EntityMovementEmission};
 use crate::entity::{SharedEntity, apply_item_stack_components, create_entity_instance};
 use crate::physics::{MoveResult, MoverType};
 use crate::player::Player;
@@ -103,6 +107,79 @@ impl<T: AbstractMinecart> AbstractMinecartEventSource for T {
 
 /// Shared behavior for every minecart variant entity.
 pub trait AbstractMinecart: VehicleEntity + AbstractMinecartEventSource {
+    /// Searches side exits by pose and height before trying the vehicle's top.
+    fn minecart_dismount_location(&self, passenger: &dyn LivingEntity) -> DVec3 {
+        let forward = self.motion_direction();
+        let Some(world) = self.level() else {
+            return self.default_dismount_location();
+        };
+        if forward.axis() == Axis::Y {
+            return self.default_dismount_location();
+        }
+        let offsets = dismount_helper::offsets_for_direction(forward);
+        let pos = self.block_position();
+        for &pose in passenger.dismount_poses() {
+            let dimensions = passenger.dimensions_for_pose(pose);
+            let reach = f64::from(dimensions.width.min(1.0) / 2.0);
+            let heights: &[i32] = match pose {
+                EntityPose::Standing | EntityPose::Sneaking => &[0, 1, -1],
+                EntityPose::Swimming => &[0, 1],
+                _ => continue,
+            };
+            for &y in heights {
+                for (x, z) in offsets {
+                    let target = BlockPos::new(pos.x() + x, pos.y() + y, pos.z() + z);
+                    let floor = dismount_helper::block_floor_height(
+                        dismount_helper::non_climbable_shape(&world, target),
+                        dismount_helper::non_climbable_shape(&world, target.below()),
+                    );
+                    if !dismount_helper::is_block_floor_valid(floor) {
+                        continue;
+                    }
+                    let location = DVec3::new(
+                        f64::from(target.x()) + 0.5,
+                        f64::from(target.y()) + floor,
+                        f64::from(target.z()) + 0.5,
+                    );
+                    let aabb = WorldAabb::entity_box(
+                        location.x,
+                        location.y,
+                        location.z,
+                        reach,
+                        f64::from(dimensions.height),
+                    );
+                    if dismount_helper::can_dismount_to(
+                        &world,
+                        passenger.as_entity_event_source(),
+                        &aabb,
+                    ) {
+                        passenger.set_pose(pose);
+                        return location;
+                    }
+                }
+            }
+        }
+        let top = self.default_dismount_location();
+        let target = BlockPos::new(pos.x(), top.y.floor() as i32, pos.z());
+        for &pose in passenger.dismount_poses() {
+            let height = f64::from(passenger.dimensions_for_pose(pose).height);
+            let coverage = (top.y - f64::from(target.y()) + height).ceil() as i32;
+            let ceiling = dismount_helper::find_ceiling_from(target, coverage, |cursor| {
+                let state = world.get_block_state(cursor);
+                let behavior = BLOCK_BEHAVIORS.get_behavior(state.get_block());
+                let context = BlockCollisionContext::empty();
+                OffsetVoxelShape::new(
+                    behavior.get_collision_shape(state, world.as_ref(), cursor, context),
+                    behavior.get_collision_shape_offset(state, world.as_ref(), cursor, context),
+                )
+            });
+            if top.y + height <= ceiling {
+                passenger.set_pose(pose);
+                break;
+            }
+        }
+        top
+    }
     /// Returns the minecart's shared non-synchronized minecart state.
     fn minecart_base(&self) -> &AbstractMinecartBase;
 
@@ -129,26 +206,6 @@ pub trait AbstractMinecart: VehicleEntity + AbstractMinecartEventSource {
         } else {
             DEFAULT_GRAVITY
         }
-    }
-
-    /// Returns whether this minecart can be targeted by picking.
-    fn minecart_is_pickable(&self) -> bool {
-        !self.is_removed()
-    }
-
-    /// Returns whether this minecart can be pushed.
-    fn minecart_is_pushable(&self) -> bool {
-        true
-    }
-
-    /// Returns the movement side effects emitted by this minecart.
-    fn minecart_movement_emission(&self) -> EntityMovementEmission {
-        EntityMovementEmission::Events
-    }
-
-    /// Returns whether this minecart obstructs block placement.
-    fn minecart_blocks_building(&self) -> bool {
-        true
     }
 
     /// Returns whether this minecart can collide with `other`.
@@ -364,10 +421,13 @@ pub trait AbstractMinecart: VehicleEntity + AbstractMinecartEventSource {
         let xo = other_minecart.position().x - self.position().x;
         let zo = other_minecart.position().z - self.position().z;
 
-        let dir = DVec3::new(xo, 0.0, zo).normalize_or_zero();
+        let dir = steel_math::vector::normalize(DVec3::new(xo, 0.0, zo));
         let yaw = f64::from(self.rotation().0.to_radians());
-        let facing = DVec3::new(f64::from(trig::cos(yaw)), 0.0, f64::from(trig::sin(yaw)))
-            .normalize_or_zero();
+        let facing = steel_math::vector::normalize(DVec3::new(
+            f64::from(trig::cos(yaw)),
+            0.0,
+            f64::from(trig::sin(yaw)),
+        ));
         let dot = dir.dot(facing).abs();
 
         if dot < f64::from(MIN_COLLISION_ALIGNMENT) {

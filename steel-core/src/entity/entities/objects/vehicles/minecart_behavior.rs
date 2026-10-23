@@ -1,3 +1,5 @@
+//! Non-experimental rail movement only; the minecart-improvements experiment is unsupported.
+
 use std::f64::consts::PI;
 use std::sync::Arc;
 

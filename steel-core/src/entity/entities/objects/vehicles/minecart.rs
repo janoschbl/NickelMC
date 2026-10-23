@@ -261,23 +261,23 @@ impl Entity for MinecartEntity {
     }
 
     fn is_pickable(&self) -> bool {
-        self.minecart_is_pickable()
+        !self.is_removed()
     }
 
     fn is_pushable(&self) -> bool {
-        self.minecart_is_pushable()
+        true
     }
 
     fn movement_emission(&self) -> EntityMovementEmission {
-        self.minecart_movement_emission()
+        EntityMovementEmission::Events
     }
 
     fn blocks_building(&self) -> bool {
-        self.minecart_blocks_building()
+        true
     }
 
     fn dimension_changing_delay(&self) -> i32 {
-        self.vehicle_dimension_changing_delay()
+        10
     }
 
     fn get_relative_portal_position(&self, axis: Axis, area: FoundRectangle) -> DVec3 {
@@ -312,7 +312,18 @@ impl Entity for MinecartEntity {
         self.load_abstract_minecart_data(nbt);
     }
 
-    // TODO: Implement getPickResult.
+    fn pick_result(&self) -> Option<steel_registry::item_stack::ItemStack> {
+        Some(steel_registry::item_stack::ItemStack::new(
+            &vanilla_items::MINECART,
+        ))
+    }
+
+    fn dismount_location_for_passenger(
+        &self,
+        passenger: &dyn crate::entity::LivingEntity,
+    ) -> DVec3 {
+        self.minecart_dismount_location(passenger)
+    }
 }
 
 #[cfg(test)]

@@ -60,8 +60,9 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use steel_protocol::packets::game::{
-    CEntityEvent, CPlayerCombatKill, CPlayerLookAt, CRespawn, CSetDefaultSpawnPosition, CSetHealth,
-    CSetHeldSlot, CSetPassengers, ClientCommandAction, LookAtAnchor, RelativeMovement, SoundSource,
+    CEntityEvent, CPlayerCombatEnd, CPlayerCombatEnter, CPlayerCombatKill, CPlayerLookAt, CRespawn,
+    CSetDefaultSpawnPosition, CSetHealth, CSetHeldSlot, CSetPassengers, ClientCommandAction,
+    LookAtAnchor, RelativeMovement, SoundSource,
 };
 use steel_protocol::packets::game::{CLevelEvent, CSetEntityData, CSetExperience};
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
@@ -87,7 +88,6 @@ use arc_swap::ArcSwap;
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::{Difficulty, GameType, InteractionHand};
 use text_components::resolving::TextResolutor;
-use text_components::translation::TranslatedMessage;
 use text_components::{
     Modifier as _, TextComponent,
     interactivity::{ClickEvent, HoverEvent},
@@ -681,36 +681,6 @@ impl Player {
         }
     }
 
-    /// Ticks the death animation timer.
-    /// Vanilla: `LivingEntity.tickDeath()` (not overridden by `ServerPlayer`).
-    fn tick_death(&self) {
-        let death_time = self.living_base.increment_death_time();
-
-        if death_time >= DEATH_DURATION && !self.is_removed() {
-            let world = self.get_world();
-            let chunk_pos = *self.last_chunk_pos.lock();
-            world.broadcast_to_nearby(
-                chunk_pos,
-                CEntityEvent {
-                    entity_id: self.id(),
-                    event: EntityStatus::Poof,
-                },
-                None,
-            );
-
-            world.unregister_player_entity(self);
-            world.chunk_map.remove_player(self);
-            world.entity_tracker().on_player_leave(self);
-            world.player_area_map.remove_by_entity_id(self.id());
-            self.set_removed(RemovalReason::Killed);
-            assert_eq!(
-                self.remove_all_menus_with_disposition(MenuItemDisposition::Drop),
-                MenuRemovalStatus::Complete,
-                "death removal menu cleanup must run outside a menu callback"
-            );
-        }
-    }
-
     /// Ticks to award stats that are awarded based on ticks.
     fn tick_stats(&self) {
         // These stats are expressed in ticks.
@@ -869,9 +839,9 @@ impl Player {
             );
         }
 
-        // TODO: combat tracker (getCombatTracker().recordDamage)
         if damage != 0.0 {
             self.cause_food_exhaustion(source.damage_type.exhaustion);
+            self.record_combat_damage(source, damage);
             self.set_health(self.get_health() - damage);
             if damage < f32::MAX {
                 self.award_custom_stat_with_count(
@@ -915,16 +885,10 @@ impl Player {
 
         let show_death_messages = world.get_game_rule(&SHOW_DEATH_MESSAGES);
 
-        // TODO: use CombatTracker for multi-arg messages (killer name, item, etc.)
-        let death_key = format!("death.attack.{}", source.damage_type.message_id);
-        let death_message = TranslatedMessage {
-            key: death_key.into(),
-            fallback: None,
-            args: Some(Box::new([TextComponent::plain(
-                self.gameprofile.name().to_owned(),
-            )])),
-        }
-        .component();
+        let death_message = match self.combat_death_message() {
+            Ok(message) => message,
+            Err(error) => panic!("Failed to encode death message: {error}"),
+        };
 
         self.send_packet(CPlayerCombatKill {
             player_id: self.id(),
@@ -968,6 +932,8 @@ impl Player {
 
         self.clear_fire();
         self.set_ticks_frozen(0);
+
+        self.recheck_combat_status();
 
         if world.get_game_rule(&IMMEDIATE_RESPAWN) {
             self.respawn();
@@ -1722,6 +1688,40 @@ const fn protocol_look_at_anchor(anchor: EntityAnchor) -> LookAtAnchor {
 }
 
 impl LivingEntity for Player {
+    fn tick_death(&self) {
+        let death_time = self.living_base.increment_death_time();
+        if death_time >= DEATH_DURATION && !self.is_removed() {
+            let world = self.get_world();
+            let chunk_pos = *self.last_chunk_pos.lock();
+            world.broadcast_to_nearby(
+                chunk_pos,
+                CEntityEvent {
+                    entity_id: self.id(),
+                    event: EntityStatus::Poof,
+                },
+                None,
+            );
+            world.unregister_player_entity(self);
+            world.chunk_map.remove_player(self);
+            world.entity_tracker().on_player_leave(self);
+            world.player_area_map.remove_by_entity_id(self.id());
+            self.set_removed(RemovalReason::Killed);
+            assert_eq!(
+                self.remove_all_menus_with_disposition(MenuItemDisposition::Drop),
+                MenuRemovalStatus::Complete,
+                "death removal menu cleanup must run outside a menu callback"
+            );
+        }
+    }
+
+    fn on_enter_combat(&self) {
+        self.send_packet(CPlayerCombatEnter);
+    }
+
+    fn on_leave_combat(&self, duration: i32) {
+        self.send_packet(CPlayerCombatEnd { duration });
+    }
+
     fn living_synced_data(&self) -> Option<&dyn LivingEntitySyncedData> {
         Some(&self.entity_data)
     }
@@ -1733,6 +1733,7 @@ impl LivingEntity for Player {
         self.tick_throttlers();
         self.check_idle_timeout();
         self.tick_client_load_timeout();
+        self.living_base.decrement_invulnerable_time();
         self.tick_sleep_counter();
         if self.is_sleeping() {
             let world = self.get_world();
@@ -1763,6 +1764,9 @@ impl LivingEntity for Player {
 
         self.default_tick();
         self.detect_equipment_updates();
+        if self.tick_count() % 20 == 0 {
+            self.recheck_combat_status();
+        }
         self.ai_step(entity);
 
         // Vanilla snaps the player back to firstGood after ServerPlayer.doTick().
@@ -1776,15 +1780,11 @@ impl LivingEntity for Player {
 
         self.tick_ack_block_changes();
 
-        self.living_base.decrement_invulnerable_time();
-        self.tick_mob_effects();
         self.tick_active_item_use(entity);
         // TODO: Tick stats even when the player has been dead for more than 20 ticks.
         self.tick_stats();
 
-        if self.get_health() <= 0.0 {
-            self.tick_death();
-        } else {
+        if self.get_health() > 0.0 {
             let world = self.get_world();
             self.touch_nearby_items();
             self.block_breaking.lock().tick(self, &world);

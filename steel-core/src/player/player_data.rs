@@ -23,7 +23,7 @@ use crate::{
 
 /// Current data version for player saves.
 /// Increment when making breaking changes to the format.
-pub const PLAYER_DATA_VERSION: i32 = 6;
+pub const PLAYER_DATA_VERSION: i32 = 7;
 
 /// Persistent player data saved by Steel's storage backend.
 ///
@@ -63,6 +63,9 @@ pub struct PersistentPlayerData {
 
     /// Current health points.
     pub health: f32,
+
+    /// Remaining hurt animation ticks, saved as vanilla's signed short.
+    pub hurt_time: i16,
 
     /// Current game mode (0=survival, 1=creative, 2=adventure, 3=spectator).
     pub game_mode: i32,
@@ -247,6 +250,7 @@ impl PersistentPlayerData {
             was_in_powder_snow: fire_freeze.was_in_powder_snow(),
             has_visual_fire: fire_freeze.has_visual_fire(),
             health: player.get_health(),
+            hurt_time: player.living_base().hurt_time() as i16,
             game_mode: player.game_mode() as i32,
             prev_game_mode: player
                 .previous_game_mode()
@@ -447,6 +451,7 @@ impl PersistentPlayerData {
 
         // Health
         player.set_health(self.health);
+        player.living_base().set_hurt_time(self.hurt_time);
 
         // Game mode
         player.restore_game_modes(

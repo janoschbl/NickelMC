@@ -1,0 +1,24 @@
+NickelMC
+========
+
+NickelMC is a fork of SteelMC (https://github.com/Steel-Foundation/SteelMC)
+by the Steel Foundation. It is not affiliated with or endorsed by the Steel
+Foundation, Mojang, or Microsoft.
+
+License
+-------
+NickelMC is free software licensed under the GNU Affero General Public
+License, version 3 or (at your option) any later version (AGPL-3.0-or-later).
+See the LICENSE file. All original copyright notices and author information
+are preserved.
+
+Upstream contributors
+---------------------
+Work in this fork builds on the SteelMC project and its contributors; see
+`git log` for the full author list. In addition, NickelMC carries commits
+from the following open upstream pull requests, with original authorship kept:
+
+JosepBove, SomeYellowGuy, NotGhoull, quaid-perkins (Quaddle), Purdze, Julien, coco875,
+teknostom, tangjuyo, AnthonyDuong1, kdcokenny (Kenny), NandoBF (nabattis), JunkyDeveloper,
+CuzImClicks, lazy-importer, brandnakash-code.
+(Taken from commit authors on the dev/feat-* branches; the git history is authoritative.)

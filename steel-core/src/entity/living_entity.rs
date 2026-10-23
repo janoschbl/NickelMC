@@ -241,10 +241,6 @@ pub trait LivingEntity: Entity {
     fn save_command_nbt(&self, nbt: &mut NbtCompound) {
         nbt.insert("Health", self.get_health());
         nbt.insert(
-            "HurtTime",
-            NbtTag::Short(self.living_base().hurt_time() as i16),
-        );
-        nbt.insert(
             "DeathTime",
             NbtTag::Short(self.living_base().death_time() as i16),
         );

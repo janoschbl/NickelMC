@@ -1126,6 +1126,10 @@ impl Player {
 
     /// Appends vanilla-shaped player state used by command NBT predicates.
     pub(crate) fn save_command_nbt(&self, nbt: &mut NbtCompound) {
+        nbt.insert(
+            "HurtTime",
+            NbtTag::Short(self.living_base.hurt_time() as i16),
+        );
         {
             let inventory = self.inventory.lock();
             nbt.insert("Inventory", inventory.to_vanilla_inventory_nbt());

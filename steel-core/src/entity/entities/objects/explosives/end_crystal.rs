@@ -8,18 +8,24 @@ use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
+use steel_registry::vanilla_damage_type_tags::DamageTypeTag;
+use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_data::EndCrystalEntityData;
 use steel_utils::{BlockPos, locks::SyncMutex};
 use steel_utils::{DowncastType, DowncastTypeKey};
 
-use crate::entity::{Entity, EntityBase, EntityBaseLoad, EntitySyncedData};
+use crate::entity::damage::DamageSource;
+use crate::entity::{Entity, EntityBase, EntityBaseLoad, EntitySyncedData, RemovalReason};
 use crate::world::World;
+use crate::world::explosion::{ExplosionInteraction, ExplosionOptions};
+
+const EXPLOSION_RADIUS: f32 = 6.0;
 
 /// End Crystal entity state needed by worldgen and persistence.
 ///
 /// Steel currently implements the synchronized data and saved fields used by generated
-/// End spikes. Portal handling, dragon fight callbacks, and explosion behavior are still
-/// intentionally left to the broader entity/combat foundations.
+/// End spikes, plus the explosion of a destroyed crystal. Portal handling and dragon fight
+/// callbacks are still intentionally left to the broader entity/combat foundations.
 #[entity_behavior(class = "EndCrystal")]
 pub struct EndCrystalEntity {
     base: EntityBase,
@@ -90,7 +96,45 @@ impl Entity for EndCrystalEntity {
     }
 
     fn tick(self: Arc<Self>) {
-        // TODO: Implement portal handling, fire refresh, dragon fight callbacks, and explosion behavior.
+        // TODO: Implement portal handling and fire refresh.
+    }
+
+    fn hurt(&self, world: &World, source: &DamageSource, _amount: f32) -> bool {
+        if self.is_invulnerable_to_base(source) {
+            return false;
+        }
+
+        // Vanilla tests `instanceof EnderDragon`; the dragon entity is not implemented yet.
+        if source
+            .causing_entity()
+            .is_some_and(|attacker| attacker.entity_type() == &vanilla_entities::ENDER_DRAGON)
+        {
+            return false;
+        }
+
+        if !self.is_removed() {
+            // The crystal is the direct source of its own explosion and must be looked up
+            // before removal.
+            let crystal = world.get_entity_by_id(self.id());
+            self.set_removed(RemovalReason::Killed);
+            if !source.is(&DamageTypeTag::IS_EXPLOSION) {
+                let mut options = ExplosionOptions::new(
+                    self.position(),
+                    EXPLOSION_RADIUS,
+                    ExplosionInteraction::Block,
+                );
+                options.damage_source = source.causing_entity().map(|attacker| {
+                    DamageSource::explosion(crystal.clone(), Some(Arc::clone(attacker)))
+                });
+                options.source = crystal;
+                if let Some(world) = self.level() {
+                    world.explode(options);
+                }
+            }
+            // TODO: Notify `EnderDragonFight.onCrystalDestroyed` once the dragon fight exists.
+        }
+
+        true
     }
 
     fn is_pickable(&self) -> bool {

@@ -8,6 +8,8 @@ use super::{
     mem, vanilla_entities,
 };
 
+use crate::entity::EntityCollisionCandidates;
+
 pub(super) struct NavigatingMobTracker {
     ids: SyncMutex<FxHashSet<i32>>,
 }
@@ -750,6 +752,30 @@ impl World {
             ControlFlow::Continue(())
         });
         boxes
+    }
+
+    /// Gets entity shapes for movement collision through the selected conservative broad phase.
+    #[must_use]
+    pub(crate) fn get_movement_collision_boxes_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        candidates: EntityCollisionCandidates,
+        predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Vec<WorldAabb> {
+        self.entity_manager
+            .get_movement_collision_boxes_in_aabb_matching(aabb, candidates, predicate)
+    }
+
+    /// Returns whether the selected movement-collision broad phase has a matching entity.
+    #[must_use]
+    pub(crate) fn has_movement_collision_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        candidates: EntityCollisionCandidates,
+        predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> bool {
+        self.entity_manager
+            .has_movement_collision_in_aabb_matching(aabb, candidates, predicate)
     }
 
     /// Gets the nearest entity intersecting the given bounding box and matching `predicate`.

@@ -118,6 +118,7 @@ mod domain_entity_directory;
 mod entity_management;
 pub mod environment;
 mod events;
+pub mod explosion;
 /// Vanilla game-event contexts, listeners, and dispatch storage.
 pub mod game_event;
 mod level_effects;
@@ -143,7 +144,7 @@ pub use crate::config::WorldStorageConfig;
 use crate::worldgen::generators::vanilla::fuzzed_biome_at_block;
 use crate::worldgen::{ChunkGenerator, ChunkGeneratorType};
 use block_event::BlockEventQueue;
-pub(crate) use block_region::{BlockRegionBounds, MAX_BLOCK_REGION_WORKSET_SLOTS};
+pub(crate) use block_region::{BlockRegionBounds, BlockRegionRead, MAX_BLOCK_REGION_WORKSET_SLOTS};
 use block_updates::CollectingNeighborUpdater;
 pub use border::WorldBorderError;
 pub(crate) use border::{MAX_CENTER_COORDINATE, MAX_SIZE};
@@ -152,6 +153,11 @@ pub(crate) use domain_entity_directory::DomainEntityDirectory;
 use entity_management::NavigatingMobTracker;
 #[cfg(test)]
 use entity_management::nearest_player_distance_in_range;
+pub use explosion::{
+    BlockInteraction, DefaultExplosionDamageCalculator, EntityBasedExplosionDamageCalculator,
+    Explosion, ExplosionDamageCalculator, ExplosionInteraction, ExplosionOptions, ExplosionOutcome,
+};
+pub(crate) use explosion::{ExplosionBlockReader, ImmutableExplosionBlockCalculator};
 pub use level_reader::{LevelAccessor, LevelReader, ScheduledTickAccess};
 pub use player_index::{PlayerAreaMap, PlayerMap};
 pub use raycast::{ClipBlockShape, ClipFluid, ClipHitResult, RaytraceAction};
@@ -242,6 +248,8 @@ pub struct WorldConfig {
 /// A struct that represents a world.
 pub struct World {
     pub(crate) damage_history: Weak<DamageHistory>,
+    /// Gameplay and command users share one scoreboard across each domain.
+    scoreboard: SyncRwLock<Arc<crate::scoreboard::Scoreboard>>,
     /// The chunk map of the world.
     pub chunk_map: Arc<ChunkMap>,
     /// All players in the world with dual indexing by UUID and entity ID.
@@ -437,6 +445,7 @@ impl World {
 
             Self {
                 damage_history: Arc::downgrade(&config.damage_history),
+                scoreboard: SyncRwLock::new(Arc::new(crate::scoreboard::Scoreboard::new())),
                 chunk_map,
                 players: PlayerMap::new(),
                 player_area_map: PlayerAreaMap::new(),
@@ -513,6 +522,15 @@ impl World {
     #[must_use]
     pub fn domain(&self) -> &str {
         self.key.namespace.as_ref()
+    }
+
+    /// Returns this domain's shared scoreboard.
+    pub fn scoreboard(&self) -> Arc<crate::scoreboard::Scoreboard> {
+        Arc::clone(&self.scoreboard.read())
+    }
+
+    pub(crate) fn set_scoreboard(&self, scoreboard: Arc<crate::scoreboard::Scoreboard>) {
+        *self.scoreboard.write() = scoreboard;
     }
 
     pub(crate) fn set_domain_entity_directory(&self, directory: Arc<DomainEntityDirectory>) {
